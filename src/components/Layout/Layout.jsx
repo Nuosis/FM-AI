@@ -7,28 +7,38 @@ const DRAWER_WIDTH = 240;
 const Main = styled('main')(({ theme }) => ({
   flexGrow: 1,
   width: '100%',
-  padding: theme.spacing(3),
-  minHeight: '100vh',
+  padding: theme.spacing(1),
   backgroundColor: theme.palette.background.default,
   color: theme.palette.text.primary,
   transition: theme.transitions.create(['margin', 'width'], {
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.leavingScreen,
   }),
+  overflow: 'auto'
 }));
 
 const Layout = ({ children, onClassSelect, onViewChange, currentView }) => {
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', width: '100%' }}>
+    <Box sx={{ 
+      display: 'flex', 
+      height: '100vh',
+      width: '100%'
+    }}>
       <Sidebar 
         width={DRAWER_WIDTH} 
         onClassSelect={onClassSelect}
         onViewChange={onViewChange}
         currentView={currentView}
       />
-      <Main id="main">
-        {children}
-      </Main>
+      <Box sx={{ 
+        flex: 1,
+        display: 'flex',
+        minWidth: 0
+      }}>
+        <Main id="main">
+          {children}
+        </Main>
+      </Box>
     </Box>
   );
 };

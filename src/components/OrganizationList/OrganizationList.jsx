@@ -143,9 +143,9 @@ const OrganizationList = () => {
 
   return (
     <Box sx={{ 
-      width: showLogViewer ? 'calc(67% - 88px)' : '100%',
+      width: showLogViewer ? 'Fit Content' : '100%',
       p: 4,
-      marginRight: showLogViewer ? '33%' : 0,
+      marginRight: showLogViewer ? 10 : 4,
       height: '100vh',
       overflowY: 'auto'
     }}>

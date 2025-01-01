@@ -125,8 +125,9 @@ const ModuleList = () => {
 
   return (
     <Box sx={{ 
-      p: 3,
-      marginRight: showLogViewer ? '400px' : 0,
+      width: showLogViewer ? 'Fit Content' : '100%',
+      p: 4,
+      marginRight: showLogViewer ? 10 : 4,
       transition: 'margin-right 0.3s ease-in-out'
     }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>

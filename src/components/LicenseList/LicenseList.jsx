@@ -286,9 +286,10 @@ const LicenseList = () => {
 
   return (
     <Box sx={{ 
-      p: 3,
-      width: showLogViewer ? 'calc(100% - 400px)' : '100%',
-      transition: 'width 0.3s ease'
+      p: 4,
+      transition: 'width 0.6s ease',
+      width: showLogViewer ? 'Fit Content' : '100%',
+      marginRight: showLogViewer ? 10 : 4,
     }}>
       <Typography variant="h5" sx={{ mb: 3 }}>Licenses</Typography>
 
