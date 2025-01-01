@@ -55,17 +55,13 @@ const LogViewer = () => {
   };
 
   return (
-    <div className="log-viewer" style={{ 
-      width: '33%', 
-      height: '100vh',
-      position: 'fixed',
-      right: 0,
-      top: 0,
+    <div style={{ 
+      height: '100%',
       backgroundColor: '#1e1e1e',
       color: '#fff',
       padding: '20px',
       overflowY: 'auto',
-      borderLeft: '1px solid #333'
+      borderTop: '1px solid #333'
     }}>
       <div style={{ 
         display: 'flex', 
@@ -114,7 +110,7 @@ const LogViewer = () => {
         padding: '10px',
         backgroundColor: '#2d2d2d',
         borderRadius: '4px',
-        maxHeight: 'calc(100vh - 100px)',
+        height: 'calc(100% - 80px)',
         overflowY: 'auto'
       }}>
         {Array.isArray(logs) ? logs.map(log => (

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { Box, styled, useTheme, useMediaQuery } from '@mui/material';
 import { useSelector } from 'react-redux';
+import LogViewer from '../LogViewer/LogViewer';
+import { selectShowLogViewer } from '../../redux/slices/appSlice';
 import Sidebar from '../Sidebar/Sidebar';
 import Bottombar from '../Sidebar/Bottombar';
 import {
@@ -34,15 +36,10 @@ const BottomBarContainer = styled('div')(({ theme }) => ({
 const Main = styled('main', {
   shouldForwardProp: prop => prop !== 'isMobile'
 })(({ theme, isMobile }) => ({
-  flexGrow: 1,
   width: '100%',
   padding: theme.spacing(1),
   backgroundColor: theme.palette.background.default,
   color: theme.palette.text.primary,
-  transition: theme.transitions.create(['margin', 'width'], {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.leavingScreen,
-  }),
   overflow: 'auto',
   marginBottom: isMobile ? '96px' : 0
 }));
@@ -63,6 +60,7 @@ const Layout = ({ children, onClassSelect, onViewChange, currentView }) => {
   const [openItem, setOpenItem] = useState(null);
   const [components, setComponents] = useState({});
   const { isAuthenticated } = useSelector((state) => state.auth);
+  const showLogViewer = useSelector(selectShowLogViewer);
 
   useEffect(() => {
     const loadAllConfigs = async () => {
@@ -140,9 +138,9 @@ const Layout = ({ children, onClassSelect, onViewChange, currentView }) => {
             mobileMenuAnchor={mobileMenuAnchor}
             activeParentPath={
               // For special views, highlight parent without opening menu
-              currentView === 'organizations' || 
-              currentView === 'licenses' || 
-              currentView === 'modules' ? 'processes' : null
+              currentView === 'organization-list' || 
+              currentView === 'license-list' || 
+              currentView === 'module-list' ? 'processes' : null
             }
             setMobileMenuAnchor={setMobileMenuAnchor}
             setOpenItem={setOpenItem}
@@ -165,11 +163,24 @@ const Layout = ({ children, onClassSelect, onViewChange, currentView }) => {
       <Box sx={{ 
         flex: 1,
         display: 'flex',
-        minWidth: 0
+        flexDirection: 'column',
+        minWidth: 0,
+        height: '100%',
+        overflow: 'hidden'
       }}>
         <Main id="main" isMobile={isMobile}>
           {children}
         </Main>
+        {showLogViewer && (
+          <Box id="logs" sx={{
+            width: '100%',
+            height: isMobile ? '300px' : '400px',
+            backgroundColor: '#1e1e1e',
+            marginBottom: isMobile ? '96px' : 0
+          }}>
+            <LogViewer />
+          </Box>
+        )}
       </Box>
     </Box>
   );

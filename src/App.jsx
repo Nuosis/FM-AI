@@ -9,9 +9,8 @@ import ModuleList from './components/ModuleList/ModuleList';
 import LicenseList from './components/LicenseList/LicenseList';
 import OrganizationList from './components/OrganizationList/OrganizationList';
 import BillableList from './components/BillableList/BillableList';
-import LogViewer from './components/LogViewer/LogViewer';
 import { LoginForm, RegistrationForm, AuthGuard } from './components/Auth';
-import { clearLogs, createLog, LogType, selectShowLogViewer } from './redux/slices/appSlice';
+import { clearLogs, createLog, LogType } from './redux/slices/appSlice';
 import { setLicenseKey } from './redux/slices/authSlice';
 
 const theme = createTheme({
@@ -63,7 +62,6 @@ function App() {
   const dispatch = useDispatch();
   const [selectedClass, setSelectedClass] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const showLogViewer = useSelector(selectShowLogViewer);
   const { isAuthenticated } = useSelector((state) => state.auth);
   const [currentView, setCurrentView] = useState('login');
 
@@ -147,10 +145,10 @@ function App() {
           gap: 3, 
           width: '100%',
           flex: 1,
-          marginRight: showLogViewer ? '33%' : 0,
+          marginRight: '33%',
           transition: 'margin-right 0.3s ease-in-out',
           position: 'relative',
-          maxWidth: showLogViewer ? '67%' : '100%'
+          maxWidth: '100%'
         }}>
           {currentView === 'backend-app' && (
             <AuthGuard>
@@ -188,7 +186,6 @@ function App() {
           {currentView === 'login' && <LoginForm onViewChange={handleViewChange} />}
           {currentView === 'register' && <RegistrationForm onViewChange={handleViewChange} />}
         </Box>
-        {showLogViewer && <LogViewer />}
       </Layout>
     </ThemeProvider>
   );

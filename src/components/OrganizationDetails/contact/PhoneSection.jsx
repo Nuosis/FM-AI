@@ -132,19 +132,27 @@ const PhoneSection = ({ phones, editMode, onAdd, onEdit, onDelete }) => {
 
   return (
     <Box>
-      <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-        <PhoneIcon sx={{ mr: 1 }} /> Phone Numbers
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
+          <PhoneIcon sx={{ mr: 1 }} /> Phone Numbers
+        </Typography>
+        {editMode && (
+          <Button
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog('add')}
+            size="small"
+          >
+            Add Phone
+          </Button>
+        )}
+      </Box>
       <List>
         {phones?.map((item, index) => (
           <Card key={item.fieldData.__ID} sx={{ mb: 1 }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="body1">
-                    {item.fieldData.phone}
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <Chip 
                       size="small" 
                       label={item.fieldData.label || 'main'} 
@@ -159,28 +167,45 @@ const PhoneSection = ({ phones, editMode, onAdd, onEdit, onDelete }) => {
                       />
                     )}
                   </Box>
+                  <Typography variant="body1">
+                    {item.fieldData.phone}
+                  </Typography>
                 </Box>
                 
-                <Box>
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: 'flex-end',
+                  ml: 1,
+                  pb: 0.5
+                }}>
                   <Tooltip title="Call">
                     <IconButton 
                       onClick={() => {
                         window.location.href = `tel:${item.fieldData.phone}`;
                       }}
+                      size="small"
                     >
-                      <CallIcon />
+                      <CallIcon fontSize="medium" />
                     </IconButton>
                   </Tooltip>
                   
                   {editMode && (
-                    <>
-                      <IconButton onClick={() => handleOpenDialog('edit', index)}>
-                        <EditIcon />
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', ml: 1 }}>
+                      <IconButton 
+                        color="primary" 
+                        onClick={() => handleOpenDialog('edit', index)}
+                        size="small"
+                      >
+                        <EditIcon fontSize="small" />
                       </IconButton>
-                      <IconButton onClick={() => handleDelete(index)}>
-                        <DeleteIcon />
+                      <IconButton 
+                        color="secondary" 
+                        onClick={() => handleDelete(index)}
+                        size="small"
+                      >
+                        <DeleteIcon fontSize="small" />
                       </IconButton>
-                    </>
+                    </Box>
                   )}
                 </Box>
               </Box>
@@ -188,15 +213,6 @@ const PhoneSection = ({ phones, editMode, onAdd, onEdit, onDelete }) => {
           </Card>
         ))}
         
-        {editMode && (
-          <Button
-            startIcon={<AddIcon />}
-            onClick={() => handleOpenDialog('add')}
-            sx={{ mt: 1 }}
-          >
-            Add Phone
-          </Button>
-        )}
       </List>
 
       {renderDialog()}

@@ -486,22 +486,22 @@ const OrganizationDetails = ({ organization, onClose }) => {
         <Typography 
           variant="h6" 
           component="div" 
-          sx={{ fontSize: isMobile ? '1.1rem' : '1.25rem' }}
+          sx={{ fontSize: isMobile ? '2rem' : '1.25rem', mb: isMobile ? 2 : 0 }}
         >
           {editMode ? 'Edit Organization' : 'Organization Details'}
         </Typography>
-        {!editMode && (
+        {!editMode && !isMobile && (
           <Box>
             <IconButton 
               onClick={handleEdit} 
               color="primary"
-              sx={{ padding: isMobile ? 0.5 : 1 }}
+              sx={{ padding: 1 }}
             >
               <EditIcon />
             </IconButton>
             <IconButton 
               onClick={onClose}
-              sx={{ padding: isMobile ? 0.5 : 1 }}
+              sx={{ padding: 1 }}
             >
               <CloseIcon />
             </IconButton>
@@ -509,78 +509,56 @@ const OrganizationDetails = ({ organization, onClose }) => {
         )}
       </DialogTitle>
 
-      <Tabs 
-        value={activeTab} 
-        onChange={handleTabChange}
-        variant={isMobile ? "scrollable" : "standard"}
-        scrollButtons={isMobile ? "auto" : false}
-        sx={{ 
-          borderBottom: 1, 
-          borderColor: 'divider',
-          minHeight: isMobile ? 48 : 'auto',
-          '& .MuiTabs-indicator': {
-            backgroundColor: theme.palette.primary.main
-          },
-          '& .MuiTab-root': {
-            '&:focus': {
-              outline: 'none'
+      {!isMobile && (
+        <Tabs 
+          value={activeTab} 
+          onChange={handleTabChange}
+          variant="standard"
+          sx={{ 
+            borderBottom: 1, 
+            borderColor: 'divider',
+            '& .MuiTabs-indicator': {
+              backgroundColor: theme.palette.primary.main
             },
-            '&.Mui-selected': {
-              color: theme.palette.primary.main
-            }
-          }
-        }}
-      >
-        <Tab 
-          icon={<BusinessIcon />} 
-          label={isMobile ? undefined : "Details"}
-          value="details"
-          sx={{ 
-            minHeight: isMobile ? 48 : 'auto',
-            '&:focus': {
-              outline: 'none'
+            '& .MuiTab-root': {
+              '&:focus': {
+                outline: 'none'
+              },
+              '&.Mui-selected': {
+                color: theme.palette.primary.main
+              }
             }
           }}
-        />
-        <Tab 
-          icon={<EmailIcon />} 
-          label={isMobile ? undefined : "Contact"}
-          value="contact"
-          sx={{ 
-            minHeight: isMobile ? 48 : 'auto',
-            '&:focus': {
-              outline: 'none'
-            }
-          }}
-        />
-        <Tab 
-          icon={<PersonIcon />} 
-          label={isMobile ? undefined : "Members"}
-          value="members"
-          sx={{ 
-            minHeight: isMobile ? 48 : 'auto',
-            '&:focus': {
-              outline: 'none'
-            }
-          }}
-        />
-        <Tab 
-          icon={<VpnKeyIcon />} 
-          label={isMobile ? undefined : "Licenses"}
-          value="licenses"
-          sx={{ 
-            minHeight: isMobile ? 48 : 'auto',
-            '&:focus': {
-              outline: 'none'
-            }
-          }}
-        />
-      </Tabs>
+        >
+          <Tab 
+            icon={<BusinessIcon />} 
+            label="Details"
+            value="details"
+          />
+          <Tab 
+            icon={<EmailIcon />} 
+            label="Contact"
+            value="contact"
+          />
+          <Tab 
+            icon={<PersonIcon />} 
+            label="Members"
+            value="members"
+          />
+          <Tab 
+            icon={<VpnKeyIcon />} 
+            label="Licenses"
+            value="licenses"
+          />
+        </Tabs>
+      )}
 
-      <DialogContent sx={{ 
+      <DialogContent sx={{
         flex: 1, 
         overflow: 'auto',
-        p: isMobile ? 1 : 2
+        p: isMobile ? 1 : 2,
+        pb: isMobile ? (editMode ? 14 : 7) : 2,
+        position: 'relative'
       }}>
         {activeTab === 'details' && renderDetailsContent()}
 
@@ -658,10 +636,87 @@ const OrganizationDetails = ({ organization, onClose }) => {
             availableModules={availableModules}
           />
         )}
+        {isMobile && (
+          <Tabs 
+            value={activeTab} 
+            onChange={handleTabChange}
+            variant="fullWidth"
+            sx={{ 
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              bgcolor: '#424242',
+              borderTop: '1px solid rgba(255, 255, 255, 0.12)',
+              borderColor: 'divider',
+              '& .MuiTabs-indicator': {
+                backgroundColor: theme.palette.primary.main,
+                top: 0
+              },
+              '& .MuiTab-root': {
+                minHeight: 56,
+                '&:focus': {
+                  outline: 'none'
+                },
+                '&.Mui-selected': {
+                  color: theme.palette.primary.main
+                }
+              }
+            }}
+          >
+            <Tab icon={<BusinessIcon />} value="details" />
+            <Tab icon={<EmailIcon />} value="contact" />
+            <Tab icon={<PersonIcon />} value="members" />
+            <Tab icon={<VpnKeyIcon />} value="licenses" />
+          </Tabs>
+        )}
+        {isMobile && (
+          <Box sx={{ 
+            position: 'fixed',
+            bottom: 56,
+            left: 0,
+            right: 0,
+            bgcolor: '#424242',
+            p: 1,
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: 1,
+            borderBottom: '1px solid rgba(255, 255, 255, 0.12)'
+          }}>
+            {editMode ? (
+              <>
+                <Button onClick={handleCancel}>Cancel</Button>
+                <Button 
+                  onClick={handleSave} 
+                  variant="contained"
+                  disabled={activeTab !== 'details'}
+                >
+                  Save Changes
+                </Button>
+              </>
+            ) : (
+              <>
+                <IconButton 
+                  onClick={handleEdit} 
+                  color="primary"
+                  size="small"
+                >
+                  <EditIcon />
+                </IconButton>
+                <IconButton 
+                  onClick={onClose}
+                  size="small"
+                >
+                  <CloseIcon />
+                </IconButton>
+              </>
+            )}
+          </Box>
+        )}
       </DialogContent>
 
-      {editMode && (
-        <DialogActions sx={{ p: isMobile ? 1 : 2 }}>
+      {editMode && !isMobile && (
+        <DialogActions sx={{ p: 2 }}>
           <Button onClick={handleCancel}>Cancel</Button>
           <Button 
             onClick={handleSave} 

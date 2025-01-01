@@ -44,27 +44,18 @@ import {
   selectSelectedOrganizationId,
   selectOrganizationById
 } from '../../redux/slices/organizationSlice';
-import { createLog, LogType, selectShowLogViewer } from '../../redux/slices/appSlice';
+import { createLog, LogType } from '../../redux/slices/appSlice';
 import OrganizationDetails from '../OrganizationDetails';
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-const retryFetch = async (dispatch, name = null, maxAttempts = 5, baseDelay = 100) => {
+const retryFetch = async (dispatch, maxAttempts = 5, baseDelay = 100) => {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     await delay(baseDelay * Math.pow(2, attempt));
     dispatch(createLog(`Retry attempt ${attempt + 1} to fetch organizations`, LogType.DEBUG));
-    const result = await dispatch(fetchOrganizations()).unwrap();
-    
-    if (name) {
-      if (result.some(org => org.fieldData?.Name === name)) {
-        dispatch(setRefresh(false));
-        dispatch(createLog(`Successfully found new organization: ${name}`, LogType.DEBUG));
-        return true;
-      }
-    } else {
-      dispatch(setRefresh(false));
-      return true;
-    }
+    dispatch(fetchOrganizations());
+    dispatch(setRefresh(false));
+    return true;
   }
   dispatch(createLog('Failed to fetch organizations after multiple attempts', LogType.ERROR));
   return false;
@@ -78,7 +69,6 @@ const OrganizationList = () => {
   const searchQuery = useSelector(selectSearchQuery);
   const sortConfig = useSelector(selectSortConfig);
   const refresh = useSelector(selectOrganizationRefresh);
-  const showLogViewer = useSelector(selectShowLogViewer);
   const notification = useSelector(selectNotification);
   const selectedOrganizationId = useSelector(selectSelectedOrganizationId);
   const selectedOrganization = useSelector(state => 
@@ -88,16 +78,17 @@ const OrganizationList = () => {
   const isMediumOrSmaller = useMediaQuery(theme.breakpoints.down('lg'));
 
   useEffect(() => {
+    // Initial fetch on mount
+    dispatch(createLog('Initial fetch of organizations', LogType.INFO));
+    dispatch(fetchOrganizations());
+  }, [dispatch]); // Only run on mount
+
+  useEffect(() => {
+    // Handle refresh requests
     if (refresh) {
-      dispatch(createLog('Fetching organizations', LogType.INFO));
-      dispatch(fetchOrganizations()).unwrap()
-        .then(() => {
-          dispatch(setRefresh(false));
-          dispatch(createLog('Successfully fetched organizations', LogType.DEBUG));
-        })
-        .catch((err) => {
-          dispatch(createLog(`Error fetching organizations: ${err.message}`, LogType.ERROR));
-        });
+      dispatch(createLog('Refreshing organizations', LogType.INFO));
+      dispatch(fetchOrganizations());
+      dispatch(setRefresh(false));
     }
   }, [dispatch, refresh]);
 
@@ -112,7 +103,7 @@ const OrganizationList = () => {
 
     try {
       dispatch(createLog(`Deleting organization: ${name}`, LogType.INFO));
-      await dispatch(deleteOrganization(orgId)).unwrap();
+      await dispatch(deleteOrganization(orgId));
       dispatch(setNotification({
         message: `Successfully deleted ${name}`,
         severity: 'success'
@@ -143,11 +134,11 @@ const OrganizationList = () => {
 
   return (
     <Box sx={{ 
-      width: showLogViewer ? 'Fit Content' : '100%',
       p: 4,
-      marginRight: showLogViewer ? 10 : 4,
-      height: '100vh',
-      overflowY: 'auto'
+      height: '100vh', // Account for padding and margins
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
     }}>
       <Typography variant="h5" sx={{ mb: 3 }}>Organizations</Typography>
 

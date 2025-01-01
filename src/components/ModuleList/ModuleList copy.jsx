@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import axiosInstance from '../../utils/axios';
-import { createLog, LogType } from '../../redux/slices/appSlice';
+import { createLog, LogType, selectShowLogViewer } from '../../redux/slices/appSlice';
 import {
   Box,
   Button,
@@ -29,6 +29,7 @@ import {
 
 const ModuleList = () => {
   const dispatch = useDispatch();
+  const showLogViewer = useSelector(selectShowLogViewer);
   const [modules, setModules] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedModule, setSelectedModule] = useState(null);
@@ -124,11 +125,10 @@ const ModuleList = () => {
 
   return (
     <Box sx={{ 
+      width: showLogViewer ? 'Fit Content' : '100%',
       p: 4,
-      height: '100vh', // Account for padding and margins
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden'
+      marginRight: showLogViewer ? 10 : 4,
+      transition: 'margin-right 0.3s ease-in-out'
     }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h5">Modules</Typography>
@@ -150,14 +150,7 @@ const ModuleList = () => {
         </Alert>
       )}
 
-      <TableContainer 
-        component={Paper} 
-        sx={{ 
-          flex: 1,
-          overflow: 'auto',
-          mb: 3 // Add bottom margin
-        }}
-      >
+      <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>

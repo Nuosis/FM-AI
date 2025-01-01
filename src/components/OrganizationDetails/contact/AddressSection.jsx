@@ -188,51 +188,74 @@ const AddressSection = ({ addresses, editMode, onAdd, onEdit, onDelete }) => {
 
   return (
     <Box>
-      <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-        <LocationIcon sx={{ mr: 1 }} /> Addresses
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
+          <LocationIcon sx={{ mr: 1 }} /> Addresses
+        </Typography>
+        {editMode && (
+          <Button
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog('add')}
+            size="small"
+          >
+            Add Address
+          </Button>
+        )}
+      </Box>
       <List>
         {addresses?.map((item, index) => (
           <Card key={item.fieldData.__ID} sx={{ mb: 1 }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="body1">
-                    {`${item.fieldData.streetAddress}${item.fieldData.unitNumber ? `, Unit ${item.fieldData.unitNumber}` : ''}`}
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    {`${item.fieldData.city}, ${item.fieldData.prov} ${item.fieldData.postalCode}`}
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <Chip 
                       size="small" 
                       label={item.fieldData.label || 'main'} 
                       variant="outlined"
                     />
                   </Box>
+                  <Typography variant="body1">
+                    {`${item.fieldData.streetAddress}${item.fieldData.unitNumber ? `, Unit ${item.fieldData.unitNumber}` : ''}`}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    {`${item.fieldData.city}, ${item.fieldData.prov} ${item.fieldData.postalCode}`}
+                  </Typography>
                 </Box>
                 
-                <Box>
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: 'flex-end',
+                }}>
                   <Tooltip title="View on map">
                     <IconButton 
                       onClick={() => {
                         setSelectedAddress(item.fieldData);
                         setShowMap(true);
                       }}
+                      size="small"
                     >
-                      <MapIcon />
+                      <MapIcon fontSize="medium" />
                     </IconButton>
                   </Tooltip>
                   
                   {editMode && (
-                    <>
-                      <IconButton onClick={() => handleOpenDialog('edit', index)}>
-                        <EditIcon />
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', ml: 1 }}>
+                      <IconButton
+                        color="primary" 
+                        onClick={() => handleOpenDialog('edit', index)}
+                        size="small"
+                      >
+                        <EditIcon fontSize="small" />
                       </IconButton>
-                      <IconButton onClick={() => handleDelete(index)}>
-                        <DeleteIcon />
+                      <IconButton 
+                        color="secondary"
+                        onClick={() => handleDelete(index)}
+                        size="small"
+                      >
+                        <DeleteIcon fontSize="small" />
                       </IconButton>
-                    </>
+                    </Box>
                   )}
                 </Box>
               </Box>
@@ -240,15 +263,6 @@ const AddressSection = ({ addresses, editMode, onAdd, onEdit, onDelete }) => {
           </Card>
         ))}
         
-        {editMode && (
-          <Button
-            startIcon={<AddIcon />}
-            onClick={() => handleOpenDialog('add')}
-            sx={{ mt: 1 }}
-          >
-            Add Address
-          </Button>
-        )}
       </List>
 
       {renderDialog()}

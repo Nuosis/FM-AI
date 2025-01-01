@@ -1,3 +1,6 @@
+//AI_NOTE Path variables like activeParentPath are working and should not be changed.
+
+
 import PropTypes from 'prop-types';
 import { useRef, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
@@ -81,7 +84,7 @@ const MobileIconList = styled('div')(({ theme }) => ({
   }
 }));
 
-const MobileSidebar = ({ 
+const BottomBar = ({ 
   menuItems, 
   components, 
   mobileMenuAnchor,
@@ -91,58 +94,86 @@ const MobileSidebar = ({
   onClassSelect,
   currentView,
   isAuthenticated,
-  activeParentPath
+  activeParentPath: propActiveParentPath
 }) => {
+  //console.log('BottomBar render:', { currentView, propActiveParentPath, mobileMenuAnchor });
+  
   const theme = useTheme();
   const dispatch = useDispatch();
   const showLogViewer = useSelector(selectShowLogViewer);
   const [centeredIcon, setCenteredIcon] = useState(null);
+  const [activeParentPath, setActiveParentPath] = useState(propActiveParentPath);
+  const [selectedParentPath, setSelectedParentPath] = useState(propActiveParentPath);
+
+  // Component mount logging
+  useEffect(() => {
+    console.log('BottomBar mounted with:', {
+      currentView,
+      propActiveParentPath,
+      menuItems: menuItems.map(item => ({ name: item.name, path: item.path }))
+    });
+  }, []);
+  
+  // Set initial activeParentPath on mount and when currentView changes
+  useEffect(() => {
+    console.log(`Setting ${selectedParentPath} to active parent path`)
+    setActiveParentPath(selectedParentPath)
+  }, []);
+
   const scrollContainerRef = useRef(null);
   const iconListRef = useRef(null);
   const scrollTimeoutRef = useRef(null);
 
   const scrollToIcon = (iconPath) => {
-    if (!iconPath) return;
+
+    if (!iconPath) {
+      console.log(`No iconPath provided for ${activeParentPath}`);
+      return;
+    }
+    console.log(`Scrolling to ${activeParentPath}`)
+
     const iconElement = iconListRef.current?.querySelector(`[data-path="${iconPath}"]`);
+
     if (iconElement) {
       const currentScroll = iconListRef.current.scrollLeft;
       const targetScroll = iconElement.offsetLeft - (iconListRef.current.offsetWidth - iconElement.offsetWidth) / 2;
       const distance = Math.abs(currentScroll - targetScroll);
       
-      // Longer duration for longer distances
       const duration = Math.min(4500, Math.max(2400, distance * 6));
       
-      // Disable snap points during animation
-      iconListRef.current.style.scrollSnapType = 'none';
-      const startTime = Date.now();
-      const startScroll = currentScroll;
-      const scrollDiff = targetScroll - startScroll;
-      
-      const easeInOutCubic = (t) => {
-        return t < 0.5
-          ? 4 * t * t * t
-          : 1 - Math.pow(-2 * t + 2, 3) / 2;
-      };
+      if (iconListRef.current) {
+        iconListRef.current.style.scrollSnapType = 'none';
+        const startTime = Date.now();
+        const startScroll = currentScroll;
+        const scrollDiff = targetScroll - startScroll;
+        
+        const easeInOutCubic = (t) => {
+          return t < 0.5
+            ? 4 * t * t * t
+            : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        };
 
-      const animate = () => {
-        if (!iconListRef.current) return;
+        const animate = () => {
+          if (!iconListRef.current) return;
+          
+          const elapsed = Date.now() - startTime;
+          const progress = Math.min(1, elapsed / duration);
+          
+          if (progress < 1) {
+            const eased = easeInOutCubic(progress);
+            iconListRef.current.scrollLeft = startScroll + (scrollDiff * eased);
+            requestAnimationFrame(animate);
+          }
+        };
         
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(1, elapsed / duration);
+        requestAnimationFrame(animate);
         
-        if (progress < 1) {
-          const eased = easeInOutCubic(progress);
-          iconListRef.current.scrollLeft = startScroll + (scrollDiff * eased);
-          requestAnimationFrame(animate);
-        }
-      };
-      
-      requestAnimationFrame(animate);
-      
-      // Reset snap points after animation
-      setTimeout(() => {
-        iconListRef.current.style.scrollSnapType = 'x mandatory';
-      }, duration);
+        setTimeout(() => {
+          if (iconListRef.current) {
+            iconListRef.current.style.scrollSnapType = 'x mandatory';
+          }
+        }, duration);
+      }
     }
   };
 
@@ -174,6 +205,11 @@ const MobileSidebar = ({
     };
 
   useEffect(() => {
+    console.log('Scroll effect setup:', {
+      activeParentPath,
+      selectedParentPath
+    });
+
     if (!scrollContainerRef.current || !iconListRef.current) return;
 
     const handleScroll = () => {
@@ -184,8 +220,11 @@ const MobileSidebar = ({
       requestAnimationFrame(updateCenteredIcon);
 
       scrollTimeoutRef.current = setTimeout(() => {
-        // If no menu is open after 2 seconds, scroll back to active parent
         if (!mobileMenuAnchor && activeParentPath) {
+          // console.log('Auto-scroll timeout triggered:', {
+          //   mobileMenuAnchor,
+          //   activeParentPath
+          // });
           scrollToIcon(activeParentPath);
         }
       }, 2000);
@@ -194,9 +233,11 @@ const MobileSidebar = ({
     const iconList = iconListRef.current;
     iconList.addEventListener('scroll', handleScroll);
     
-    // Initial scroll to active parent
     if (activeParentPath) {
-      scrollToIcon(activeParentPath);
+      //console.log('Initial scroll setup for:', activeParentPath);
+      setTimeout(() => {
+        scrollToIcon(activeParentPath);
+      }, 100);
     }
 
     return () => {
@@ -213,8 +254,16 @@ const MobileSidebar = ({
   };
 
   const handleClassSelect = (category, classInfo) => {
+    console.log('Class select:', {classInfo, category})
     if (classInfo.isSpecial) {
       const viewName = classInfo.name.toLowerCase();
+      console.log('Special view selected:', {
+        category,
+        viewName,
+        classInfo,
+        currentView
+      });
+      
       dispatch(createLog(`Navigating to special view: ${viewName}`, LogType.INFO));
       if (classInfo.name === 'Register a Database') {
         onViewChange('database');
@@ -227,12 +276,16 @@ const MobileSidebar = ({
       } else if (classInfo.name === 'Billables') {
         onViewChange('billables');
       }
-      setOpenItem('processes');
+      setOpenItem(category);
+      setMobileMenuAnchor(null); // Close the menu after selection
+      setSelectedParentPath('processes'); // Set parent path for special views
     } else {
       dispatch(createLog(`Selected class: ${classInfo.name} in category: ${category}`, LogType.INFO));
       onClassSelect(category, classInfo);
     }
-      }
+    console.log(`Setting ${selectedParentPath} to active parent path`)
+    setActiveParentPath(selectedParentPath)
+  }
 
   return (
     <BottomBarContainer>
@@ -250,6 +303,7 @@ const MobileSidebar = ({
                   } else {
                     setMobileMenuAnchor(path);
                     setOpenItem(path);
+                    setSelectedParentPath(path)
                   }
                 }}
                 sx={{
@@ -352,7 +406,7 @@ const MobileSidebar = ({
   );
 };
 
-MobileSidebar.propTypes = {
+BottomBar.propTypes = {
   menuItems: PropTypes.arrayOf(PropTypes.shape({
     name: PropTypes.string.isRequired,
     icon: PropTypes.node.isRequired,
@@ -369,4 +423,4 @@ MobileSidebar.propTypes = {
   activeParentPath: PropTypes.string
 };
 
-export default MobileSidebar;
+export default BottomBar;

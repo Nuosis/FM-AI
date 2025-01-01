@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { useDispatch, useSelector } from 'react-redux';
-import { createLog, LogType, selectShowLogViewer } from '../../redux/slices/appSlice';
+import { useDispatch } from 'react-redux';
+import { createLog, LogType } from '../../redux/slices/appSlice';
 import {
   Box,
   Button,
@@ -143,21 +143,12 @@ const LicenseForm = ({ open, onClose, selectedLicense = null, onSubmit }) => {
     onSubmit(apiFormData);
   };
 
-  const showLogViewer = useSelector(selectShowLogViewer);
-
   return (
     <Dialog 
       open={open} 
       onClose={onClose} 
       maxWidth="sm" 
       fullWidth
-      sx={{
-        '& .MuiDialog-paper': {
-          width: showLogViewer ? 'calc(100% - 400px)' : '100%',
-          transition: 'width 0.3s ease',
-          maxWidth: 'none'
-        }
-      }}
     >
       <DialogTitle>
         {selectedLicense ? 'Edit License' : 'Add License'}

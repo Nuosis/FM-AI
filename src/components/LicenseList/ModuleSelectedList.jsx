@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { useDispatch, useSelector } from 'react-redux';
-import { createLog, LogType, selectShowLogViewer } from '../../redux/slices/appSlice';
+import { useDispatch } from 'react-redux';
+import { createLog, LogType } from '../../redux/slices/appSlice';
 import axiosInstance from '../../utils/axios';
 import {
   Box,
@@ -33,7 +33,6 @@ import ModuleSelectedForm from './ModuleSelectedForm';
 
 const ModuleSelectedList = ({ license = null, onBack }) => {
   const dispatch = useDispatch();
-  const showLogViewer = useSelector(selectShowLogViewer);
   const [moduleSelections, setModuleSelections] = useState([]);
   const [notification, setNotification] = useState(null);
   const [selectedModule, setSelectedModule] = useState(null);
@@ -216,11 +215,7 @@ const ModuleSelectedList = ({ license = null, onBack }) => {
   }, [moduleSelections, searchQuery, sortConfig]);
 
   return (
-    <Box sx={{ 
-      p: 3,
-      width: showLogViewer ? 'calc(100% - 400px)' : '100%',
-      transition: 'width 0.3s ease'
-    }}>
+    <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <IconButton onClick={onBack} size="small" sx={{ mr: 1 }}>
           <ChevronLeftIcon />

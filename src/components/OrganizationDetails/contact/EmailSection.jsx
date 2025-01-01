@@ -7,7 +7,8 @@ import {
   IconButton,
   Card,
   CardContent,
-  Chip
+  Chip,
+  Tooltip,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -19,19 +20,27 @@ import {
 const EmailSection = ({ emails, editMode, onAdd, onEdit, onDelete }) => {
   return (
     <Box>
-      <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-        <EmailIcon sx={{ mr: 1 }} /> Email Addresses
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
+          <EmailIcon sx={{ mr: 1 }} /> Email Addresses
+        </Typography>
+        {editMode && (
+          <Button 
+            startIcon={<AddIcon />}
+            onClick={() => onAdd('email', { label: 'main' })}
+            size="small"
+          >
+            Add Email
+          </Button>
+        )}
+      </Box>
       <List>
         {emails?.map((item) => (
           <Card key={item.fieldData.__ID} sx={{ mb: 1 }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="body1">
-                    {item.fieldData.email}
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <Chip 
                       size="small" 
                       label={item.fieldData.label || 'main'} 
@@ -46,34 +55,44 @@ const EmailSection = ({ emails, editMode, onAdd, onEdit, onDelete }) => {
                       />
                     )}
                   </Box>
-                </Box>
+                  <Typography variant="body1">
+                    {item.fieldData.email}
+                  </Typography>
+                </Box>                  
+                <Tooltip title="Send Mail">
+                  <IconButton 
+                    onClick={() => {
+                      window.location.href = `mailto:${item.fieldData.email}`;
+                    }}
+                    size="small"
+                  >
+                    <EmailIcon fontSize="medium" />
+                  </IconButton>
+                </Tooltip>
                 
-                <Box>
-                  {editMode && (
-                    <>
-                      <IconButton onClick={() => onEdit('email', item.fieldData.__ID, item.fieldData)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton onClick={() => onDelete('email', item.fieldData.__ID)}>
-                        <DeleteIcon />
-                      </IconButton>
-                    </>
-                  )}
-                </Box>
+                {editMode && (
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', ml: 1 }}>
+                    <IconButton 
+                      color="primary" 
+                      onClick={() => onEdit('email', item.fieldData.__ID, item.fieldData)}
+                      size="small"
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton 
+                      color="secondary" 
+                      onClick={() => onDelete('email', item.fieldData.__ID)}
+                      size="small"
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                )}
               </Box>
             </CardContent>
           </Card>
         ))}
         
-        {editMode && (
-          <Button
-            startIcon={<AddIcon />}
-            onClick={() => onAdd('email', { label: 'main' })}
-            sx={{ mt: 1 }}
-          >
-            Add Email
-          </Button>
-        )}
       </List>
     </Box>
   );

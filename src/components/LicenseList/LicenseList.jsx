@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { createLog, LogType, selectShowLogViewer } from '../../redux/slices/appSlice';
+import { createLog, LogType } from '../../redux/slices/appSlice';
 import {
   setSearchQuery,
   setSortConfig,
@@ -209,8 +209,6 @@ const LicenseList = () => {
     }
   };
 
-  const showLogViewer = useSelector(selectShowLogViewer);
-
   const handleSort = (field) => {
     const newDirection = 
       sortConfig.field === field && sortConfig.direction === 'asc' 
@@ -287,9 +285,10 @@ const LicenseList = () => {
   return (
     <Box sx={{ 
       p: 4,
-      transition: 'width 0.6s ease',
-      width: showLogViewer ? 'Fit Content' : '100%',
-      marginRight: showLogViewer ? 10 : 4,
+      height: '100vh', // Account for padding and margins
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
     }}>
       <Typography variant="h5" sx={{ mb: 3 }}>Licenses</Typography>
 
