@@ -1,0 +1,91 @@
+{
+  "tables": {
+    "billable": {
+      "layout": "dapiBillable",
+      "completed": true
+    },
+    "conversation": {
+      "layout": "dapiConversation",
+      "completed": true
+    },
+    "device": {
+      "layout": "dapiDevice",
+      "completed": true
+    },
+    "inventory": {
+      "layout": "dapiInventory",
+      "completed": true
+    },
+    "invoice": {
+      "layout": "dapiInvoice",
+      "completed": true
+    },
+    "license": {
+      "layout": "dapiLicense",
+      "completed": true
+    },
+    "message": {
+      "layout": "dapiMessage",
+      "completed": true
+    },
+    "module": {
+      "layout": "dapiModules",
+      "completed": true
+    },
+    "the active element": {
+      "layout": "dapi<<element>>",
+      "completed": false
+    },
+    "party": {
+      "layout": "dapiParty",
+      "completed": true
+    },
+    "timesheet": {
+      "layout": "dapiTimesheet",
+      "completed": true
+    },
+    "flow": {
+      "layout": "dapiFlowSteps",
+      "completed": true
+    },
+    "process": {
+      "layout": "dapiProcessStep",
+      "completed": true
+    }
+  },
+  "tasks": [
+      {
+        "title": "Initialize Slice, Define Custom Actions and Implement Selectors",
+        "description": "Copy sliceTemplate.js to create new slice file. Update slice name and API endpoints based on the element type. Customize initialState based on the Object layout fields from schema analysis. Review backend/app/services/<<element>>_service.py for the relavant context. If helpful look at the tests implementation to understand how the routes are expected to be used.Add any element-specific reducers beyond the template's CRUD operations. Update the async thunks to match the backend API structure and element-specific requirements. Add element-specific selectors for derived state or complex data access patterns. Ensure selectors follow the established naming conventions."
+      },
+      {
+        "title": "Register Slice",
+        "description": "Add the slice reducer to the store configuration in store.js. Verify the slice is properly connected to the Redux store."
+      },
+      {
+        "title": "Create Custom Hooks",
+        "description": "Implement element-specific hooks using the base hooks from hooks.js. Add any specialized functionality needed for this element's state management."
+      }
+  ],
+  "system": {
+    "current_step": "0",
+    "instructions": [
+      "Break down complex tasks into smaller, manageable steps",
+      "Follow best practices for Python and JavaScript development",
+      "Ensure proper error handling and validation throughout",
+      "Maintain consistent code style with existing codebase",
+      "As much as possible implement DRY practices",
+      "make sure code is organizaed in clear and logical ways",
+      "Write comprehensive tests for all new functionality",
+      "Document code thoroughly with clear comments",
+      "Use modern UI design principles for frontend components",
+      "Consider security implications in all implementations",
+      "Follow RESTful API design principles",
+      "Implement proper logging and monitoring",
+      "Ensure backward compatibility",
+      "Update completion status as tasks progress",
+      "Verify all functionality through testing before marking complete"
+    ]
+  },
+  "prompt": "Read sliceCreationTasks.json and Complete the task in current_step where the table is the next incomplete table and the number in the current_step key is the task index. On completion ask if you should proceed to the next step. When all tasks are done update sliceCreationTasks by setting the current table.completed to true."
+}
