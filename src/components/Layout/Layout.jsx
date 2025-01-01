@@ -23,10 +23,12 @@ const BottomBarContainer = styled('div')(({ theme }) => ({
   bottom: 0,
   left: 0,
   right: 0,
-  height: '64px',
+  height: '100px',
   backgroundColor: theme.palette.background.paper,
   borderTop: `1px solid ${theme.palette.divider}`,
-  zIndex: theme.zIndex.drawer
+  zIndex: theme.zIndex.drawer + 2,
+  display: 'flex',
+  flexDirection: 'column'
 }));
 
 const Main = styled('main', {
@@ -42,7 +44,7 @@ const Main = styled('main', {
     duration: theme.transitions.duration.leavingScreen,
   }),
   overflow: 'auto',
-  marginBottom: isMobile ? '64px' : 0
+  marginBottom: isMobile ? '96px' : 0
 }));
 
 const menuItems = [
@@ -56,7 +58,7 @@ const menuItems = [
 
 const Layout = ({ children, onClassSelect, onViewChange, currentView }) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null);
   const [openItem, setOpenItem] = useState(null);
   const [components, setComponents] = useState({});
@@ -136,6 +138,12 @@ const Layout = ({ children, onClassSelect, onViewChange, currentView }) => {
             menuItems={menuItems}
             components={components}
             mobileMenuAnchor={mobileMenuAnchor}
+            activeParentPath={
+              // For special views, highlight parent without opening menu
+              currentView === 'organizations' || 
+              currentView === 'licenses' || 
+              currentView === 'modules' ? 'processes' : null
+            }
             setMobileMenuAnchor={setMobileMenuAnchor}
             setOpenItem={setOpenItem}
             onClassSelect={onClassSelect}

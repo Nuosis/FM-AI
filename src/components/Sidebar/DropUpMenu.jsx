@@ -14,7 +14,7 @@ import { Storage, Class } from '@mui/icons-material';
 
 const MenuContainer = styled(Box)(({ theme }) => ({
   position: 'fixed',
-  bottom: '64px', // Height of bottom bar
+  bottom: '96px', // Height of bottom bar
   left: '50%',
   transform: 'translate(-50%, 0)',
   backgroundColor: theme.palette.background.paper,
@@ -23,7 +23,7 @@ const MenuContainer = styled(Box)(({ theme }) => ({
   padding: theme.spacing(1),
   maxHeight: '50vh',
   overflowY: 'auto',
-  zIndex: theme.zIndex.drawer + 2,
+  zIndex: theme.zIndex.drawer - 1,
   minWidth: 200,
   animation: 'slideUp 0.3s ease-out forwards',
   '@keyframes slideUp': {
@@ -75,7 +75,7 @@ const DropUpMenu = ({
         open={open}
         onClick={onClose}
         sx={{
-          zIndex: theme.zIndex.drawer + 1,
+          zIndex: theme.zIndex.drawer - 2,
           backgroundColor: 'rgba(0, 0, 0, 0.5)',
         }}
       />
