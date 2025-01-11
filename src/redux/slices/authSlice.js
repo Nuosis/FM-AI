@@ -10,6 +10,7 @@ const initialState = {
   failedAttempts: 0,
   isLocked: false,
   lockoutExpiry: null,
+  licenseId: null,
   licenseKey: {
     jwt: import.meta.env.VITE_API_JWT || null,
     privateKey: import.meta.env.VITE_API_KEY || null
@@ -30,6 +31,7 @@ const authSlice = createSlice({
       state.accessToken = action.payload.access_token;
       state.refreshToken = action.payload.refresh_token;
       state.user = action.payload.user;
+      state.licenseId = action.payload.user?.license_id || null;
       state.error = null;
     },
     loginFailure: (state, action) => {
@@ -46,10 +48,14 @@ const authSlice = createSlice({
       }
     },
     logoutSuccess: () => {
-      // Preserve license key when logging out
+      // Preserve license key when logging out and set loading false
       const licenseKey = initialState.licenseKey;
-      const newState = { ...initialState, licenseKey };
-      return newState;
+      return {
+        ...initialState,
+        licenseKey,
+        loading: false,
+        licenseId: null
+      };
     },
     refreshTokenStart: (state) => {
       state.loading = true;
@@ -63,12 +69,14 @@ const authSlice = createSlice({
       state.error = null;
     },
     refreshTokenFailure: (state, action) => {
-      state.loading = false;
-      state.error = action.payload;
-      // On refresh failure, clear auth state but preserve license key
+      // On refresh failure, clear auth state but preserve license key and set loading false
       const licenseKey = state.licenseKey;
-      const newState = { ...initialState, licenseKey };
-      return newState;
+      return {
+        ...initialState,
+        licenseKey,
+        loading: false,
+        error: action.payload
+      };
     },
     clearError: (state) => {
       state.error = null;

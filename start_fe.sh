@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Configuration
+PORT=${PORT:-5175}
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -13,10 +16,9 @@ echo -e "${YELLOW}Starting Frontend Server...${NC}"
 
 # Kill any existing frontend process before starting new one
 echo "Checking for existing frontend process..."
-port=5173
-pid=$(lsof -ti:$port 2>/dev/null || true)
+pid=$(lsof -ti:$PORT 2>/dev/null || true)
 if [ ! -z "$pid" ]; then
-    echo "Killing process on port $port (PID: $pid)..."
+    echo "Killing process on port $PORT (PID: $pid)..."
     kill -9 $pid 2>/dev/null || true
 fi
 
@@ -105,7 +107,7 @@ check_frontend() {
         fi
 
         # Check if Vite server is responding
-        if curl -s http://localhost:5173 > /dev/null && grep -q "VITE.*ready" frontend.log; then
+        if curl -s http://localhost:$PORT > /dev/null && grep -q "VITE.*ready" frontend.log; then
             echo -e "${GREEN}Frontend is ready!${NC}"
             return 0
         fi
@@ -123,7 +125,7 @@ check_frontend() {
 
 # Start frontend with error output
 echo -e "${GREEN}Starting frontend server...${NC}"
-npm run dev > frontend.log 2>&1 &
+npm run dev -- --port $PORT > frontend.log 2>&1 &
 FRONTEND_PID=$!
 
 echo "Frontend process started with PID: $FRONTEND_PID"
@@ -141,7 +143,7 @@ fi
 # Final status message
 if ps -p $FRONTEND_PID > /dev/null; then
     echo -e "\n${GREEN}🚀 Frontend is running:${NC}"
-    echo -e "   Frontend: ${GREEN}http://localhost:5173${NC}"
+    echo -e "   Frontend: ${GREEN}http://localhost:$PORT${NC}"
     echo -e "\nLogs are available in:"
     echo -e "   Frontend: ${YELLOW}frontend.log${NC}"
     echo -e "\n${YELLOW}Press Ctrl+C to stop the frontend server${NC}"

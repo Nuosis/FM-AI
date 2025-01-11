@@ -1,9 +1,8 @@
 //AI_NOTE Path variables like activeParentPath are working and should not be changed.
 
-
 import PropTypes from 'prop-types';
 import { useRef, useEffect, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
 import { store } from '../../redux/store';
 import tokenStorage from '../Auth/services/tokenStorage';
 import { 
@@ -12,11 +11,11 @@ import {
   IconButton,
 } from '@mui/material';
 import {
-  Article as LogIcon,
+  Settings,
   Login as LoginIcon,
   Logout as LogoutIcon
 } from '@mui/icons-material';
-import { toggleLogViewer, selectShowLogViewer, createLog, LogType } from '../../redux/slices/appSlice';
+import { createLog, LogType } from '../../redux/slices/appSlice';
 import DropUpMenu from './DropUpMenu';
 
 const BottomBarContainer = styled('div')({
@@ -85,27 +84,22 @@ const MobileIconList = styled('div')(({ theme }) => ({
 }));
 
 const BottomBar = ({ 
-  menuItems, 
+  menuItems,
   components, 
   mobileMenuAnchor,
   setMobileMenuAnchor,
   setOpenItem,
   onViewChange,
-  onClassSelect,
   currentView,
   isAuthenticated,
   activeParentPath: propActiveParentPath
 }) => {
-  //console.log('BottomBar render:', { currentView, propActiveParentPath, mobileMenuAnchor });
-  
   const theme = useTheme();
   const dispatch = useDispatch();
-  const showLogViewer = useSelector(selectShowLogViewer);
   const [centeredIcon, setCenteredIcon] = useState(null);
   const [activeParentPath, setActiveParentPath] = useState(propActiveParentPath);
   const [selectedParentPath, setSelectedParentPath] = useState(propActiveParentPath);
 
-  // Component mount logging
   useEffect(() => {
     console.log('BottomBar mounted with:', {
       currentView,
@@ -114,10 +108,9 @@ const BottomBar = ({
     });
   }, []);
   
-  // Set initial activeParentPath on mount and when currentView changes
   useEffect(() => {
-    console.log(`Setting ${selectedParentPath} to active parent path`)
-    setActiveParentPath(selectedParentPath)
+    console.log(`Setting ${selectedParentPath} to active parent path`);
+    setActiveParentPath(selectedParentPath);
   }, []);
 
   const scrollContainerRef = useRef(null);
@@ -125,12 +118,11 @@ const BottomBar = ({
   const scrollTimeoutRef = useRef(null);
 
   const scrollToIcon = (iconPath) => {
-
     if (!iconPath) {
       console.log(`No iconPath provided for ${activeParentPath}`);
       return;
     }
-    console.log(`Scrolling to ${activeParentPath}`)
+    console.log(`Scrolling to ${activeParentPath}`);
 
     const iconElement = iconListRef.current?.querySelector(`[data-path="${iconPath}"]`);
 
@@ -179,37 +171,32 @@ const BottomBar = ({
 
   const updateCenteredIcon = () => {
     if (!scrollContainerRef.current || !iconListRef.current) return;
-      const container = scrollContainerRef.current;
-      const containerCenter = container.offsetWidth / 2;
-      const containerRect = container.getBoundingClientRect();
-      const icons = iconListRef.current.querySelectorAll('.icon-button');
+    const container = scrollContainerRef.current;
+    const containerCenter = container.offsetWidth / 2;
+    const containerRect = container.getBoundingClientRect();
+    const icons = iconListRef.current.querySelectorAll('.icon-button');
+    
+    let closestIcon = null;
+    let minDistance = Infinity;
+
+    icons.forEach(icon => {
+      const iconRect = icon.getBoundingClientRect();
+      const iconCenter = iconRect.left - containerRect.left + iconRect.width / 2;
+      const distance = Math.abs(iconCenter - containerCenter);
       
-      let closestIcon = null;
-      let minDistance = Infinity;
-
-      icons.forEach(icon => {
-        const iconRect = icon.getBoundingClientRect();
-        const iconCenter = iconRect.left - containerRect.left + iconRect.width / 2;
-        const distance = Math.abs(iconCenter - containerCenter);
-        
-        if (distance < minDistance) {
-          minDistance = distance;
-          closestIcon = icon;
-        }
-      });
-
-      if (closestIcon) {
-        const path = closestIcon.getAttribute('data-path');
-        setCenteredIcon(path);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestIcon = icon;
       }
-    };
-
-  useEffect(() => {
-    console.log('Scroll effect setup:', {
-      activeParentPath,
-      selectedParentPath
     });
 
+    if (closestIcon) {
+      const path = closestIcon.getAttribute('data-path');
+      setCenteredIcon(path);
+    }
+  };
+
+  useEffect(() => {
     if (!scrollContainerRef.current || !iconListRef.current) return;
 
     const handleScroll = () => {
@@ -221,10 +208,6 @@ const BottomBar = ({
 
       scrollTimeoutRef.current = setTimeout(() => {
         if (!mobileMenuAnchor && activeParentPath) {
-          // console.log('Auto-scroll timeout triggered:', {
-          //   mobileMenuAnchor,
-          //   activeParentPath
-          // });
           scrollToIcon(activeParentPath);
         }
       }, 2000);
@@ -234,7 +217,6 @@ const BottomBar = ({
     iconList.addEventListener('scroll', handleScroll);
     
     if (activeParentPath) {
-      //console.log('Initial scroll setup for:', activeParentPath);
       setTimeout(() => {
         scrollToIcon(activeParentPath);
       }, 100);
@@ -248,95 +230,62 @@ const BottomBar = ({
     };
   }, [activeParentPath, mobileMenuAnchor]);
 
-  const handleToggleLogs = () => {
-    dispatch(createLog(`${showLogViewer ? 'Hiding' : 'Showing'} log viewer`, LogType.DEBUG));
-    dispatch(toggleLogViewer());
+  const handleViewChange = (view) => {
+    dispatch(createLog(`Navigating to view: ${view}`, LogType.INFO));
+    onViewChange(view);
   };
-
-  const handleClassSelect = (category, classInfo) => {
-    console.log('Class select:', {classInfo, category})
-    if (classInfo.isSpecial) {
-      const viewName = classInfo.name.toLowerCase();
-      console.log('Special view selected:', {
-        category,
-        viewName,
-        classInfo,
-        currentView
-      });
-      
-      dispatch(createLog(`Navigating to special view: ${viewName}`, LogType.INFO));
-      if (classInfo.name === 'Register a Database') {
-        onViewChange('database');
-      } else if (classInfo.name === 'Modules') {
-        onViewChange('modules');
-      } else if (classInfo.name === 'Licenses') {
-        onViewChange('licenses');
-      } else if (classInfo.name === 'Organizations') {
-        onViewChange('organizations');
-      } else if (classInfo.name === 'Billables') {
-        onViewChange('billables');
-      }
-      setOpenItem(category);
-      setMobileMenuAnchor(null); // Close the menu after selection
-      setSelectedParentPath('processes'); // Set parent path for special views
-    } else {
-      dispatch(createLog(`Selected class: ${classInfo.name} in category: ${category}`, LogType.INFO));
-      onClassSelect(category, classInfo);
-    }
-    console.log(`Setting ${selectedParentPath} to active parent path`)
-    setActiveParentPath(selectedParentPath)
-  }
 
   return (
     <BottomBarContainer>
       <ScrollContainer ref={scrollContainerRef}>
         <MobileIconList ref={iconListRef}>
-          {menuItems.map(({ name, icon, path }) => 
-            path === 'processes' && !isAuthenticated ? null : (
-              <IconButton
-                key={name}
-                className="icon-button"
-                data-path={path}
-                onClick={() => {
-                  if (mobileMenuAnchor === path) {
-                    setMobileMenuAnchor(null);
-                  } else {
-                    setMobileMenuAnchor(path);
-                    setOpenItem(path);
-                    setSelectedParentPath(path)
-                  }
-                }}
-                sx={{
-                  color: theme.palette.primary.main,
-                  ...(centeredIcon === path && {
-                    backgroundColor: 'rgba(144, 202, 249, 0.16)',
-                    transform: 'scale(1.1)'
-                  })
-                }}
-              >
-                {icon}
-              </IconButton>
-            )
+          {menuItems.map(({ name, icon, path, view }) => (
+            <IconButton
+              key={name}
+              className="icon-button"
+              data-path={path}
+              onClick={() => {
+                handleViewChange(view);
+                if (mobileMenuAnchor === path) {
+                  setMobileMenuAnchor(null);
+                } else {
+                  setMobileMenuAnchor(path);
+                  setOpenItem(path);
+                  setSelectedParentPath(path);
+                }
+              }}
+              sx={{
+                color: theme.palette.primary.main,
+                ...(centeredIcon === path && {
+                  backgroundColor: 'rgba(144, 202, 249, 0.16)',
+                  transform: 'scale(1.1)'
+                })
+              }}
+            >
+              {icon}
+            </IconButton>
+          ))}
+          {isAuthenticated && (
+            <IconButton
+              className="icon-button"
+              data-path="settings"
+              onClick={() => handleViewChange('settings')}
+              sx={{
+                color: theme.palette.primary.main,
+                ...(centeredIcon === 'settings' && {
+                  backgroundColor: 'rgba(144, 202, 249, 0.16)',
+                  transform: 'scale(1.1)'
+                })
+              }}
+            >
+              <Settings />
+            </IconButton>
           )}
-          <IconButton
-            className="icon-button"
-            data-path="logs"
-            onClick={handleToggleLogs}
-            sx={{
-              color: theme.palette.primary.main,
-              ...(centeredIcon === 'logs' && {
-                backgroundColor: 'rgba(144, 202, 249, 0.16)',
-                transform: 'scale(1.1)'
-              })
-            }}
-          >
-            <LogIcon />
-          </IconButton>
           {!isAuthenticated ? (
             <IconButton
               className="icon-button"
               data-path="login"
-              onClick={() => onViewChange('login')}
+              onClick={() => handleViewChange('login')}
               sx={{
                 color: theme.palette.primary.main,
                 ...(centeredIcon === 'login' && {
@@ -363,12 +312,12 @@ const BottomBar = ({
                   });
                   tokenStorage.clearTokens();
                   dispatch(createLog('User logged out successfully', LogType.INFO));
-                  onViewChange('login');
+                  handleViewChange('login');
                 } catch (error) {
                   console.error('Logout error:', error);
                   dispatch(createLog('Logout failed: ' + error.message, LogType.ERROR));
                   tokenStorage.clearTokens();
-                  onViewChange('login');
+                  handleViewChange('login');
                 }
               }}
               sx={{
@@ -387,18 +336,22 @@ const BottomBar = ({
       <IconLabel>
         {centeredIcon && (
           menuItems.find(item => item.path === centeredIcon)?.name ||
-          (centeredIcon === 'logs' ? 'Logs' :
+          (centeredIcon === 'settings' ? 'Settings' :
            centeredIcon === 'login' ? 'Login' :
            centeredIcon === 'logout' ? 'Logout' : '')
         )}
       </IconLabel>
-      {/* Only show DropUpMenu when explicitly opened by clicking */}
       {mobileMenuAnchor && (
         <DropUpMenu
           open={true}
           onClose={() => setMobileMenuAnchor(null)}
           items={components[mobileMenuAnchor] || []}
-          onItemClick={(item) => handleClassSelect(mobileMenuAnchor, item)}
+          onItemClick={(item) => {
+            if (item.view) {
+              handleViewChange(item.view);
+            }
+            setMobileMenuAnchor(null);
+          }}
           currentView={currentView}
         />
       )}
@@ -410,14 +363,14 @@ BottomBar.propTypes = {
   menuItems: PropTypes.arrayOf(PropTypes.shape({
     name: PropTypes.string.isRequired,
     icon: PropTypes.node.isRequired,
-    path: PropTypes.string.isRequired
+    path: PropTypes.string.isRequired,
+    view: PropTypes.string.isRequired
   })).isRequired,
   components: PropTypes.object.isRequired,
   mobileMenuAnchor: PropTypes.string,
   setMobileMenuAnchor: PropTypes.func.isRequired,
   setOpenItem: PropTypes.func.isRequired,
   onViewChange: PropTypes.func.isRequired,
-  onClassSelect: PropTypes.func.isRequired,
   currentView: PropTypes.string.isRequired,
   isAuthenticated: PropTypes.bool.isRequired,
   activeParentPath: PropTypes.string

@@ -15,9 +15,12 @@ const AuthGuard = ({ children, requiredModules = [] }) => {
 
   useEffect(() => {
     const validateToken = async () => {
-      if (!accessToken || !refreshToken) return;
-
       try {
+        if (!accessToken || !refreshToken) {
+          dispatch(refreshTokenFailure('No tokens available'));
+          return;
+        }
+        dispatch(refreshTokenStart());
         // Validate current token
         const validateResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/validate`, {
           headers: {
@@ -25,10 +28,12 @@ const AuthGuard = ({ children, requiredModules = [] }) => {
           }
         });
 
-        // If token is invalid, try to refresh
-        if (!validateResponse.ok) {
-          dispatch(refreshTokenStart());
-
+        if (validateResponse.ok) {
+          // Token is valid, update state
+          const data = await validateResponse.json();
+          dispatch(refreshTokenSuccess(data));
+        } else {
+          // Token is invalid, try to refresh
           const refreshResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/refresh`, {
             method: 'POST',
             headers: {

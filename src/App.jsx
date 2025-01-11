@@ -1,17 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material';
-import tokenStorage from './components/Auth/services/tokenStorage';
 import Layout from './components/Layout/Layout';
-import DatabaseRegistry from './components/DatabaseRegistry/DatabaseRegistry';
-import BackendAppViewer from './components/BackendAppViewer/BackendAppViewer';
-import ModuleList from './components/ModuleList/ModuleList';
-import LicenseList from './components/LicenseList/LicenseList';
-import OrganizationList from './components/OrganizationList/OrganizationList';
-import BillableList from './components/BillableList/BillableList';
-import { LoginForm, RegistrationForm, AuthGuard } from './components/Auth';
-import { clearLogs, createLog, LogType } from './redux/slices/appSlice';
-import { setLicenseKey } from './redux/slices/authSlice';
+import { LoginForm } from './components/Auth';
+import SettingsForm from './components/SettingsForm';
+import { createLog, LogType, toggleLogViewer } from './redux/slices/appSlice';
+import tokenStorage from './components/Auth/services/tokenStorage';
+import { fetchOrgLicenses } from './redux/slices/licenseSlice';
 
 const theme = createTheme({
   palette: {
@@ -60,71 +55,49 @@ const theme = createTheme({
 
 function App() {
   const dispatch = useDispatch();
-  const [selectedClass, setSelectedClass] = useState(null);
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const { isAuthenticated } = useSelector((state) => state.auth);
   const [currentView, setCurrentView] = useState('login');
+  const auth = useSelector(state => state.auth);
+  const { isAuthenticated } = auth;
 
   useEffect(() => {
-    // Clear logs on mount and log app start
-    dispatch(clearLogs());
-    dispatch(createLog('Application initialized successfully', LogType.INFO));
+    // Log auth state changes
+    dispatch(createLog(`Current auth state: ${JSON.stringify(auth, null, 2)}`, LogType.DEBUG));
+  }, [auth, dispatch]);
+
+  const licenseStatus = useSelector(state => state.license.status);
+
+  useEffect(() => {
+    // Enable log viewer by default
+    dispatch(toggleLogViewer());
     
     // Initialize token storage service
-    dispatch(createLog('Initializing token storage service', LogType.INFO));
-    try {
-      tokenStorage.initialize();
-      dispatch(createLog('Token storage service initialized successfully', LogType.INFO));
-      
-      // Set initial view based on restored auth state
-      if (isAuthenticated) {
-        setCurrentView('organizations');
-        dispatch(createLog('Restored authenticated session', LogType.INFO));
-      }
-    } catch (error) {
-      dispatch(createLog(`Token storage initialization failed: ${error.message}`, LogType.ERROR));
+    tokenStorage.initialize();
+    
+    // Fetch licenses if authenticated and not already fetched/fetching
+    if (isAuthenticated && licenseStatus === 'idle') {
+      dispatch(fetchOrgLicenses())
+        .unwrap()
+        .then(result => {
+          dispatch(createLog(
+            `Licenses fetched successfully. Active license: ${result.activeLicenseId}`, 
+            LogType.INFO
+          ));
+        })
+        .catch(error => {
+          dispatch(createLog(
+            `Failed to fetch licenses: ${error.message}`, 
+            LogType.ERROR
+          ));
+        });
     }
-
-    // Initialize license key auth from env variables
-    const jwt = import.meta.env.VITE_API_JWT;
-    const privateKey = import.meta.env.VITE_API_KEY;
-    if (jwt && privateKey) {
-      dispatch(setLicenseKey({ jwt, privateKey }));
-      dispatch(createLog('License key auth initialized', LogType.INFO));
-    } else {
-      dispatch(createLog('License key auth not available', LogType.WARN));
-    }
-
+    
     // Cleanup on unmount
-    return () => {
-      dispatch(createLog('Cleaning up token storage service', LogType.INFO));
-      tokenStorage.cleanup();
-    };
-  }, [dispatch, isAuthenticated]);
-
-  // Set view to login when not authenticated
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setCurrentView('login');
-      dispatch(createLog('Redirected to login due to no authentication', LogType.INFO));
-    }
-  }, [isAuthenticated, dispatch]);
-
-  const handleClassSelect = (category, classInfo) => {
-    setSelectedCategory(category);
-    setSelectedClass(classInfo);
-    setCurrentView('backend-app');
-    dispatch(createLog(`Selected class: ${classInfo?.name} in category: ${category}`, LogType.DEBUG));
-  };
+    return () => tokenStorage.cleanup();
+  }, [dispatch, isAuthenticated, licenseStatus]);
 
   const handleViewChange = (view) => {
     try {
       setCurrentView(view);
-      if (view === 'database' || view === 'modules' || view === 'licenses' || 
-          view === 'organizations' || view === 'billables') {
-        setSelectedClass(null);
-        setSelectedCategory(null);
-      }
       dispatch(createLog(`Navigation: View changed to ${view}`, LogType.INFO));
     } catch (error) {
       dispatch(createLog(`Error changing view: ${error.message}`, LogType.ERROR));
@@ -134,59 +107,48 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Layout 
-        onClassSelect={handleClassSelect} 
-        onViewChange={handleViewChange} 
-        currentView={currentView}
-      >
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          gap: 3, 
-          width: '100%',
-          flex: 1,
-          marginRight: '33%',
-          transition: 'margin-right 0.3s ease-in-out',
-          position: 'relative',
-          maxWidth: '100%'
-        }}>
-          {currentView === 'backend-app' && (
-            <AuthGuard>
-              <BackendAppViewer 
-                category={selectedCategory} 
-                selectedClass={selectedClass} 
-              />
-            </AuthGuard>
-          )}
-          {currentView === 'database' && (
-            <AuthGuard>
-              <DatabaseRegistry />
-            </AuthGuard>
-          )}
-          {currentView === 'modules' && (
-            <AuthGuard>
-              <ModuleList />
-            </AuthGuard>
-          )}
-          {currentView === 'licenses' && (
-            <AuthGuard>
-              <LicenseList />
-            </AuthGuard>
-          )}
-          {currentView === 'organizations' && (
-            <AuthGuard>
-              <OrganizationList />
-            </AuthGuard>
-          )}
-          {currentView === 'billables' && (
-            <AuthGuard>
-              <BillableList />
-            </AuthGuard>
-          )}
-          {currentView === 'login' && <LoginForm onViewChange={handleViewChange} />}
-          {currentView === 'register' && <RegistrationForm onViewChange={handleViewChange} />}
-        </Box>
-      </Layout>
+      <Box sx={{ minHeight: '100vh', display: 'flex' }}>
+        <Layout 
+          currentView={currentView}
+          onViewChange={handleViewChange}
+        >
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: 3, 
+            width: '100%',
+            flex: 1,
+            marginRight: '33%',
+            transition: 'margin-right 0.3s ease-in-out',
+            position: 'relative',
+            maxWidth: '100%'
+          }}>
+            {!isAuthenticated ? (
+              <Box sx={{ 
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%'
+              }}>
+                <LoginForm onViewChange={handleViewChange} />
+              </Box>
+            ) : (
+              currentView === 'settings' && (
+                <SettingsForm 
+                  onNotification={(notification) => {
+                    dispatch(createLog(notification.message, 
+                      notification.severity === 'error' ? LogType.ERROR : LogType.INFO
+                    ));
+                  }}
+                  onModuleUpdate={() => {
+                    dispatch(createLog('Module settings updated', LogType.INFO));
+                  }}
+                />
+              )
+            )}
+          </Box>
+          </Layout>
+      </Box>
     </ThemeProvider>
   );
 }

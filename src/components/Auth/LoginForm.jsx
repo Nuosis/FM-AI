@@ -121,30 +121,64 @@ const LoginForm = ({ onViewChange }) => {
     try {
       const credentials = Buffer.from(`${formData.email}:${formData.password}`).toString('base64');
       
+      // Log request details for debugging
+      dispatch(createLog(`Login request to: ${import.meta.env.VITE_API_BASE_URL}/api/auth/login`, LogType.DEBUG));
+      dispatch(createLog(`Headers: Origin=${import.meta.env.VITE_FRONTEND_BASE_URL}`, LogType.DEBUG));
+      
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
-          'Origin': import.meta.env.VITE_FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
-          'Authorization': `Basic ${credentials}`
+          'Authorization': `Basic ${credentials}`,
         },
         body: JSON.stringify({ org_id: import.meta.env.VITE_PUBLIC_KEY })
       });
 
+      // Log response status for debugging
+      dispatch(createLog(`Login response status: ${response.status}`, LogType.DEBUG));
+
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || 'Login failed');
+        const errorMessage = data.error || 'Login failed';
+        dispatch(createLog(`Login error: ${errorMessage}`, LogType.ERROR));
+        throw new Error(errorMessage);
       }
+
+      // Log full response data for debugging
+      dispatch(createLog(`Login response data: ${JSON.stringify(data)}`, LogType.DEBUG));
 
       // Validate response structure
       if (!data.access_token || !data.refresh_token || !data.user) {
         throw new Error('Invalid response format');
       }
 
-      // Validate user object
+      // Validate user object and log details
+      dispatch(createLog(`User data: ${JSON.stringify(data.user)}`, LogType.DEBUG));
+      
       if (!data.user.id || !data.user.org_id || !data.user.active_status) {
         throw new Error('Invalid user data');
+      }
+
+      // Fetch license ID for the organization using API key auth
+      try {
+        const licenseResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/licenses/?org_id=${import.meta.env.VITE_PUBLIC_KEY}`, {
+          headers: {
+            'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
+          }
+        });
+
+        if (!licenseResponse.ok) {
+          dispatch(createLog(`licenseResponse ${licenseResponse.json}`, LogType.WARNING))
+          dispatch(createLog('Failed to fetch license ID', LogType.WARNING));
+        } else {
+          const licenseData = await licenseResponse.json();
+          dispatch(createLog(`License data: ${JSON.stringify(licenseData)}`, LogType.DEBUG));
+          // Add license_id to user data
+          data.user.license_id = licenseData.__ID;
+        }
+      } catch (err) {
+        dispatch(createLog(`Failed to fetch license ID: ${err.message}`, LogType.WARNING));
       }
 
       // Validate user is active
@@ -164,8 +198,14 @@ const LoginForm = ({ onViewChange }) => {
       dispatch(createLog('Login successful - tokens stored in memory and localStorage', LogType.INFO));
       onViewChange('organizations');
     } catch (err) {
-      dispatch(loginFailure(err.message));
-      dispatch(createLog(`Login failed: ${err.message}`, LogType.ERROR));
+      const errorMessage = err.message || 'Unknown login error';
+      dispatch(loginFailure(errorMessage));
+      dispatch(createLog(`Login failed: ${errorMessage}`, LogType.ERROR));
+      // Log additional error details if available
+      if (err.response) {
+        dispatch(createLog(`Response status: ${err.response.status}`, LogType.ERROR));
+        dispatch(createLog(`Response data: ${JSON.stringify(err.response.data)}`, LogType.ERROR));
+      }
     }
   };
 

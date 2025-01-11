@@ -101,7 +101,7 @@ const RegistrationForm = ({ onViewChange }) => {
   const createParty = async (formData) => {
     dispatch(createLog('Creating new party record', LogType.DEBUG));
     const displayName = `${formData.firstName} ${formData.lastName}`;
-    const partyResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/party`, {
+    const partyResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/party/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -126,7 +126,7 @@ const RegistrationForm = ({ onViewChange }) => {
 
     // Create email for new party
     dispatch(createLog('Creating new email record', LogType.DEBUG));
-    const emailResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/email`, {
+    const emailResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/email/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

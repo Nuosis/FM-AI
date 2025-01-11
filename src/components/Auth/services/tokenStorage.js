@@ -1,11 +1,10 @@
 import { store } from '../../../redux/store';
 import { 
-  refreshTokenStart, 
-  refreshTokenSuccess, 
   refreshTokenFailure,
   logoutSuccess,
   loginSuccess
 } from '../../../redux/slices/authSlice';
+import { createLog, LogType } from '../../../redux/slices/appSlice';
 
 // Constants
 const TOKEN_REFRESH_THRESHOLD = 60; // Refresh token if less than 60 seconds until expiration
@@ -31,6 +30,9 @@ class TokenStorageService {
   // Save tokens to localStorage
   saveTokens(accessToken, refreshToken, user) {
     if (accessToken && refreshToken) {
+      console.log('Saving user data to storage:', user); // Debug log
+      store.dispatch(createLog(`Saving user data: ${JSON.stringify(user)}`, LogType.DEBUG));
+      
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         accessToken,
         refreshToken,
@@ -45,6 +47,9 @@ class TokenStorageService {
     if (stored) {
       try {
         const { accessToken, refreshToken, user } = JSON.parse(stored);
+        console.log('Restored user data from storage:', user); // Debug log
+        store.dispatch(createLog(`Restored user data: ${JSON.stringify(user)}`, LogType.DEBUG));
+        
         if (accessToken && refreshToken) {
           store.dispatch(loginSuccess({ 
             access_token: accessToken, 
@@ -54,8 +59,12 @@ class TokenStorageService {
         }
       } catch (error) {
         console.error('Error restoring tokens:', error);
+        store.dispatch(createLog(`Error restoring tokens: ${error.message}`, LogType.ERROR));
         this.clearTokens();
       }
+    } else {
+      console.log('No stored auth data found'); // Debug log
+      store.dispatch(createLog('No stored auth data found', LogType.DEBUG));
     }
   }
 
@@ -105,14 +114,21 @@ class TokenStorageService {
 
   // Refresh token if needed
   async refreshTokenIfNeeded() {
-    const state = store.getState().auth;
-    const { accessToken, refreshToken } = state;
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) {
+      store.dispatch(createLog('No stored tokens found during refresh check', LogType.DEBUG));
+      return;
+    }
 
-    if (!accessToken || !refreshToken) return;
+    try {
+      const { accessToken, refreshToken } = JSON.parse(stored);
+      if (!accessToken || !refreshToken) {
+        store.dispatch(createLog('Invalid stored token data during refresh check', LogType.WARNING));
+        return;
+      }
 
-    if (this.needsRefresh(accessToken)) {
-      try {
-        store.dispatch(refreshTokenStart());
+      if (this.needsRefresh(accessToken)) {
+        store.dispatch(createLog('Token refresh needed, making refresh request', LogType.DEBUG));
         
         const response = await fetch('/api/auth/refresh', {
           method: 'POST',
@@ -122,15 +138,23 @@ class TokenStorageService {
           body: JSON.stringify({ refresh_token: refreshToken }),
         });
 
-        if (!response.ok) throw new Error('Token refresh failed');
+        if (!response.ok) {
+          store.dispatch(createLog('Token refresh request failed', LogType.ERROR));
+          store.dispatch(refreshTokenFailure('Token refresh failed'));
+          this.clearTokens();
+          return;
+        }
 
         const data = await response.json();
-        store.dispatch(refreshTokenSuccess(data));
+        store.dispatch(createLog('Token refresh successful, updating storage', LogType.DEBUG));
+        store.dispatch(createLog(`Refreshed user data: ${JSON.stringify(data.user)}`, LogType.DEBUG));
+        
+        // Silently update localStorage without Redux state change
         this.saveTokens(data.access_token, refreshToken, data.user);
-      } catch (error) {
-        store.dispatch(refreshTokenFailure(error.message));
-        this.clearTokens();
       }
+    } catch (error) {
+      store.dispatch(refreshTokenFailure(error.message));
+      this.clearTokens();
     }
   }
 
@@ -141,10 +165,10 @@ class TokenStorageService {
       clearInterval(this.refreshInterval);
     }
     
-    // Check every 30 seconds
+    // Check every 12 minutes
     this.refreshInterval = setInterval(() => {
       this.refreshTokenIfNeeded();
-    }, 30000);
+    }, 720000); // 12 minutes in milliseconds
   }
 }
 

@@ -6,45 +6,18 @@ import {
   setLogContent
 } from '../../redux/slices/appSlice';
 import { useEffect } from 'react';
-import axios from '../../utils/axios';
+import { readLogs } from '../../utils/logging';
 
 const LogViewer = () => {
   const dispatch = useDispatch();
   const isVerboseEnabled = useSelector(selectIsVerboseEnabled);
   const logs = useSelector(state => state.app.logs) || [];
 
-  const fetchLogContent = async () => {
-    try {
-      const response = await axios.get('/api/admin/logs/content');
-      const content = response.data || '';
-      
-      // Parse the log content into structured data
-      const parsedLogs = content
-        .split('\n')
-        .filter(line => line.trim())
-        .map(line => {
-          const match = line.match(/\[(.*?)\] \[(.*?)\] \[(.*?)\] (.*)/);
-          if (match) {
-            return {
-              timestamp: match[2], // Using the ISO timestamp
-              type: match[3],
-              message: match[4]
-            };
-          }
-          return null;
-        })
-        .filter(log => log !== null);
-
-      dispatch(setLogContent(parsedLogs));
-    } catch (error) {
-      console.error('Error fetching log content:', error);
-      dispatch(setLogContent([]));
-    }
-  };
-
   useEffect(() => {
-    fetchLogContent();
-  }, [logs.length]); // Fetch when logs array length changes
+    // Read logs from localStorage
+    const storedLogs = readLogs();
+    dispatch(setLogContent(storedLogs));
+  }, [dispatch]); // Only run once on mount
 
   const handleToggleVerbose = () => {
     dispatch(toggleVerbose());
@@ -114,8 +87,8 @@ const LogViewer = () => {
         overflowY: 'auto'
       }}>
         {Array.isArray(logs) ? logs.map(log => (
-          `[${log.timestamp}] [${log.type.toUpperCase()}] ${log.message}\n`
-        )) : ''}
+          `[${log.timestamp}] [${log.type}] ${log.message}\n`
+        )).join('') : ''}
       </pre>
     </div>
   );

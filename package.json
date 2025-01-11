@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "start": "./start_fe.sh",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "generate-jwt": "node scripts/generate-jwt.js",

@@ -1,22 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { Box, styled, useTheme, useMediaQuery } from '@mui/material';
+import {
+  Code,
+  ManageSearch,
+  Handyman,
+  SmartToy
+} from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import LogViewer from '../LogViewer/LogViewer';
 import { selectShowLogViewer } from '../../redux/slices/appSlice';
 import Sidebar from '../Sidebar/Sidebar';
 import Bottombar from '../Sidebar/Bottombar';
-import {
-  Security,
-  Cloud,
-  Timeline,
-  Settings,
-  Code,
-  AutoAwesome,
-  Business,
-  VpnKey,
-  Extension
-} from '@mui/icons-material';
+import { menuItems } from '../../constants/menuItems';
 
 const DRAWER_WIDTH = 240;
 
@@ -44,85 +40,12 @@ const Main = styled('main', {
   marginBottom: isMobile ? '96px' : 0
 }));
 
-const menuItems = [
-  { name: 'Authentication', icon: <Security />, path: 'auth' },
-  { name: 'Deployment', icon: <Cloud />, path: 'deployment' },
-  { name: 'Monitoring', icon: <Timeline />, path: 'monitoring' },
-  { name: 'Orchestration', icon: <Settings />, path: 'orchestration' },
-  { name: 'Database', icon: <Code />, path: 'database' },
-  { name: 'Org Settings', icon: <AutoAwesome />, path: 'processes' }
-];
-
-const Layout = ({ children, onClassSelect, onViewChange, currentView }) => {
+const Layout = ({ children, onViewChange, currentView }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null);
   const [openItem, setOpenItem] = useState(null);
-  const [components, setComponents] = useState({});
-  const { isAuthenticated } = useSelector((state) => state.auth);
   const showLogViewer = useSelector(selectShowLogViewer);
-
-  useEffect(() => {
-    const loadAllConfigs = async () => {
-      try {
-        const configs = {};
-        for (const { path } of menuItems) {
-          if (path === 'processes') {
-            configs[path] = [
-              {
-                name: 'Organizations',
-                component: 'OrganizationList',
-                isSpecial: true,
-                icon: <Business fontSize="small" />
-              },
-              {
-                name: 'Licenses',
-                component: 'LicenseList',
-                isSpecial: true,
-                icon: <VpnKey fontSize="small" />
-              },
-              {
-                name: 'Modules',
-                component: 'ModuleList',
-                isSpecial: true,
-                icon: <Extension fontSize="small" />
-              }
-            ];
-            continue;
-          }
-          const response = await fetch(`/api/admin/backend-app/${path}/config.json`);
-          if (!response.ok) {
-            throw new Error(`Failed to load config for ${path}`);
-          }
-          const data = await response.json();
-          let items = Object.entries(data).flatMap(([source, component]) => 
-            component.classes.map(classInfo => ({
-              ...classInfo,
-              component: component.summary,
-              source
-            }))
-          );
-          
-          if (path === 'database') {
-            items = [
-              {
-                name: 'Register a Database',
-                component: 'DatabaseRegistry',
-                isSpecial: true
-              },
-              ...items
-            ];
-          }
-          configs[path] = items;
-        }
-        setComponents(configs);
-      } catch (err) {
-        console.error('Error loading configs:', err);
-      }
-    };
-
-    loadAllConfigs();
-  }, []);
 
   return (
     <Box sx={{ 
@@ -133,27 +56,28 @@ const Layout = ({ children, onClassSelect, onViewChange, currentView }) => {
       {isMobile ? (
         <BottomBarContainer>
           <Bottombar
-            menuItems={menuItems}
-            components={components}
+            menuItems={menuItems.map(item => ({
+              ...item,
+              icon: (() => {
+                switch (item.iconType) {
+                  case 'Code': return <Code />;
+                  case 'ManageSearch': return <ManageSearch />;
+                  case 'Handyman': return <Handyman />;
+                  case 'SmartToy': return <SmartToy />;
+                  default: return null;
+                }
+              })()
+            }))}
             mobileMenuAnchor={mobileMenuAnchor}
-            activeParentPath={
-              // For special views, highlight parent without opening menu
-              currentView === 'organization-list' || 
-              currentView === 'license-list' || 
-              currentView === 'module-list' ? 'processes' : null
-            }
             setMobileMenuAnchor={setMobileMenuAnchor}
             setOpenItem={setOpenItem}
-            onClassSelect={onClassSelect}
             onViewChange={onViewChange}
             currentView={currentView}
-            isAuthenticated={isAuthenticated}
           />
         </BottomBarContainer>
       ) : (
         <Sidebar 
           width={DRAWER_WIDTH} 
-          onClassSelect={onClassSelect}
           onViewChange={onViewChange}
           currentView={currentView}
           openItem={openItem}
@@ -188,7 +112,6 @@ const Layout = ({ children, onClassSelect, onViewChange, currentView }) => {
 
 Layout.propTypes = {
   children: PropTypes.node.isRequired,
-  onClassSelect: PropTypes.func.isRequired,
   onViewChange: PropTypes.func.isRequired,
   currentView: PropTypes.string.isRequired
 };

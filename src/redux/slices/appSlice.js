@@ -1,6 +1,5 @@
 import { createSlice } from '@reduxjs/toolkit';
-import { writeToLog } from '../../utils/logging';
-import axios from 'axios';
+import { writeToLog, readLogs, clearLogs as clearLogFile } from '../../utils/logging';
 
 export const LogType = {
   INFO: 'info',
@@ -34,9 +33,7 @@ const appSlice = createSlice({
       });
     },
     clearLogs: (state) => {
-      axios.post('/api/admin/logs/clear').catch(error => {
-        console.error('Error clearing logs:', error);
-      });
+      clearLogFile();
       state.logs = [];
     },
     setLogContent: (state, action) => {
@@ -61,17 +58,20 @@ export const selectLogs = (state) => state.app.logs;
 
 // Thunk for handling log creation
 export const createLog = (message, type = LogType.INFO) => async (dispatch) => {
-  const result = await writeToLog(message, type);
+  // Always add to Redux state first
+  dispatch(addLog({ message, type }));
   
-  if (result.result === 'logged') {
-    try {
-      const response = await axios.get('/api/admin/logs/content');
-      dispatch(setLogContent(response.data));
-    } catch (error) {
-      console.error('Error fetching logs:', error);
+  // Write to local log file
+  try {
+    const result = await writeToLog(message, type);
+    if (result.result === 'logged') {
+      const logs = readLogs();
+      dispatch(setLogContent(logs));
+    } else if (result.result === 'error') {
+      console.error('Error writing log to file:', result.error);
     }
-  } else if (result.result === 'error') {
-    console.error('Error writing log:', result.error);
+  } catch (error) {
+    console.error('Error in logging process:', error);
   }
 };
 
