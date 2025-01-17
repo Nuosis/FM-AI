@@ -46,7 +46,7 @@ const API_BASE_URL = process.env.VITE_API_BASE_URL;
 const FRONTEND_BASE_URL = process.env.VITE_FRONTEND_BASE_URL;
 const PUBLIC_KEY = process.env.VITE_PUBLIC_KEY;
 
-if (!API_BASE_URL || !PUBLIC_KEY || !FRONTEND_BASE_URL) {
+if (!API_BASE_URL || !PUBLIC_KEY) {
   throw new Error('Required environment variables are not set');
 }
 
@@ -73,7 +73,7 @@ async function runUserAuthTests() {
       const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `Basic ${credentials}`
         },
@@ -124,16 +124,17 @@ async function runUserAuthTests() {
     try {
       log('Testing account lockout...', LogType.INFO);
       
-      const wrongCredentials = encodeCredentials('test.lockout', 'wrongpass');
+      // Use a dedicated account for lockout testing to avoid affecting other tests
+      const lockoutTestCredentials = encodeCredentials('lockout_test@example.com', 'WrongPassword123!');
       
       // Attempt login multiple times to trigger lockout
       for (let i = 0; i < TEST_CONFIG.maxLoginAttempts; i++) {
         const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
           method: 'POST',
           headers: {
-            'Origin': FRONTEND_BASE_URL,
+            //'Origin': FRONTEND_BASE_URL,
             'Content-Type': 'application/json',
-            'Authorization': `Basic ${wrongCredentials}`
+            'Authorization': `Basic ${lockoutTestCredentials}`
           },
           body: JSON.stringify({ org_id: PUBLIC_KEY })
         });
@@ -152,9 +153,9 @@ async function runUserAuthTests() {
       const finalResponse = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
-          'Authorization': `Basic ${wrongCredentials}`
+            'Authorization': `Basic ${lockoutTestCredentials}`
         },
         body: JSON.stringify({ org_id: PUBLIC_KEY })
       });
@@ -187,7 +188,7 @@ async function runUserAuthTests() {
       const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `Basic ${credentials}`
         },
@@ -312,7 +313,7 @@ async function runUserAuthTests() {
         const response = await fetch(`${API_BASE_URL}/api/auth/password/change`, {
           method: 'POST',
           headers: {
-            'Origin': FRONTEND_BASE_URL,
+            //'Origin': FRONTEND_BASE_URL,
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${accessToken}`
           },
@@ -353,7 +354,7 @@ async function runUserAuthTests() {
       const response = await fetch(`${API_BASE_URL}/api/auth/password/change`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`
         },
@@ -391,7 +392,7 @@ async function runUserAuthTests() {
       const revertResponse = await fetch(`${API_BASE_URL}/api/auth/password/change`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`
         },
@@ -421,7 +422,7 @@ async function runUserAuthTests() {
       const response = await fetch(`${API_BASE_URL}/api/auth/password/reset-request`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -461,7 +462,7 @@ async function runUserAuthTests() {
       const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ refresh_token: refreshToken })
@@ -475,7 +476,7 @@ async function runUserAuthTests() {
       const refreshResponse = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ refresh_token: refreshToken })

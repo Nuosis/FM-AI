@@ -273,7 +273,6 @@ const RegistrationForm = ({ onViewChange }) => {
       const loginResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
-          'Origin': import.meta.env.VITE_FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `Basic ${credentials}`
         },
@@ -457,14 +456,19 @@ const RegistrationForm = ({ onViewChange }) => {
             >
               Already have an account?{' '}
               <Link
-                component="span"
+                component="button"
                 variant="body2"
                 onClick={handleSignIn}
                 sx={{ 
                   textDecoration: 'none',
                   cursor: 'pointer',
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  color: 'primary.main',
                   '&:hover': {
-                    textDecoration: 'underline'
+                    textDecoration: 'underline',
+                    color: 'primary.light'
                   }
                 }}
               >

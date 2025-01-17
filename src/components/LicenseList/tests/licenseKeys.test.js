@@ -41,14 +41,12 @@ const log = (message, type = LogType.INFO) => {
 };
 
 const API_BASE_URL = process.env.VITE_API_BASE_URL; // Flask server port from main.py
-const FRONTEND_BASE_URL = process.env.VITE_FRONTEND_BASE_URL
 // Check required environment variables
-if (! process.env.API_BASE_URL || !process.env.FRONTEND_BASE_URL || !process.env.PUBLIC_KEY || !process.env.API_JWT || !process.env.API_KEY) {
+if (! process.env.API_BASE_URL || !process.env.PUBLIC_KEY || !process.env.API_JWT || !process.env.API_KEY) {
   console.error('\n[ERROR] Required environment variables are not set.');
   console.error('This test requires:');
   console.error('- PUBLIC_KEY: Organization UUID');
   console.error('- API_BASE_URL');
-  console.error('- FRONTEND_BASE_URL');
   console.error('- API_JWT: Organization API key JWT');
   console.error('- API_KEY: Organization API key private key');
   process.exit(1);
@@ -85,7 +83,6 @@ async function runApiKeyTests() {
       const response = await fetch(`${API_BASE_URL}/api/admin/licenses`, {
         headers: {
           'Authorization': `ApiKey ${process.env.API_JWT}:${process.env.API_KEY}`,
-          'Origin': FRONTEND_BASE_URL
         }
       });
       
@@ -121,7 +118,6 @@ async function runApiKeyTests() {
       const response = await fetch(`${API_BASE_URL}/api/admin/licenses/${licenseId}/keys`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `ApiKey ${process.env.API_JWT}:${process.env.API_KEY}`
         },
@@ -155,7 +151,6 @@ async function runApiKeyTests() {
       
       const response = await fetch(`${API_BASE_URL}/api/admin/licenses/${licenseId}/keys`, {
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Authorization': `ApiKey ${process.env.API_JWT}:${process.env.API_KEY}`
         }
       });
@@ -211,7 +206,6 @@ async function runApiKeyTests() {
       const response = await fetch(`${API_BASE_URL}/api/admin/licenses/${licenseId}/keys/${createdKeyId}/modules`, {
         method: 'PATCH',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `ApiKey ${process.env.API_JWT}:${process.env.API_KEY}`
         },
@@ -242,7 +236,6 @@ async function runApiKeyTests() {
       const response = await fetch(`${API_BASE_URL}/api/keys/validate`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Authorization': `ApiKey ${jwtToken}:${privateKey}`
         }
       });
@@ -274,7 +267,6 @@ async function runApiKeyTests() {
       const response = await fetch(`${API_BASE_URL}/api/admin/licenses/${licenseId}/keys/${createdKeyId}/revoke`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Authorization': `ApiKey ${process.env.API_JWT}:${process.env.API_KEY}`
         }
       });

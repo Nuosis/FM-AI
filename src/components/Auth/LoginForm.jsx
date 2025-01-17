@@ -37,10 +37,12 @@ import {
   checkLockoutExpiry
 } from '../../redux/slices/authSlice';
 import { createLog, LogType } from '../../redux/slices/appSlice';
+import { fetchOrgLicenses, selectActiveLicenseId } from '../../redux/slices/licenseSlice';
 
 const LoginForm = ({ onViewChange }) => {
   const dispatch = useDispatch();
   const auth = useSelector((state) => state.auth);
+  const activeLicenseId = useSelector(selectActiveLicenseId);
   const { loading, error, isLocked, lockoutExpiry } = auth;
 
   const [formData, setFormData] = useState({
@@ -123,7 +125,6 @@ const LoginForm = ({ onViewChange }) => {
       
       // Log request details for debugging
       dispatch(createLog(`Login request to: ${import.meta.env.VITE_API_BASE_URL}/api/auth/login`, LogType.DEBUG));
-      dispatch(createLog(`Headers: Origin=${import.meta.env.VITE_FRONTEND_BASE_URL}`, LogType.DEBUG));
       
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/login`, {
         method: 'POST',
@@ -160,22 +161,13 @@ const LoginForm = ({ onViewChange }) => {
         throw new Error('Invalid user data');
       }
 
-      // Fetch license ID for the organization using API key auth
+      // Fetch and set license data using Redux action
       try {
-        const licenseResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/licenses/?org_id=${import.meta.env.VITE_PUBLIC_KEY}`, {
-          headers: {
-            'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-          }
-        });
-
-        if (!licenseResponse.ok) {
-          dispatch(createLog(`licenseResponse ${licenseResponse.json}`, LogType.WARNING))
-          dispatch(createLog('Failed to fetch license ID', LogType.WARNING));
+        await dispatch(fetchOrgLicenses()).unwrap();
+        if (activeLicenseId) {
+          data.licenseId = activeLicenseId;
         } else {
-          const licenseData = await licenseResponse.json();
-          dispatch(createLog(`License data: ${JSON.stringify(licenseData)}`, LogType.DEBUG));
-          // Add license_id to user data
-          data.user.license_id = licenseData.__ID;
+          dispatch(createLog('No active license found for organization', LogType.WARNING));
         }
       } catch (err) {
         dispatch(createLog(`Failed to fetch license ID: ${err.message}`, LogType.WARNING));
@@ -191,12 +183,15 @@ const LoginForm = ({ onViewChange }) => {
         throw new Error('Invalid permitted modules data');
       }
 
-      // Store tokens in memory and localStorage, then start refresh monitoring
+      // submit to auth
       dispatch(loginSuccess(data));
+      dispatch(createLog(`Auth data submitted: ${JSON.stringify(data)}`, LogType.DEBUG));
+
+      // Store tokens in memory and localStorage, then start refresh monitoring
       tokenStorage.saveTokens(data.access_token, data.refresh_token, data.user);
       tokenStorage.refreshTokenIfNeeded(); // Initialize refresh monitoring
       dispatch(createLog('Login successful - tokens stored in memory and localStorage', LogType.INFO));
-      onViewChange('organizations');
+      onViewChange('functions');
     } catch (err) {
       const errorMessage = err.message || 'Unknown login error';
       dispatch(loginFailure(errorMessage));
@@ -342,12 +337,16 @@ const LoginForm = ({ onViewChange }) => {
             >
               Don&apos;t have an account?{' '}
               <Link
-                component="span"
+                component="button"
                 variant="body2"
                 onClick={handleCreateAccount}
                 sx={{ 
                   textDecoration: 'none',
                   cursor: 'pointer',
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  color: 'inherit',
                   '&:hover': {
                     textDecoration: 'underline'
                   }

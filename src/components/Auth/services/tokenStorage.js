@@ -47,7 +47,7 @@ class TokenStorageService {
     if (stored) {
       try {
         const { accessToken, refreshToken, user } = JSON.parse(stored);
-        console.log('Restored user data from storage:', user); // Debug log
+        //console.log('Restored user data from storage:', user); // Debug log
         store.dispatch(createLog(`Restored user data: ${JSON.stringify(user)}`, LogType.DEBUG));
         
         if (accessToken && refreshToken) {

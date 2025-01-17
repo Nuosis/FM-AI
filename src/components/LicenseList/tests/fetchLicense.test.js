@@ -25,17 +25,15 @@ const log = (message, type = LogType.INFO) => {
 
 // Load and validate required environment variables
 const API_BASE_URL = process.env.VITE_API_BASE_URL;
-const FRONTEND_BASE_URL = process.env.VITE_FRONTEND_BASE_URL;
 const ORG_ID = process.env.VITE_TEST_ORG_ID;
 
 // Log environment variables for debugging
 console.log('Environment variables loaded:', {
   API_BASE_URL,
-  FRONTEND_BASE_URL,
   ORG_ID
 });
 
-if (!API_BASE_URL || !FRONTEND_BASE_URL || !ORG_ID) {
+if (!API_BASE_URL || !ORG_ID) {
   throw new Error('Required environment variables are not set');
 }
 
@@ -71,7 +69,8 @@ async function checkBackendHealth() {
     
     const response = await fetch(`${API_BASE_URL}/health`, {
       headers: {
-        'Origin': FRONTEND_BASE_URL
+        //'Origin': FRONTEND_BASE_URL
+        'Content-Type': 'application/json'
       }
     });
     
@@ -111,7 +110,6 @@ async function runLicenseTests() {
       const response = await fetch(`${API_BASE_URL}/api/admin/licenses`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(TEST_CONFIG.licenseData)
@@ -140,7 +138,7 @@ async function runLicenseTests() {
 
       const response = await fetch(`${API_BASE_URL}/api/admin/licenses`, {
         headers: {
-          'Origin': FRONTEND_BASE_URL
+          'Content-Type': 'application/json'
         }
       });
       
@@ -229,7 +227,6 @@ async function runLicenseTests() {
       const response = await fetch(`${API_BASE_URL}/api/admin/licenses/${createdLicenseId}`, {
         method: 'PATCH',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(TEST_CONFIG.updateData)
@@ -259,7 +256,7 @@ async function runLicenseTests() {
       const response = await fetch(`${API_BASE_URL}/api/admin/licenses/${createdLicenseId}`, {
         method: 'DELETE',
         headers: {
-          'Origin': FRONTEND_BASE_URL
+          'Content-Type': 'application/json'
         }
       });
       

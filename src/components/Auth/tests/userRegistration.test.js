@@ -26,7 +26,7 @@ const PUBLIC_KEY = process.env.VITE_PUBLIC_KEY;
 const API_JWT = process.env.VITE_API_JWT;
 const API_KEY = process.env.VITE_API_KEY;
 
-if (!API_BASE_URL || !FRONTEND_BASE_URL || !PUBLIC_KEY || !API_JWT || !API_KEY) {
+if (!API_BASE_URL || !PUBLIC_KEY || !API_JWT || !API_KEY) {
   throw new Error('Required environment variables are not set');
 }
 
@@ -51,7 +51,7 @@ async function runUserRegistrationTests() {
       const response = await fetch(`${API_BASE_URL}/api/admin/email/find`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
         },
@@ -104,7 +104,7 @@ async function runUserRegistrationTests() {
       const response = await fetch(`${API_BASE_URL}/api/admin/party`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
         },
@@ -127,7 +127,7 @@ async function runUserRegistrationTests() {
       const emailResponse = await fetch(`${API_BASE_URL}/api/admin/email`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
         },
@@ -188,7 +188,7 @@ async function runUserRegistrationTests() {
       const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
         },
@@ -207,7 +207,7 @@ async function runUserRegistrationTests() {
       const loginResponse = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `Basic ${encodeCredentials(formData.userName, formData.password)}`
         },
@@ -248,7 +248,7 @@ async function runUserRegistrationTests() {
       let response = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
         },
@@ -270,7 +270,7 @@ async function runUserRegistrationTests() {
       response = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
         },
@@ -302,7 +302,7 @@ async function runUserRegistrationTests() {
         response = await fetch(`${API_BASE_URL}/api/auth/register`, {
           method: 'POST',
           headers: {
-            'Origin': FRONTEND_BASE_URL,
+            //'Origin': FRONTEND_BASE_URL,
             'Content-Type': 'application/json',
             'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
           },
@@ -337,7 +337,7 @@ async function runUserRegistrationTests() {
       const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
+          //'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(userData)

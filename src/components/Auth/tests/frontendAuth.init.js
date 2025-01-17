@@ -41,7 +41,6 @@ const log = (message, type = LogType.INFO) => {
 
 // Test configuration and environment validation
 const API_BASE_URL = process.env.VITE_API_BASE_URL;
-const FRONTEND_BASE_URL = process.env.VITE_FRONTEND_BASE_URL;
 const PUBLIC_KEY = process.env.VITE_PUBLIC_KEY;
 const API_JWT = process.env.VITE_API_JWT;
 const API_KEY = process.env.VITE_API_KEY;
@@ -77,7 +76,6 @@ async function testMachineToMachineAuth() {
       const response = await fetch(`${API_BASE_URL}/api/admin/licenses`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
         },
@@ -104,7 +102,6 @@ async function testMachineToMachineAuth() {
       
       const response = await fetch(`${API_BASE_URL}/api/admin/licenses`, {
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
         }
       });
@@ -169,7 +166,6 @@ async function testMachineToMachineAuth() {
       const response = await fetch(`${API_BASE_URL}/api/keys/validate`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
         }
       });
@@ -232,7 +228,6 @@ async function testMachineToMachineAuth() {
       const response = await fetch(`${API_BASE_URL}/api/licenses/${licenseId}/keys`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
         },
@@ -264,7 +259,6 @@ async function testMachineToMachineAuth() {
         log('No license ID provided, fetching license...', LogType.DEBUG);
         const licenseResponse = await fetch(`${API_BASE_URL}/api/admin/licenses`, {
           headers: {
-            'Origin': FRONTEND_BASE_URL,
             'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
           }
         });
@@ -289,7 +283,6 @@ async function testMachineToMachineAuth() {
       // Now get the License Keys for this license
       const apiKeysResponse = await fetch(`${API_BASE_URL}/api/licenses/${licenseId}/keys`, {
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
         }
       });

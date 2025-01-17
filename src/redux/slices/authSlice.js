@@ -26,12 +26,13 @@ const authSlice = createSlice({
       state.error = null;
     },
     loginSuccess: (state, action) => {
+      //console.log({action})
       state.isAuthenticated = true;
       state.loading = false;
       state.accessToken = action.payload.access_token;
       state.refreshToken = action.payload.refresh_token;
       state.user = action.payload.user;
-      state.licenseId = action.payload.user?.license_id || null;
+      state.licenseId = action.payload.licenseId || null;
       state.error = null;
     },
     loginFailure: (state, action) => {

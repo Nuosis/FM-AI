@@ -1,25 +1,25 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { createLog, LogType } from './appSlice';
+import axios from '../../utils/axios';
 
 export const fetchOrgLicenses = createAsyncThunk(
   'license/fetchOrgLicenses',
   async (_, { dispatch }) => {
+    // Get org_id from Redux auth state
     const orgId = import.meta.env.VITE_PUBLIC_KEY;
+    if (!orgId) {
+      throw new Error('No organization ID set');
+    }
     dispatch(createLog(`Fetching organization licenses ${orgId}`, LogType.DEBUG));
     
     try {
-      const response = await fetch(`/api/admin/licenses/?org_id=${orgId}`, {
+      const response = await axios.get(`/admin/licenses/?org_id=${orgId}`, {
         headers: {
           'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
         }
       });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch licenses');
-      }
-      
-      const data = await response.json();
+      const data = response.data;
       
       dispatch(createLog(`Licenses data: ${JSON.stringify(data)}`, LogType.DEBUG));
       

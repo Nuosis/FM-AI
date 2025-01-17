@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material';
 import Layout from './components/Layout/Layout';
-import { LoginForm } from './components/Auth';
+import { LoginForm, RegistrationForm } from './components/Auth';
 import SettingsForm from './components/SettingsForm';
 import { createLog, LogType, toggleLogViewer } from './redux/slices/appSlice';
 import tokenStorage from './components/Auth/services/tokenStorage';
@@ -130,7 +130,11 @@ function App() {
                 justifyContent: 'center',
                 height: '100%'
               }}>
-                <LoginForm onViewChange={handleViewChange} />
+                {currentView === 'register' ? (
+                  <RegistrationForm onViewChange={handleViewChange} />
+                ) : (
+                  <LoginForm onViewChange={handleViewChange} />
+                )}
               </Box>
             ) : (
               currentView === 'settings' && (

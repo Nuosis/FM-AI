@@ -3,6 +3,29 @@ import { selectIsVerboseEnabled } from '../redux/slices/appSlice';
 
 const LOGS_STORAGE_KEY = 'app_logs';
 
+// Mask sensitive data like keys and tokens
+export const maskSensitiveData = (data) => {
+  if (typeof data !== 'object' || data === null) return data;
+  
+  const sensitiveKeys = ['privateKey', 'apiKey', 'clientSecret', 'refreshToken', 'token', 'jwt'];
+  const maskedData = { ...data };
+  
+  for (const key in maskedData) {
+    if (sensitiveKeys.some(sensitive => key.toLowerCase().includes(sensitive.toLowerCase()))) {
+      if (typeof maskedData[key] === 'string') {
+        const value = maskedData[key];
+        maskedData[key] = value.length <= 8 
+          ? `${value.slice(0, 2)}***${value.slice(-2)}`
+          : `${value.slice(0, 4)}***${value.slice(-4)}`;
+      }
+    } else if (typeof maskedData[key] === 'object' && maskedData[key] !== null) {
+      maskedData[key] = maskSensitiveData(maskedData[key]);
+    }
+  }
+  
+  return maskedData;
+};
+
 const getStoredLogs = () => {
   try {
     const storedLogs = localStorage.getItem(LOGS_STORAGE_KEY);
@@ -35,8 +58,16 @@ export const writeToLog = async (message, type) => {
     };
     
     try {
+      // Mask any sensitive data before logging
+      const maskedMessage = typeof message === 'object' 
+        ? JSON.stringify(maskSensitiveData(message))
+        : message;
+        
       const logs = getStoredLogs();
-      logs.push(newLog);
+      logs.push({
+        ...newLog,
+        message: maskedMessage
+      });
       setStoredLogs(logs);
       return { result: 'logged', error: 0 };
     } catch (error) {

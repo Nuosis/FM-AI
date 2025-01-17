@@ -27,7 +27,7 @@ const log = (message, type = LogType.INFO) => {
 const API_BASE_URL = process.env.VITE_API_BASE_URL;
 const FRONTEND_BASE_URL = process.env.VITE_FRONTEND_BASE_URL;
 
-if (!API_BASE_URL || !FRONTEND_BASE_URL) {
+if (!API_BASE_URL) {
   throw new Error('Required environment variables are not set');
 }
 
@@ -38,7 +38,8 @@ export async function testHealth() {
     
     const response = await fetch(`${API_BASE_URL}/health`, {
       headers: {
-        'Origin': FRONTEND_BASE_URL
+        //'Origin': FRONTEND_BASE_URL
+        'Content-Type': 'application/json'
       }
     });
 
@@ -71,9 +72,9 @@ export async function testHealthSecureBearer(accessToken) {
   try {
     log('Testing /health-secure with Bearer token...', LogType.INFO);
     
-    const response = await fetch(`${API_BASE_URL}/health-secure`, {
+    const response = await fetch(`${API_BASE_URL}/api/admin/health-secure`, {
       headers: {
-        'Origin': FRONTEND_BASE_URL,
+      //'Origin': FRONTEND_BASE_URL,
         'Authorization': `Bearer ${accessToken}`
       }
     });
@@ -104,9 +105,9 @@ export async function testHealthSecureBasic(username, password) {
     
     const credentials = Buffer.from(`${username}:${password}`).toString('base64');
     
-    const response = await fetch(`${API_BASE_URL}/health-secure`, {
+    const response = await fetch(`${API_BASE_URL}/api/admin/health-secure`, {
       headers: {
-        'Origin': FRONTEND_BASE_URL,
+        //'Origin': FRONTEND_BASE_URL,
         'Authorization': `Basic ${credentials}`
       }
     });
@@ -135,9 +136,9 @@ export async function testHealthSecureApiKey(apiKey, privateKey) {
   try {
     log('Testing /health-secure with ApiKey...', LogType.INFO);
     
-    const response = await fetch(`${API_BASE_URL}/health-secure`, {
+    const response = await fetch(`${API_BASE_URL}/api/admin/health-secure`, {
       headers: {
-        'Origin': FRONTEND_BASE_URL,
+        //'Origin': FRONTEND_BASE_URL,
         'Authorization': `ApiKey ${apiKey}:${privateKey}`
       }
     });
@@ -166,9 +167,9 @@ export async function testHealthSecureLicenseKey(licenseKey, privateKey) {
   try {
     log('Testing /health-secure with LicenseKey...', LogType.INFO);
     
-    const response = await fetch(`${API_BASE_URL}/health-secure`, {
+    const response = await fetch(`${API_BASE_URL}/api/admin/health-secure`, {
       headers: {
-        'Origin': FRONTEND_BASE_URL,
+        //'Origin': FRONTEND_BASE_URL,
         'Authorization': `LicenseKey ${licenseKey}:${privateKey}`
       }
     });
@@ -206,13 +207,13 @@ async function runAllTests() {
   const tests = [];
 
   // Skip Bearer token test since we're not authenticated (would need active session)
-  log('Skipping Bearer token test - not authenticated (isAuthenticated: false)', LogType.WARNING);
+  // log('Skipping Bearer token test - not authenticated (isAuthenticated: false)', LogType.WARNING);
 
   // Add remaining tests
   tests.push(
     testHealthSecureBasic(
-      process.env.DEV_USER,
-      process.env.DEV_PASSWORD
+      process.env.TEST_USER,
+      process.env.TEST_PASSWORD
     ),
     testHealthSecureApiKey(
       process.env.VITE_API_KEY,
@@ -230,7 +231,8 @@ async function runAllTests() {
   // Consider test successful if ApiKey and LicenseKey tests pass
   const criticalTests = [
     results[results.length - 2], // ApiKey test
-    results[results.length - 1]  // LicenseKey test
+    results[results.length - 1],  // LicenseKey test
+    results[results.length - 0]  // Basic Auth test
   ];
   const allPassed = criticalTests.every(result => result === true);
   

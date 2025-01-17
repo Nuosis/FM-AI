@@ -21,12 +21,11 @@ import {
   Delete as DeleteIcon
 } from '@mui/icons-material';
 
-const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = false }) => {
+const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = true }) => {
   const dispatch = useDispatch();
   const currentUser = useSelector(state => state.auth.user);
   const licenseKey = useSelector(state => state.auth.licenseKey);
   const activeLicense = useSelector(state => state.license.activeLicense);
-  const licenseId = activeLicense?.fieldData?.__ID || null;
   const authHeader = `LicenseKey ${licenseKey.jwt}:${licenseKey.privateKey}`;
   const [availableModules, setAvailableModules] = useState([]);
   const [selectedModule, setSelectedModule] = useState('');
@@ -37,25 +36,17 @@ const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = false }) => {
 
   // Fetch available modules
   const fetchAvailableModules = async (fetchApiKeys = apiKeys) => {
-    console.log('fetchAvailableModules called'); // Immediate console log
-    
-    if (!licenseId) {
-      console.error('No license ID available');
-      await dispatch(createLog('No license ID available', LogType.ERROR));
-      return;
-    }
+    console.log('fetchAvailableModules called',`fetchApiKeys ${fetchApiKeys}`);
     
     try {
-      await dispatch(createLog(`Fetching modules for license ID: ${licenseId}`, LogType.DEBUG));
       console.log('Current user:', currentUser); // Immediate console log
       await dispatch(createLog(`Current user: ${JSON.stringify(currentUser)}`, LogType.DEBUG));
       
       // Use module_selected_keys route only when explicitly fetching API keys
       const endpoint = fetchApiKeys 
-        ? `/api/admin/modulesselected/${licenseId}/parties/${currentUser.party_id}/keys`
-        : `/api/admin/modulesselected/license/${licenseId}`;
+        ? `/api/admin/modulesselected/${currentUser.org_id}/parties/${currentUser.party_id}/keys`
+        : `/api/admin/modulesselected/license/${currentUser.org_id}`;
       
-      console.log('Using endpoint:', endpoint); // Immediate console log
       await dispatch(createLog(`Fetching modules from endpoint: ${endpoint}`, LogType.DEBUG));
       
       console.log('Making API request to:', endpoint); // Immediate console log
@@ -67,12 +58,24 @@ const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = false }) => {
       });
       const data = response.data;
       
-      console.log('Call response:', response); // Immediate console log
-      await dispatch(createLog(`Full module response: ${JSON.stringify(response)}`, LogType.DEBUG));
+      console.log('Call response status:', response.status);
+      await dispatch(createLog(`Module response status: ${response.status}`, LogType.DEBUG));
+      
       const modules = Array.isArray(data) ? data : [];
-      console.log('Processed modules:', modules); // Immediate console log
+      console.log('Module names:', modules.map(m => m.fieldData?.moduleName));
+      await dispatch(createLog(`Processed modules: ${JSON.stringify(modules.map(m => ({
+        id: m.fieldData?.__ID,
+        name: m.fieldData?.moduleName
+      })))}`, LogType.DEBUG));
       setAvailableModules(modules);
       await dispatch(createLog(`Successfully loaded ${modules.length} available modules`, LogType.INFO));
+      
+      // Log module details after setting state
+      console.log('Available modules after state update:', {
+        count: modules.length,
+        moduleNames: modules.map(m => m.fieldData?.moduleName),
+        hasModuleData: modules.every(m => m.fieldData && m.fieldData.moduleName)
+      });
     } catch (err) {
       console.error('Error fetching modules:', err); // Immediate console log
       const errorMsg = `Failed to fetch available modules: ${err.message}`;
@@ -115,7 +118,7 @@ const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = false }) => {
       if (isApiKeyBased) {
         // Fetch existing API keys
         const response = await axiosInstance.get(
-          `/api/admin/modulesselected/${licenseId}/parties/${currentUser.party_id}/keys`,
+          `/api/admin/modulesselected/${currentUser.org_id}/parties/${currentUser.party_id}/keys`,
           {
             headers: {
               'Authorization': authHeader,
@@ -154,31 +157,19 @@ const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = false }) => {
     }
   };
 
+  // get available modules and setAvailableModeules
   useEffect(() => {
-    // Debug logs to understand component mount state
-    console.log('SettingsForm useEffect triggered');
-    console.log('licenseId:', licenseId);
-    console.log('currentUser:', currentUser);
-    console.log('activeLicense:', activeLicense);
-    console.log('licenseKey:', licenseKey);
-
     dispatch(createLog(`Auth state when SettingsForm mounts: ${JSON.stringify({
-      licenseId,
+      licenseId: currentUser.org_id,
       currentUser,
       activeLicense,
-      licenseKey
+      licenseKey: licenseKey ? {
+        jwt: licenseKey.jwt ? `${licenseKey.jwt.slice(0, 10)}...` : null,
+        privateKey: licenseKey.privateKey ? `***masked***` : null
+      } : null
     }, null, 2)}`, LogType.DEBUG));
-
-    // Only fetch modules if we have both licenseId and currentUser
-    if (licenseId && currentUser?.org_id) {
-      console.log('Conditions met, calling fetchAvailableModules');
-      fetchAvailableModules();
-    } else {
-      console.log('Conditions not met for fetchAvailableModules:');
-      console.log('- licenseId present:', !!licenseId);
-      console.log('- currentUser.org_id present:', !!currentUser?.org_id);
-    }
-  }, [licenseId, currentUser, activeLicense, licenseKey]);
+    fetchAvailableModules();
+  }, []);
 
   useEffect(() => {
     if (selectedModule) {
@@ -210,7 +201,7 @@ const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = false }) => {
       if (isApiKeyBased) {
         // Create new API key
         await axiosInstance.post(
-          `/api/admin/modulesselected/${licenseId}/parties/${currentUser.party_id}/keys`,
+          `/api/admin/modulesselected/${currentUser.org_id}/parties/${currentUser.party_id}/keys`,
           {
             moduleId: selectedModule,
             apiKey: fieldValue
@@ -292,7 +283,7 @@ const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = false }) => {
       if (isApiKeyBased) {
         // Delete API key
         await axiosInstance.delete(
-          `/api/admin/modulesselected/${licenseId}/parties/${currentUser.party_id}/keys/${fieldRecord.value}`,
+          `/api/admin/modulesselected/${currentUser.org_id}/parties/${currentUser.party_id}/keys/${fieldRecord.value}`,
           {
             headers: {
               'Authorization': authHeader,

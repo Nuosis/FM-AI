@@ -10,7 +10,6 @@
  * 
  * 2. Required environment variables:
  *    - VITE_API_BASE_URL: Backend API URL
- *    - VITE_FRONTEND_BASE_URL: Frontend URL
  *    - VITE_API_JWT: License key JWT token
  *    - VITE_API_KEY: License key private key
  * 
@@ -45,14 +44,12 @@ const log = (message, type = LogType.INFO) => {
 
 // Load and validate required environment variables
 const API_BASE_URL = process.env.VITE_API_BASE_URL;
-const FRONTEND_BASE_URL = process.env.VITE_FRONTEND_BASE_URL;
 const JWT = process.env.VITE_API_JWT;
 const KEY = process.env.VITE_API_KEY;
 
 // Check each required environment variable individually
 const missingVars = [];
 if (!API_BASE_URL) missingVars.push('VITE_API_BASE_URL');
-if (!FRONTEND_BASE_URL) missingVars.push('VITE_FRONTEND_BASE_URL');
 if (!JWT) missingVars.push('VITE_API_JWT');
 if (!KEY) missingVars.push('VITE_API_KEY');
 
@@ -78,7 +75,6 @@ async function runLLMChatTests() {
       const response = await fetch(`${API_BASE_URL}/api/admin/modules/`, {
         method: 'GET',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Authorization': `LicenseKey ${JWT}:${KEY}`,
           'X-Organization-Id': organizationId
         }
@@ -124,7 +120,6 @@ async function runLLMChatTests() {
       const response = await fetch(`${API_BASE_URL}/api/llm/${selectedModuleId}/models`, {
         method: 'GET',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Authorization': `LicenseKey ${JWT}:${KEY}`,
           'X-Organization-Id': organizationId
         }
@@ -165,7 +160,6 @@ async function runLLMChatTests() {
       const response = await fetch(`${API_BASE_URL}/api/llm/${selectedModuleId}/completion`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json',
           'Authorization': `LicenseKey ${JWT}:${KEY}`,
           'X-Organization-Id': organizationId
