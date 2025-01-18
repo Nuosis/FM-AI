@@ -66,6 +66,10 @@ const authSlice = createSlice({
       state.loading = false;
       state.isAuthenticated = true;
       state.accessToken = action.payload.access_token;
+      // Only update refresh token if a new one is provided
+      if (action.payload.refresh_token) {
+        state.refreshToken = action.payload.refresh_token;
+      }
       state.user = action.payload.user;
       state.error = null;
     },

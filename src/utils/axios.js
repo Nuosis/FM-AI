@@ -53,8 +53,13 @@ instance.interceptors.response.use(
         // Dispatch refresh token start
         store.dispatch(refreshTokenStart());
 
-        // Attempt to refresh token
-        const response = await axios.post(`${import.meta.env.VITE_API_BASE_URL}/auth/refresh`, {
+        // Create a clean axios instance for refresh token request
+        const refreshAxios = axios.create({
+          baseURL: import.meta.env.VITE_API_BASE_URL
+        });
+        
+        // Attempt to refresh token with clean instance
+        const response = await refreshAxios.post('/auth/refresh', {
           refresh_token: refreshToken
         });
 

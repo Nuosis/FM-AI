@@ -66,11 +66,41 @@ function App() {
 
   const licenseStatus = useSelector(state => state.license.status);
 
+  // Track if token storage is initialized
+  const [isInitialized, setIsInitialized] = useState(false);
+
   useEffect(() => {
-    // Initialize token storage service
-    tokenStorage.initialize();
-    
-    // Fetch licenses if authenticated and not already fetched/fetching
+    let mounted = true;
+
+    const initializeTokenStorage = async () => {
+      if (isInitialized) return; // Prevent multiple initializations
+      
+      try {
+        dispatch(createLog('Initializing token storage...', LogType.DEBUG));
+        await tokenStorage.initialize();
+        if (mounted) {
+          setIsInitialized(true);
+          dispatch(createLog('Token storage initialized successfully', LogType.DEBUG));
+        }
+      } catch (error) {
+        dispatch(createLog(`Token storage initialization failed: ${error.message}`, LogType.ERROR));
+        // Don't set isInitialized on error to allow retry on next render
+      }
+    };
+
+    initializeTokenStorage();
+
+    // Cleanup on unmount
+    return () => {
+      mounted = false;
+      tokenStorage.cleanup();
+    };
+  }, [dispatch, isInitialized]); // Only re-run if dispatch or isInitialized changes
+
+  // Separate useEffect for license fetching to avoid race conditions
+  useEffect(() => {
+    if (!isInitialized) return; // Wait for token storage to initialize
+
     if (isAuthenticated && licenseStatus === 'idle') {
       dispatch(fetchOrgLicenses())
         .unwrap()
@@ -87,10 +117,7 @@ function App() {
           ));
         });
     }
-    
-    // Cleanup on unmount
-    return () => tokenStorage.cleanup();
-  }, [dispatch, isAuthenticated, licenseStatus]);
+  }, [dispatch, isAuthenticated, licenseStatus, isInitialized]);
 
   const handleViewChange = (view) => {
     try {

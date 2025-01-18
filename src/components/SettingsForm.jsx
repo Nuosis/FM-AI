@@ -15,14 +15,16 @@ import {
   TextField,
   IconButton,
   Paper,
-  Chip
+  Chip,
+  Snackbar,
+  Alert
 } from '@mui/material';
 import {
   Add as AddIcon,
   Delete as DeleteIcon
 } from '@mui/icons-material';
 
-const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = true }) => {
+const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
   const dispatch = useDispatch();
   const currentUser = useSelector(state => state.auth.user);
   const licenseKey = useSelector(state => state.auth.licenseKey);
@@ -38,6 +40,23 @@ const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = true }) => {
   // Initialize state for API keys
   const [apiKeysList, setApiKeysList] = useState([]);
   const activeLicenseId = useSelector(selectActiveLicenseId);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
+
+  const handleCloseSnackbar = () => {
+    setSnackbar(prev => ({ ...prev, open: false }));
+  };
+
+  const showNotification = (message, severity = 'success') => {
+    setSnackbar({
+      open: true,
+      message,
+      severity
+    });
+  };
 
   // Function to initialize modules and refresh the list
   const initializeModules = async () => {
@@ -77,10 +96,7 @@ const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = true }) => {
       
     } catch (error) {
       dispatch(createLog(`Failed to initialize modules: ${error.message}`, LogType.ERROR));
-      onNotification?.({
-        message: `Failed to initialize modules: ${error.message}`,
-        severity: 'error'
-      });
+      showNotification(`Failed to initialize modules: ${error.message}`, 'error');
     }
   };
 
@@ -112,14 +128,14 @@ const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = true }) => {
 
       // Create new API key
       await axiosInstance.post(
-        `/api/admin/modulesselected/${currentUser.org_id}/parties/${currentUser.party_id}/keys`,
+        `/api/admin/modules-selected/${selectedModule}/parties/${currentUser.party_id}/keys`,
         {
-          moduleId: selectedModule,
-          apiKey: fieldValue
+          description: `${module.name} ${selectedField}`,
+          modules: [selectedModule],
+          type: "userKey"
         },
         {
           headers: {
-            'Authorization': authHeader,
             'X-Organization-Id': currentUser.org_id
           }
         }
@@ -133,18 +149,12 @@ const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = true }) => {
       setFieldValue('');
 
       dispatch(createLog('Successfully added service field', LogType.INFO));
-      onNotification?.({
-        message: 'Successfully added service field',
-        severity: 'success'
-      });
+      showNotification('Successfully added service field');
       onModuleUpdate?.();
     } catch (err) {
       const errorMsg = `Failed to add service field: ${err.message}`;
       dispatch(createLog(errorMsg, LogType.ERROR));
-      onNotification?.({
-        message: errorMsg,
-        severity: 'error'
-      });
+      showNotification(errorMsg, 'error');
     }
   };
 
@@ -171,67 +181,63 @@ const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = true }) => {
       initializeModules();
 
       dispatch(createLog('Successfully deleted service field', LogType.INFO));
-      onNotification?.({
-        message: 'Successfully deleted service field',
-        severity: 'success'
-      });
+      showNotification('Successfully deleted service field');
       onModuleUpdate?.();
     } catch (err) {
       const errorMsg = `Failed to delete service field: ${err.message}`;
       dispatch(createLog(errorMsg, LogType.ERROR));
-      onNotification?.({
-        message: errorMsg,
-        severity: 'error'
-      });
+      showNotification(errorMsg, 'error');
     }
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h6" sx={{ mb: 3 }}>
-        {currentUser?.org_id ? 'Organization' : ''} Service Configuration
-      </Typography>
+    <>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h6" sx={{ mb: 3 }}>
+          {currentUser?.org_id ? 'Organization' : ''} Service Configuration
+        </Typography>
 
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: { xs: 'column', md: 'row' }, 
-        gap: 2, 
-        mb: 3 
-      }}>
-        <FormControl sx={{ minWidth: 200 }}>
-          <InputLabel>Module</InputLabel>
-          <Select
-            value={selectedModule}
-            onChange={(e) => setSelectedModule(e.target.value)}
-            label="Module"
-          >
-            {availableModules.map((module) => (
-              <MenuItem key={module.id} value={module.id}>
-                {module.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <FormControl sx={{ minWidth: 200 }}>
-          <InputLabel>Field</InputLabel>
-          <Select
-            value={selectedField}
-            onChange={(e) => setSelectedField(e.target.value)}
-            label="Field"
-            disabled={!selectedModule}
-          >
-            {serviceFields.map((field) => (
-              <MenuItem key={field.key} value={field.label}>
-                {field.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
         <Box sx={{ 
           display: 'flex', 
           flexDirection: { xs: 'column', md: 'row' }, 
+          gap: 2
+        }}>
+          <FormControl sx={{ minWidth: 200 }}>
+            <InputLabel>Module</InputLabel>
+            <Select
+              value={selectedModule}
+              onChange={(e) => setSelectedModule(e.target.value)}
+              label="Module"
+            >
+              {availableModules.map((module) => (
+                <MenuItem key={module.id} value={module.id}>
+                  {module.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl sx={{ minWidth: 200 }}>
+            <InputLabel>Field</InputLabel>
+            <Select
+              value={selectedField}
+              onChange={(e) => setSelectedField(e.target.value)}
+              label="Field"
+              disabled={!selectedModule}
+            >
+              {serviceFields.map((field) => (
+                <MenuItem key={field.key} value={field.label}>
+                  {field.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: { xs: 'column', sm: 'row' }, 
           gap: 2,
           width: '100%'
         }}>
@@ -252,7 +258,7 @@ const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = true }) => {
           >
             Add Field
           </Button>
-        </Box>
+          </Box>
       </Box>
 
       <Paper sx={{ p: 2 }}>
@@ -298,12 +304,26 @@ const SettingsForm = ({ onNotification, onModuleUpdate, apiKeys = true }) => {
           )}
         </Box>
       </Paper>
-    </Box>
+      </Box>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert 
+          onClose={handleCloseSnackbar} 
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </>
   );
 };
 
 SettingsForm.propTypes = {
-  onNotification: PropTypes.func,
   onModuleUpdate: PropTypes.func,
   apiKeys: PropTypes.bool
 };

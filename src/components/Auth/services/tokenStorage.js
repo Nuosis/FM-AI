@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { store } from '../../../redux/store';
 import { 
   refreshTokenFailure,
@@ -21,10 +22,38 @@ class TokenStorageService {
   }
 
   // Initialize token monitoring and restore tokens
-  initialize() {
-    this.restoreTokens();
-    this.startTokenRefreshInterval();
+  async initialize() {
+    try {
+      await this.restoreTokens();
+      // Only start refresh interval if we successfully restored tokens
+      if (store.getState().auth.isAuthenticated) {
+        this.startTokenRefreshInterval();
+      }
+    } catch (error) {
+      store.dispatch(createLog(`Initialization failed: ${error.message}`, LogType.ERROR));
+      this.clearTokens();
+    }
     return this;
+  }
+
+  // Check if refresh token is expired
+  isRefreshTokenExpired(refreshToken) {
+    if (!refreshToken) {
+      store.dispatch(createLog('No refresh token provided for expiration check', LogType.WARNING));
+      return true;
+    }
+    const expiration = this.getTokenExpiration(refreshToken);
+    const currentTime = Math.floor(Date.now() / 1000);
+    const isExpired = expiration <= currentTime;
+    
+    store.dispatch(createLog(
+      `Refresh token expiration check: expires=${new Date(expiration * 1000).toISOString()}, ` +
+      `current=${new Date(currentTime * 1000).toISOString()}, ` +
+      `isExpired=${isExpired}`,
+      LogType.DEBUG
+    ));
+    
+    return isExpired;
   }
 
   // Save tokens to localStorage
@@ -42,15 +71,49 @@ class TokenStorageService {
   }
 
   // Restore tokens from localStorage
-  restoreTokens() {
+  async restoreTokens() {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
         const { accessToken, refreshToken, user } = JSON.parse(stored);
-        //console.log('Restored user data from storage:', user); // Debug log
-        store.dispatch(createLog(`Restored user data: ${JSON.stringify(user)}`, LogType.DEBUG));
+        store.dispatch(createLog(`Attempting to restore user data: ${JSON.stringify(user)}`, LogType.DEBUG));
         
-        if (accessToken && refreshToken) {
+        if (!accessToken || !refreshToken) {
+          throw new Error('Missing tokens in storage');
+        }
+
+        // Check if refresh token is expired
+        if (this.isRefreshTokenExpired(refreshToken)) {
+          throw new Error('Refresh token is expired');
+        }
+
+        // Check if access token is expired or close to expiry
+        if (this.needsRefresh(accessToken)) {
+          store.dispatch(createLog('Stored access token needs refresh, attempting refresh', LogType.DEBUG));
+          
+          // Create a clean axios instance for refresh
+          const refreshAxios = axios.create({
+            baseURL: import.meta.env.VITE_API_BASE_URL
+          });
+          
+          const response = await refreshAxios.post('/auth/refresh', {
+            refresh_token: refreshToken
+          });
+
+          const data = response.data;
+          store.dispatch(createLog('Token refresh successful during restore', LogType.DEBUG));
+          
+          // Update store with new tokens
+          store.dispatch(loginSuccess({ 
+            access_token: data.access_token,
+            refresh_token: data.refresh_token || refreshToken,
+            user: data.user || user
+          }));
+          
+          // Update storage
+          this.saveTokens(data.access_token, data.refresh_token || refreshToken, data.user || user);
+        } else {
+          // Token is still valid, restore as is
           store.dispatch(loginSuccess({ 
             access_token: accessToken, 
             refresh_token: refreshToken,
@@ -97,12 +160,25 @@ class TokenStorageService {
 
   // Check if token needs refresh
   needsRefresh(token) {
-    if (!token) return false;
+    if (!token) {
+      store.dispatch(createLog('No token provided for refresh check', LogType.WARNING));
+      return false;
+    }
     
     const expiration = this.getTokenExpiration(token);
     const currentTime = Math.floor(Date.now() / 1000);
+    const timeUntilExpiration = expiration - currentTime;
+    const needsRefresh = timeUntilExpiration < TOKEN_REFRESH_THRESHOLD;
     
-    return expiration - currentTime < TOKEN_REFRESH_THRESHOLD;
+    store.dispatch(createLog(
+      `Access token refresh check: expires=${new Date(expiration * 1000).toISOString()}, ` +
+      `timeUntilExpiration=${timeUntilExpiration}s, ` +
+      `threshold=${TOKEN_REFRESH_THRESHOLD}s, ` +
+      `needsRefresh=${needsRefresh}`,
+      LogType.DEBUG
+    ));
+    
+    return needsRefresh;
   }
 
   // Clear tokens and cleanup resources
@@ -124,28 +200,30 @@ class TokenStorageService {
       const { accessToken, refreshToken } = JSON.parse(stored);
       if (!accessToken || !refreshToken) {
         store.dispatch(createLog('Invalid stored token data during refresh check', LogType.WARNING));
+        this.clearTokens();
+        return;
+      }
+
+      // Check if refresh token is expired
+      if (this.isRefreshTokenExpired(refreshToken)) {
+        store.dispatch(createLog('Refresh token is expired during refresh check', LogType.WARNING));
+        this.clearTokens();
         return;
       }
 
       if (this.needsRefresh(accessToken)) {
         store.dispatch(createLog('Token refresh needed, making refresh request', LogType.DEBUG));
         
-        const response = await fetch('/api/auth/refresh', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ refresh_token: refreshToken }),
+        // Create a clean axios instance for refresh
+        const refreshAxios = axios.create({
+          baseURL: import.meta.env.VITE_API_BASE_URL
+        });
+        
+        const response = await refreshAxios.post('/auth/refresh', {
+          refresh_token: refreshToken
         });
 
-        if (!response.ok) {
-          store.dispatch(createLog('Token refresh request failed', LogType.ERROR));
-          store.dispatch(refreshTokenFailure('Token refresh failed'));
-          this.clearTokens();
-          return;
-        }
-
-        const data = await response.json();
+        const data = response.data;
         store.dispatch(createLog('Token refresh successful, updating storage', LogType.DEBUG));
         store.dispatch(createLog(`Refreshed user data: ${JSON.stringify(data.user)}`, LogType.DEBUG));
         
