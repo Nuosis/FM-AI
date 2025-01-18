@@ -67,9 +67,6 @@ function App() {
   const licenseStatus = useSelector(state => state.license.status);
 
   useEffect(() => {
-    // Enable log viewer by default
-    dispatch(toggleLogViewer());
-    
     // Initialize token storage service
     tokenStorage.initialize();
     

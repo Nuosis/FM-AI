@@ -13,7 +13,7 @@ export const fetchOrgLicenses = createAsyncThunk(
     dispatch(createLog(`Fetching organization licenses ${orgId}`, LogType.DEBUG));
     
     try {
-      const response = await axios.get(`/admin/licenses/?org_id=${orgId}`, {
+      const response = await axios.get(`/api/admin/licenses/?org_id=${orgId}`, {
         headers: {
           'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
         }
@@ -28,6 +28,7 @@ export const fetchOrgLicenses = createAsyncThunk(
         license.fieldData._orgID === orgId && 
         license.fieldData.f_active === 1
       );
+      console.log({activeLicense})
 
       dispatch(createLog(`Active license set to: ${activeLicense?.fieldData.__ID}`, LogType.DEBUG));
       
@@ -72,30 +73,7 @@ const licenseSlice = createSlice({
     clearNotification: (state) => {
       state.notification = null;
     }
-  }
-});
-
-export const {
-  setSearchQuery,
-  setSortConfig,
-  setNotification,
-  clearNotification
-} = licenseSlice.actions;
-
-// Async thunk status selectors
-export const selectLicenses = (state) => state.license.licenses;
-export const selectActiveLicenseId = (state) => state.license.activeLicenseId;
-export const selectLicenseStatus = (state) => state.license.status;
-export const selectLicenseError = (state) => state.license.error;
-
-// Selectors
-export const selectSearchQuery = (state) => state.license.searchQuery;
-export const selectSortConfig = (state) => state.license.sortConfig;
-export const selectNotification = (state) => state.license.notification;
-
-// Add async reducers
-const licenseSliceWithAsync = {
-  ...licenseSlice,
+  },
   extraReducers: (builder) => {
     builder
       .addCase(fetchOrgLicenses.pending, (state) => {
@@ -112,6 +90,59 @@ const licenseSliceWithAsync = {
         state.error = action.error.message;
       });
   }
-};
+});
 
-export default licenseSliceWithAsync.reducer;
+export const {
+  setSearchQuery,
+  setSortConfig,
+  setNotification,
+  clearNotification
+} = licenseSlice.actions;
+
+// Selectors with memoization
+import { createSelector } from '@reduxjs/toolkit';
+
+export const selectLicenseState = (state) => state.license;
+
+export const selectLicenses = createSelector(
+  [selectLicenseState],
+  (license) => license.licenses
+);
+
+export const selectActiveLicenseId = createSelector(
+  [selectLicenseState],
+  (license) => license.activeLicenseId
+);
+
+export const selectActiveLicense = createSelector(
+  [selectLicenses, selectActiveLicenseId],
+  (licenses, activeLicenseId) => 
+    licenses.find(license => license.fieldData.__ID === activeLicenseId)
+);
+
+export const selectLicenseStatus = createSelector(
+  [selectLicenseState],
+  (license) => license.status
+);
+
+export const selectLicenseError = createSelector(
+  [selectLicenseState],
+  (license) => license.error
+);
+
+export const selectSearchQuery = createSelector(
+  [selectLicenseState],
+  (license) => license.searchQuery
+);
+
+export const selectSortConfig = createSelector(
+  [selectLicenseState],
+  (license) => license.sortConfig
+);
+
+export const selectNotification = createSelector(
+  [selectLicenseState],
+  (license) => license.notification
+);
+
+export default licenseSlice.reducer;

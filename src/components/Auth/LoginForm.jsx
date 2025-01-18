@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { useDispatch, useSelector } from 'react-redux';
 import { Buffer } from 'buffer';
@@ -43,6 +43,17 @@ const LoginForm = ({ onViewChange }) => {
   const dispatch = useDispatch();
   const auth = useSelector((state) => state.auth);
   const activeLicenseId = useSelector(selectActiveLicenseId);
+  const licenseState = useSelector((state) => state.license);
+  
+  // Debug logging for license state changes
+  // useEffect(() => {
+  //   console.log('License state updated:', {
+  //     activeLicenseId,
+  //     licenses: licenseState.licenses,
+  //     status: licenseState.status
+  //   });
+  // }, [activeLicenseId, licenseState]);
+
   const { loading, error, isLocked, lockoutExpiry } = auth;
 
   const [formData, setFormData] = useState({
@@ -52,8 +63,24 @@ const LoginForm = ({ onViewChange }) => {
 
   const [validationErrors, setValidationErrors] = useState({});
 
+  // Use ref to ensure license fetch only happens once
+  const licenseInitialized = useRef(false);
+
+  // Fetch license once on mount
   useEffect(() => {
-    dispatch(createLog('Login form mounted', LogType.DEBUG));
+    if (!licenseInitialized.current) {
+      licenseInitialized.current = true;
+      dispatch(createLog('Fetching licenses', LogType.DEBUG));
+      dispatch(fetchOrgLicenses())
+        .unwrap()
+        .then(() => {
+          dispatch(createLog('Licenses fetched successfully', LogType.DEBUG));
+        })
+        .catch(error => {
+          dispatch(createLog(`Failed to fetch licenses: ${error.message}`, LogType.ERROR));
+        });
+    }
+
     return () => {
       dispatch(createLog('Login form unmounted', LogType.DEBUG));
     };
@@ -107,6 +134,13 @@ const LoginForm = ({ onViewChange }) => {
       return;
     }
 
+    // Ensure we have a valid license before proceeding
+    if (!activeLicenseId) {
+      dispatch(loginFailure('No valid license found. Please contact support.'));
+      dispatch(createLog('Login blocked - no valid license', LogType.WARNING));
+      return;
+    }
+
     if (isLocked) {
       const remainingTime = new Date(lockoutExpiry) - new Date();
       if (remainingTime > 0) {
@@ -118,13 +152,9 @@ const LoginForm = ({ onViewChange }) => {
     }
 
     dispatch(loginStart());
-    dispatch(createLog('Login API call initiated', LogType.DEBUG));
 
     try {
       const credentials = Buffer.from(`${formData.email}:${formData.password}`).toString('base64');
-      
-      // Log request details for debugging
-      dispatch(createLog(`Login request to: ${import.meta.env.VITE_API_BASE_URL}/api/auth/login`, LogType.DEBUG));
       
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/login`, {
         method: 'POST',
@@ -135,72 +165,41 @@ const LoginForm = ({ onViewChange }) => {
         body: JSON.stringify({ org_id: import.meta.env.VITE_PUBLIC_KEY })
       });
 
-      // Log response status for debugging
-      dispatch(createLog(`Login response status: ${response.status}`, LogType.DEBUG));
-
       const data = await response.json();
       
       if (!response.ok) {
-        const errorMessage = data.error || 'Login failed';
-        dispatch(createLog(`Login error: ${errorMessage}`, LogType.ERROR));
-        throw new Error(errorMessage);
+        throw new Error(data.error || 'Login failed');
       }
 
-      // Log full response data for debugging
-      dispatch(createLog(`Login response data: ${JSON.stringify(data)}`, LogType.DEBUG));
-
-      // Validate response structure
+      // Validate response data
       if (!data.access_token || !data.refresh_token || !data.user) {
         throw new Error('Invalid response format');
       }
 
-      // Validate user object and log details
-      dispatch(createLog(`User data: ${JSON.stringify(data.user)}`, LogType.DEBUG));
-      
-      if (!data.user.id || !data.user.org_id || !data.user.active_status) {
-        throw new Error('Invalid user data');
+      if (!data.user.id || !data.user.org_id || data.user.active_status !== 'active') {
+        throw new Error('Invalid or inactive user');
       }
 
-      // Fetch and set license data using Redux action
-      try {
-        await dispatch(fetchOrgLicenses()).unwrap();
-        if (activeLicenseId) {
-          data.licenseId = activeLicenseId;
-        } else {
-          dispatch(createLog('No active license found for organization', LogType.WARNING));
-        }
-      } catch (err) {
-        dispatch(createLog(`Failed to fetch license ID: ${err.message}`, LogType.WARNING));
+      if (!Array.isArray(data.user.modules)) {
+        throw new Error('Invalid modules data');
       }
 
-      // Validate user is active
-      if (data.user.active_status !== 'active') {
-        throw new Error('User account is not active');
+      // Add license ID to auth data if available
+      if (activeLicenseId) {
+        data.licenseId = activeLicenseId;
       }
 
-      // Validate permitted modules
-      if (!Array.isArray(data.user.permitted_modules)) {
-        throw new Error('Invalid permitted modules data');
-      }
-
-      // submit to auth
+      // Update auth state and store tokens
       dispatch(loginSuccess(data));
-      dispatch(createLog(`Auth data submitted: ${JSON.stringify(data)}`, LogType.DEBUG));
-
-      // Store tokens in memory and localStorage, then start refresh monitoring
       tokenStorage.saveTokens(data.access_token, data.refresh_token, data.user);
-      tokenStorage.refreshTokenIfNeeded(); // Initialize refresh monitoring
-      dispatch(createLog('Login successful - tokens stored in memory and localStorage', LogType.INFO));
+      tokenStorage.refreshTokenIfNeeded();
+      
+      dispatch(createLog('Login successful', LogType.INFO));
       onViewChange('functions');
     } catch (err) {
       const errorMessage = err.message || 'Unknown login error';
       dispatch(loginFailure(errorMessage));
       dispatch(createLog(`Login failed: ${errorMessage}`, LogType.ERROR));
-      // Log additional error details if available
-      if (err.response) {
-        dispatch(createLog(`Response status: ${err.response.status}`, LogType.ERROR));
-        dispatch(createLog(`Response data: ${JSON.stringify(err.response.data)}`, LogType.ERROR));
-      }
     }
   };
 
