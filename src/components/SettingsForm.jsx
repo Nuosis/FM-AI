@@ -48,12 +48,12 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  // console.log({currentUser,activeLicenseId})
+  //console.log({currentUser,activeLicenseId})
 
   // Function to initialize modules and refresh the list
   const initializeModules = async () => {
     try {
-      
+      console.log("initalizing module drop down")
       // Fetch modules selected details
       const response = await axiosInstance.get(`/api/admin/modulesselected/license/${activeLicenseId}`, {
         headers: {
@@ -63,13 +63,16 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
       });
       
       const modulesSelected = response.data;
+      //console.log({modulesSelected})
       
-      // Set available modules for dropdown
-      const moduleNames = [...new Set(modulesSelected.map(m => ({
-        id: m.fieldData.__ID,
-        moduleId: m.fieldData._moduleID,
-        name: m.fieldData.moduleName
-      })))];
+      // Filter modules where f_userBasedKeys is 1 and set available modules for dropdown
+      const moduleNames = [...new Set(modulesSelected
+        .filter(m => m.fieldData.f_userBasedKeys === "1")
+        .map(m => ({
+          id: m.fieldData.__ID,
+          moduleId: m.fieldData._moduleID,
+          name: m.fieldData.moduleName
+        })))];
       
       setAvailableModules(moduleNames);
       
@@ -91,10 +94,11 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
           }
         }
       );
-      
-      if(response.data.error!=="No API key found" && response.status===200){
-        console.log("apiKeys: ",response.data.api_keys)
+      console.log("apiKeys fetch response: ",response)
+      if (response.data.api_keys) {
         setApiKeysList(response.data.api_keys)
+      } else {
+        setApiKeysList([])
       }
     } catch (error) {
       dispatch(createLog(`Failed to fetch module keys: ${error.message}`, LogType.ERROR));
