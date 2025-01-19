@@ -101,7 +101,11 @@ function App() {
   useEffect(() => {
     if (!isInitialized) return; // Wait for token storage to initialize
 
-    if (isAuthenticated && licenseStatus === 'idle') {
+    // Check if we have licenses in localStorage
+    const savedLicenses = localStorage.getItem('licenseState');
+    const hasLicenses = savedLicenses && JSON.parse(savedLicenses).licenses.length > 0;
+
+    if (isAuthenticated && licenseStatus === 'idle' && !hasLicenses) {
       dispatch(fetchOrgLicenses())
         .unwrap()
         .then(result => {

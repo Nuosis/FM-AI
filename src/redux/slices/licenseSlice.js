@@ -43,20 +43,51 @@ export const fetchOrgLicenses = createAsyncThunk(
   }
 );
 
-const initialState = {
-  searchQuery: '',
-  sortConfig: {
-    field: 'dateEnd',
-    direction: 'asc'
-  },
-  notification: null,
-  // License state
-  licenses: [],
-  activeLicenseId: null,
-  status: 'idle',
-  error: null
+// Load initial state from localStorage if available
+const loadInitialState = () => {
+  try {
+    const savedState = localStorage.getItem('licenseState');
+    if (savedState) {
+      return JSON.parse(savedState);
+    }
+  } catch (error) {
+    console.error('Error loading license state:', error);
+  }
+  return {
+    searchQuery: '',
+    sortConfig: {
+      field: 'dateEnd',
+      direction: 'asc'
+    },
+    notification: null,
+    licenses: [],
+    activeLicenseId: null,
+    status: 'idle',
+    error: null
+  };
 };
 
+const initialState = loadInitialState();
+
+// Save license state to localStorage
+const saveLicenseState = (state) => {
+  try {
+    localStorage.setItem('licenseState', JSON.stringify(state));
+  } catch (error) {
+    console.error('Error saving license state:', error);
+  }
+};
+
+// Clear license state from localStorage
+export const clearLicenseState = () => {
+  try {
+    localStorage.removeItem('licenseState');
+  } catch (error) {
+    console.error('Error clearing license state:', error);
+  }
+};
+
+// Create the slice
 const licenseSlice = createSlice({
   name: 'license',
   initialState,
@@ -84,6 +115,24 @@ const licenseSlice = createSlice({
         state.licenses = action.payload.licenses;
         state.activeLicenseId = action.payload.activeLicenseId;
         state.error = null;
+        // Save to localStorage when licenses are fetched
+        saveLicenseState(state);
+      })
+      // Add case for logout action
+      .addCase('auth/logoutSuccess', (state) => {
+        // Clear localStorage
+        clearLicenseState();
+        // Reset state to initial values
+        state.licenses = [];
+        state.activeLicenseId = null;
+        state.status = 'idle';
+        state.error = null;
+        state.searchQuery = '';
+        state.sortConfig = {
+          field: 'dateEnd',
+          direction: 'asc'
+        };
+        state.notification = null;
       })
       .addCase(fetchOrgLicenses.rejected, (state, action) => {
         state.status = 'failed';

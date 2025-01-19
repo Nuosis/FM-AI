@@ -55,16 +55,28 @@ instance.interceptors.response.use(
 
         // Create a clean axios instance for refresh token request
         const refreshAxios = axios.create({
-          baseURL: import.meta.env.VITE_API_BASE_URL
+          baseURL: import.meta.env.VITE_API_BASE_URL,
+          headers: {
+            'Content-Type': 'application/json'
+          }
         });
         
         // Attempt to refresh token with clean instance
-        const response = await refreshAxios.post('/auth/refresh', {
+        const response = await refreshAxios.post('/api/auth/refresh', {
           refresh_token: refreshToken
         });
 
+        // Structure the response data for the store
+        const refreshData = {
+          access_token: response.data.access_token,
+          user: {
+            ...store.getState().auth.user,
+            modules: response.data.modules
+          }
+        };
+
         // Update tokens in store
-        store.dispatch(refreshTokenSuccess(response.data));
+        store.dispatch(refreshTokenSuccess(refreshData));
 
         // Update Authorization header
         originalRequest.headers.Authorization = `Bearer ${response.data.access_token}`;

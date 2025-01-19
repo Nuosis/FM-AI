@@ -239,7 +239,7 @@ const BottomBar = ({
     <BottomBarContainer>
       <ScrollContainer ref={scrollContainerRef}>
         <MobileIconList ref={iconListRef}>
-          {menuItems.map(({ name, icon, path, view }) => (
+          {isAuthenticated && menuItems.filter(item => item.enabled).map(({ name, icon, path, view }) => (
             <IconButton
               key={name}
               className="icon-button"
@@ -364,7 +364,8 @@ BottomBar.propTypes = {
     name: PropTypes.string.isRequired,
     icon: PropTypes.node.isRequired,
     path: PropTypes.string.isRequired,
-    view: PropTypes.string.isRequired
+    view: PropTypes.string.isRequired,
+    enabled: PropTypes.bool.isRequired
   })).isRequired,
   components: PropTypes.object.isRequired,
   mobileMenuAnchor: PropTypes.string,

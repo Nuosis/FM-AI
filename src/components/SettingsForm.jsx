@@ -17,7 +17,8 @@ import {
   Paper,
   Chip,
   Snackbar,
-  Alert
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -45,24 +46,13 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
     message: '',
     severity: 'success'
   });
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleCloseSnackbar = () => {
-    setSnackbar(prev => ({ ...prev, open: false }));
-  };
-
-  const showNotification = (message, severity = 'success') => {
-    setSnackbar({
-      open: true,
-      message,
-      severity
-    });
-  };
+  // console.log({currentUser,activeLicenseId})
 
   // Function to initialize modules and refresh the list
   const initializeModules = async () => {
     try {
-      // Get API keys from user state
-      const userApiKeys = currentUser?.apiKeys || [];
       
       // Fetch modules selected details
       const response = await axiosInstance.get(`/api/admin/modulesselected/license/${activeLicenseId}`, {
@@ -74,21 +64,10 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
       
       const modulesSelected = response.data;
       
-      // Map API keys with module names
-      const mappedKeys = userApiKeys.map(apiKey => {
-        const module = modulesSelected.find(m => m.fieldData.__ID === apiKey._moduleSelectedID);
-        return {
-          ...apiKey,
-          moduleName: module?.fieldData?.moduleName || 'Unknown Module',
-          maskedKey: maskValue(apiKey.key)
-        };
-      });
-      
-      setApiKeysList(mappedKeys);
-      
       // Set available modules for dropdown
       const moduleNames = [...new Set(modulesSelected.map(m => ({
         id: m.fieldData.__ID,
+        moduleId: m.fieldData._moduleID,
         name: m.fieldData.moduleName
       })))];
       
@@ -100,6 +79,39 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
     }
   };
 
+  const fetchModuleKeys = async (moduleId) => {
+    setIsLoading(true);
+    try {
+      const response = await axiosInstance.get(
+        `/api/admin/modulesselected/${moduleId}/parties/${currentUser.party_id}/keys`,
+        {
+          headers: {
+            'Authorization': authHeader,
+            'X-Organization-Id': currentUser.org_id
+          }
+        }
+      );
+      
+      if(response.data.error!=="No API key found" && response.status===200){
+        console.log("apiKeys: ",response.data.api_keys)
+        setApiKeysList(response.data.api_keys)
+      }
+    } catch (error) {
+      dispatch(createLog(`Failed to fetch module keys: ${error.message}`, LogType.ERROR));
+      showNotification(`Failed to fetch module keys: ${error.message}`, 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const showNotification = (message, severity = 'success') => {
+    setSnackbar({
+      open: true,
+      message,
+      severity
+    });
+  };
+
   // Initialize modules on mount
   useEffect(() => {
     if (currentUser && activeLicenseId) {
@@ -107,19 +119,10 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
     }
   }, [currentUser, activeLicenseId]);
 
-  // Mask sensitive values
-  const maskValue = (value) => {
-    if (!value) return '';
-    if (value.length <= 8) {
-      return value.slice(0, 2) + '***' + value.slice(-2);
-    }
-    return value.slice(0, 4) + '***' + value.slice(-4);
-  };
-
-  // Handle adding a new field
   const handleAddField = async () => {
     if (!selectedModule || !selectedField || !fieldValue) return;
 
+    setIsLoading(true);
     try {
       const module = availableModules.find(m => m.id === selectedModule);
       if (!module) {
@@ -128,11 +131,12 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
 
       // Create new API key
       await axiosInstance.post(
-        `/api/admin/modules-selected/${selectedModule}/parties/${currentUser.party_id}/keys`,
+        `/api/admin/modulesselected/${selectedModule}/parties/${currentUser.party_id}/keys`,
         {
-          description: `${module.name} ${selectedField}`,
-          modules: [selectedModule],
-          type: "userKey"
+          description: selectedField,
+          modules: [module.moduleId],
+          type: "userKey",
+          privateKey: fieldValue
         },
         {
           headers: {
@@ -148,27 +152,25 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
       setSelectedField('');
       setFieldValue('');
 
-      dispatch(createLog('Successfully added service field', LogType.INFO));
-      showNotification('Successfully added service field');
+      dispatch(createLog(`Successfully added ${selectedField}`, LogType.INFO));
+      showNotification(`Successfully added ${selectedField}`);
       onModuleUpdate?.();
     } catch (err) {
       const errorMsg = `Failed to add service field: ${err.message}`;
       dispatch(createLog(errorMsg, LogType.ERROR));
       showNotification(errorMsg, 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // Handle deleting a field
-  const handleDeleteField = async (moduleId, field) => {
+  const handleDeleteField = async (apiKeyId) => {
+    setIsLoading(true);
     try {
-      const apiKey = apiKeysList.find(key => key._moduleSelectedID === moduleId);
-      if (!apiKey) {
-        throw new Error('API key not found');
-      }
 
-      // Delete API key
-      await axiosInstance.delete(
-        `/api/admin/modulesselected/${currentUser.org_id}/parties/${currentUser.party_id}/keys/${apiKey.key}`,
+      // revoke API key
+      await axiosInstance.post(
+        `/api/admin/modulesselected/${selectedModule}/parties/${currentUser.party_id}/keys/${apiKeyId}/revoke`,
         {
           headers: {
             'Authorization': authHeader,
@@ -177,17 +179,23 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
         }
       );
       
-      // Reinitialize modules to refresh the list
-      initializeModules();
+      // Reinitialize keys to refresh the list
+      fetchModuleKeys(selectedModule);
 
-      dispatch(createLog('Successfully deleted service field', LogType.INFO));
-      showNotification('Successfully deleted service field');
+      dispatch(createLog('Successfully deleted key', LogType.INFO));
+      showNotification('Successfully deleted key');
       onModuleUpdate?.();
     } catch (err) {
-      const errorMsg = `Failed to delete service field: ${err.message}`;
+      const errorMsg = `Failed to delete key: ${err.message}`;
       dispatch(createLog(errorMsg, LogType.ERROR));
       showNotification(errorMsg, 'error');
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbar(prev => ({ ...prev, open: false }));
   };
 
   return (
@@ -196,6 +204,26 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
         <Typography variant="h6" sx={{ mb: 3 }}>
           {currentUser?.org_id ? 'Organization' : ''} Service Configuration
         </Typography>
+
+        {/* Spinner overlay for the entire form */}
+        {isLoading && (
+          <Box
+            sx={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              bgcolor: 'rgba(255, 255, 255, 0.1)',
+              zIndex: 1300, // High z-index to overlay other elements
+            }}
+        >
+          <CircularProgress />
+        </Box>
+      )}
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
         <Box sx={{ 
@@ -207,7 +235,12 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
             <InputLabel>Module</InputLabel>
             <Select
               value={selectedModule}
-              onChange={(e) => setSelectedModule(e.target.value)}
+              onChange={(e) => {
+                setSelectedModule(e.target.value);
+                if (e.target.value) {
+                  fetchModuleKeys(e.target.value);
+                }
+              }}
               label="Module"
             >
               {availableModules.map((module) => (
@@ -261,11 +294,12 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
           </Box>
       </Box>
 
-      <Paper sx={{ p: 2 }}>
+      <Paper sx={{ p: 2, position: 'relative', minHeight: 100 }}>
         <Typography variant="subtitle1" sx={{ mb: 2 }}>
           Keys
         </Typography>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, position: 'relative' }}>
           {apiKeysList.map((apiKey, index) => (
             <Box
               key={index}
@@ -280,18 +314,18 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Chip
-                  label={apiKey.moduleName}
+                  label={apiKey.fieldData.description}
                   size="small"
                   color="primary"
                 />
                 <Typography>
-                  API Key: {apiKey.maskedKey}
+                  Value: {apiKey.fieldData.privateKey}
                 </Typography>
               </Box>
               <IconButton
                 size="small"
                 color="error"
-                onClick={() => handleDeleteField(apiKey._moduleSelectedID, 'API Key')}
+                onClick={() => handleDeleteField(apiKey.fieldData.__ID)}
               >
                 <DeleteIcon />
               </IconButton>
@@ -304,6 +338,7 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
           )}
         </Box>
       </Paper>
+
       </Box>
       <Snackbar
         open={snackbar.open}

@@ -223,7 +223,6 @@ async function runUserAuthTests() {
       const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
         method: 'POST',
         headers: {
-          'Origin': FRONTEND_BASE_URL,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ refresh_token: refreshToken })

@@ -96,7 +96,7 @@ const Sidebar = ({ width = 240, onViewChange, currentView }) => {
       
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
         <List sx={{ flex: 1 }}>
-          {menuItems.map(({ name, iconType, path, view }) => {
+          {isAuthenticated && menuItems.filter(item => item.enabled).map(({ name, iconType, path, view }) => {
             const icon = (() => {
               switch (iconType) {
                 case 'Code': return <Code />;
@@ -212,7 +212,14 @@ const Sidebar = ({ width = 240, onViewChange, currentView }) => {
 Sidebar.propTypes = {
   width: PropTypes.number,
   onViewChange: PropTypes.func.isRequired,
-  currentView: PropTypes.string.isRequired
+  currentView: PropTypes.string.isRequired,
+  menuItems: PropTypes.arrayOf(PropTypes.shape({
+    name: PropTypes.string.isRequired,
+    iconType: PropTypes.string.isRequired,
+    path: PropTypes.string.isRequired,
+    view: PropTypes.string.isRequired,
+    enabled: PropTypes.bool.isRequired
+  }))
 };
 
 export default Sidebar;
