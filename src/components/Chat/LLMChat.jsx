@@ -57,9 +57,6 @@ const LLMChat = () => {
       dispatch(createLog('Fetching AI modules...', LogType.INFO));
       try {
         const response = await axiosInstance.get('/api/admin/modules/', {
-          headers: {
-            'Authorization': `LicenseKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-          }
         });
         const moduleArray = Array.isArray(response.data.response.data) ? response.data.response.data : [];
         
@@ -105,7 +102,6 @@ const LLMChat = () => {
 
         const response = await axiosInstance.get(`/api/llm/${selectedModule}/models`, {
           headers: {
-            'Authorization': `LicenseKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`,
             'X-Organization-Id': organizationId
           }
         });
@@ -163,7 +159,6 @@ const LLMChat = () => {
         },
         {
           headers: {
-            'Authorization': `LicenseKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`,
             'X-Organization-Id': organizationId
           }
         }

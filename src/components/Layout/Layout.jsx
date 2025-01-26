@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, styled, useTheme, useMediaQuery } from '@mui/material';
+import { Box, styled, useTheme, useMediaQuery, Typography } from '@mui/material';
 import {
   Code,
   ManageSearch,
   Handyman,
-  SmartToy
+  SmartToy,
+  QuestionAnswer
 } from '@mui/icons-material';
+import LLMChat from '../Chat/LLMChat';
 import { useSelector } from 'react-redux';
 import LogViewer from '../LogViewer/LogViewer';
 import { selectShowLogViewer } from '../../redux/slices/appSlice';
@@ -40,12 +42,27 @@ const Main = styled('main', {
   marginBottom: isMobile ? '96px' : 0
 }));
 
+// Map component strings to actual components
+const componentMap = {
+  LLMChat: LLMChat
+  // Add other components as they become available
+};
+
 const Layout = ({ children, onViewChange, currentView }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null);
   const [openItem, setOpenItem] = useState(null);
+  const [currentComponent, setCurrentComponent] = useState(null);
   const showLogViewer = useSelector(selectShowLogViewer);
+
+  const handleViewChange = (view) => {
+    onViewChange(view);
+    const menuItem = menuItems.find(item => item.view === view);
+    if (menuItem?.component) {
+      setCurrentComponent(menuItem.component);
+    }
+  };
 
   return (
     <Box sx={{ 
@@ -71,14 +88,14 @@ const Layout = ({ children, onViewChange, currentView }) => {
             mobileMenuAnchor={mobileMenuAnchor}
             setMobileMenuAnchor={setMobileMenuAnchor}
             setOpenItem={setOpenItem}
-            onViewChange={onViewChange}
+            onViewChange={handleViewChange}
             currentView={currentView}
           />
         </BottomBarContainer>
       ) : (
         <Sidebar 
           width={DRAWER_WIDTH} 
-          onViewChange={onViewChange}
+          onViewChange={handleViewChange}
           currentView={currentView}
           openItem={openItem}
           setOpenItem={setOpenItem}
@@ -93,7 +110,27 @@ const Layout = ({ children, onViewChange, currentView }) => {
         overflow: 'hidden'
       }}>
         <Main id="main" isMobile={isMobile}>
-          {children}
+          {currentComponent ? (
+            componentMap[currentComponent] ? (
+              React.createElement(componentMap[currentComponent])
+            ) : (
+              <Box sx={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center',
+                height: '100%',
+                flexDirection: 'column',
+                gap: 2
+              }}>
+                <Typography variant="h6" color="text.secondary">
+                  Component "{currentComponent}" is not yet available
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  This feature is under development
+                </Typography>
+              </Box>
+            )
+          ) : children}
         </Main>
         {showLogViewer && (
           <Box id="logs" sx={{

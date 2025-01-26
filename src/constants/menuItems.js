@@ -1,30 +1,42 @@
 export const menuItems = [
   { 
+    name: 'Chat', 
+    path: 'chat',
+    view: 'chat',
+    iconType: 'QuestionAnswer',
+    enabled: true,
+    component: "LLMChat"
+  },  
+  { 
     name: 'Functions', 
     path: 'functions',
     view: 'functions',
     iconType: 'Code',
-    enabled: true
+    enabled: true,
+    component: "Functions"
   },
   { 
     name: 'RAG', 
     path: 'rag',
     view: 'rag',
     iconType: 'ManageSearch',
-    enabled: false
+    enabled: false,
+    component: "RAG"
   },
   { 
     name: 'Tools', 
     path: 'tools',
     view: 'tools',
     iconType: 'Handyman',
-    enabled: false
+    enabled: false,
+    component: "Tools"
   },
   { 
     name: 'Agents', 
     path: 'agents',
     view: 'agents',
     iconType: 'SmartToy',
-    enabled: false
+    enabled: false,
+    component: "Agents"
   }
 ];

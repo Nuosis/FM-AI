@@ -22,7 +22,8 @@ import {
   Code,
   ManageSearch,
   Handyman,
-  SmartToy
+  SmartToy,
+  QuestionAnswer
 } from '@mui/icons-material';
 import { createLog, LogType, toggleLogViewer } from '../../redux/slices/appSlice';
 import tokenStorage from '../Auth/services/tokenStorage';
@@ -103,6 +104,7 @@ const Sidebar = ({ width = 240, onViewChange, currentView }) => {
                 case 'ManageSearch': return <ManageSearch />;
                 case 'Handyman': return <Handyman />;
                 case 'SmartToy': return <SmartToy />;
+                case 'QuestionAnswer': return <QuestionAnswer />;
                 default: return null;
               }
             })();
@@ -218,7 +220,8 @@ Sidebar.propTypes = {
     iconType: PropTypes.string.isRequired,
     path: PropTypes.string.isRequired,
     view: PropTypes.string.isRequired,
-    enabled: PropTypes.bool.isRequired
+    enabled: PropTypes.bool.isRequired,
+    component: PropTypes.string.isRequired
   }))
 };
 
