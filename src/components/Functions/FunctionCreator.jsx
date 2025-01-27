@@ -152,6 +152,7 @@ const FunctionCreator = ({ onCancel }) => {
   }, [selectedModule, dispatch, organizationId, llmSettings.model]);
 
   const validateResponse = (response) => {
+    dispatch(createLog(`Validating Response... ${JSON.stringify(response)}`, LogType.INFO));
     const required = ['name', 'description', 'input_variables', 'example'];
     const missing = required.filter(key => !response[key]);
     
@@ -160,14 +161,17 @@ const FunctionCreator = ({ onCancel }) => {
     }
 
     if (!Array.isArray(response.input_variables)) {
+      dispatch(createLog(`Input Variables... input:${JSON.stringify(response.input_variables)}`, LogType.INFO));
       throw new Error('input_variables must be an array');
     }
 
     if (!response.input_variables.every(v => v.name && v.type && v.description)) {
+      dispatch(createLog(`Input Variables... input:${JSON.stringify(response.input_variables)}`, LogType.INFO));
       throw new Error('Each input variable must have name, type, and description');
     }
 
     if (!response.example.input || !response.example.output) {
+      dispatch(createLog(`Example Values... input:${JSON.stringify(response.example.input)}, output: ${JSON.stringify(response.example.output)}`, LogType.INFO));
       throw new Error('Example must contain input and output');
     }
 

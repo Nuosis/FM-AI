@@ -43,7 +43,7 @@ const LoginForm = ({ onViewChange }) => {
   const dispatch = useDispatch();
   const auth = useSelector((state) => state.auth);
   const activeLicenseId = useSelector(selectActiveLicenseId);
-  const licenseState = useSelector((state) => state.license);
+  //const licenseState = useSelector((state) => state.license);
   
   // Debug logging for license state changes
   // useEffect(() => {

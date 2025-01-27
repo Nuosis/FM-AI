@@ -4,7 +4,7 @@ import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material';
 import Layout from './components/Layout/Layout';
 import { LoginForm, RegistrationForm } from './components/Auth';
 import SettingsForm from './components/SettingsForm';
-import { createLog, LogType, toggleLogViewer } from './redux/slices/appSlice';
+import { createLog, LogType, /*toggleLogViewer*/ } from './redux/slices/appSlice';
 import tokenStorage from './components/Auth/services/tokenStorage';
 import { fetchOrgLicenses } from './redux/slices/licenseSlice';
 

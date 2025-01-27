@@ -21,7 +21,7 @@ instance.interceptors.request.use(
     // Debug: Log request URL and token presence
     console.log(`Request to ${config.url}`, {
       hasToken: !!accessToken,
-      authHeader: config.headers?.Authorization
+      //authHeader: config.headers?.Authorization
     });
     
     // Add Authorization header if token exists and is valid
@@ -36,7 +36,7 @@ instance.interceptors.request.use(
       config.headers.Authorization = `Bearer ${accessToken}`;
       
       // Debug: Log final header
-      console.log('Final auth header:', config.headers.Authorization);
+      console.log('Auth header:', config.headers.Authorization);
     }
     
     return config;

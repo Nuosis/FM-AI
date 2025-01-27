@@ -35,7 +35,7 @@ import {
 const LLMChat = () => {
   const dispatch = useDispatch();
   const organizationId = useSelector(state => state.auth.user?.org_id);
-  const isAuthenticated = useSelector(state => state.auth.isAuthenticated);
+  // const isAuthenticated = useSelector(state => state.auth.isAuthenticated);
   const llmSettings = useSelector(state => state.llm);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
