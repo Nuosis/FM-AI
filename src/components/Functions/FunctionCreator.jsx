@@ -205,7 +205,7 @@ const FunctionCreator = ({ onCancel }) => {
   });
 
   // Create the prompt template
-  return `Provide the expected output of a function that ${functionData.description}.
+  return `Provide the expected output of a function that ${functionData.description}
 
 // Example input -----
 ${Object.entries(functionData.example.input).map(([key, value]) => 

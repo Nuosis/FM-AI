@@ -1,11 +1,13 @@
 // eslint-disable-next-line no-unused-vars
-import React, { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import { getProviderConfig } from '../../utils/providerEndpoints';
 import { useSelector, useDispatch } from 'react-redux';
 import { 
   selectFunctions, 
   selectFunctionsLoading,
   selectFunctionsError,
-  fetchFunctions
+  fetchFunctions,
+  deleteAIFunction
 } from '../../redux/slices/functionsSlice';
 import {
   Box,
@@ -27,9 +29,12 @@ import {
 import {
   ContentCopy as ContentCopyIcon,
   Edit as EditIcon,
+  Delete as DeleteIcon,
   ExpandMore as ExpandMoreIcon,
   Search as SearchIcon
 } from '@mui/icons-material';
+import FunctionForm from './FunctionForm';
+import CurlDialog from './CurlDialog';
 
 const FunctionList = () => {
   const functions = useSelector(selectFunctions);
@@ -42,6 +47,8 @@ const FunctionList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name'); // 'name' or 'date'
   const [showMyFunctionsOnly, setShowMyFunctionsOnly] = useState(false);
+  const [editingFunction, setEditingFunction] = useState(null);
+  const [curlDialog, setCurlDialog] = useState({ open: false, command: '' });
 
   // Filter and sort functions
   const filteredAndSortedFunctions = useMemo(() => {
@@ -77,17 +84,54 @@ const FunctionList = () => {
     });
   }, [dispatch]);
 
-  // console.log('FunctionList render state:', {
-  //   functions,
-  //   isLoading,
-  //   error,
-  //   functionCount: functions?.length
-  // });
+  const generateCurlCommand = (func) => {
+    const provider = getProviderConfig(func.provider);
+    
+    if (!provider) {
+      console.warn(`Provider ${func.provider} not found`);
+      return `# Provider ${func.provider} not found
+# Please check the provider name and try again`;
+    }
+    
+    // Show example headers with {apiKey} placeholder
+    const headers = Object.entries(provider.headers)
+      .map(([key, value]) => `-H "${key}: ${value}"`)
+      .join(' \\\n  ');
+    
+    // Keep the template variables in place
+    const prompt = func.prompt_template;
 
-  const copyAsCurl = (func) => {
-    // TODO: Implement curl command generation
-    const curlCommand = `curl -X POST "YOUR_API_ENDPOINT" -H "Content-Type: application/json" -d '${JSON.stringify(func)}'`;
-    navigator.clipboard.writeText(curlCommand);
+    return `# Example cURL command for testing
+# Replace {apiKey} with your actual API key
+# Required variables:
+${func.input_variables.map(v => `#   {{${v}}}: [Your ${v} value]`).join('\n')}
+
+curl -X POST "${provider.endpoint}" \\
+  ${headers} \\
+  -d '${JSON.stringify({
+    model: func.model,
+    messages: [
+      {
+        role: "system",
+        content: func.system_instructions || ""
+      },
+      {
+        role: "user",
+        content: prompt
+      }
+    ],
+    temperature: func.temperature
+  }, null, 2)}'`;
+  };
+
+  const handleCurlClick = (func) => {
+    const curlCommand = generateCurlCommand(func);
+    setCurlDialog({ open: true, command: curlCommand });
+  };
+
+  const handleDelete = async (func) => {
+    await dispatch(deleteAIFunction(func.recordId));
+    dispatch(fetchFunctions()); // Refresh the list after deletion
   };
 
   if (isLoading) {
@@ -105,7 +149,7 @@ const FunctionList = () => {
       </Paper>
     );
   }
-  // console.log({functions})
+
   if (functions.length === 0) {
     return (
       <Paper elevation={1} sx={{ p: 3, textAlign: 'center' }}>
@@ -154,94 +198,123 @@ const FunctionList = () => {
         </Box>
       </Paper>
 
-      {filteredAndSortedFunctions.map((func) => (
-        <Paper 
-          key={func.id} 
-          elevation={1} 
-          sx={{ 
-            p: 3,
-            '&:hover': {
-              boxShadow: (theme) => theme.shadows[3]
-            }
-          }}
-        >
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <IconButton
-                onClick={() => toggleDetails(func.id)}
-                sx={{
-                  transform: expandedFunctions[func.id] ? 'rotate(180deg)' : 'rotate(0deg)',
-                  transition: 'transform 0.3s'
-                }}
-                size="small"
-              >
-                <ExpandMoreIcon />
-              </IconButton>
-              <Box>
-                <Typography variant="h6" gutterBottom>
-                  {func.name}
-                </Typography>
-                <Typography color="text.secondary" sx={{ mb: 2 }}>
-                  {func.description}
-                </Typography>
+      {editingFunction ? (
+        <FunctionForm 
+          function={editingFunction}
+          onClose={() => setEditingFunction(null)}
+        />
+      ) : (
+        filteredAndSortedFunctions.map((func) => (
+          <Paper 
+            key={func.id} 
+            elevation={1} 
+            sx={{ 
+              p: 3,
+              '&:hover': {
+                boxShadow: (theme) => theme.shadows[3]
+              }
+            }}
+          >
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <IconButton
+                  onClick={() => toggleDetails(func.id)}
+                  sx={{
+                    transform: expandedFunctions[func.id] ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.3s',
+                    '&:focus': { outline: 'none' }
+                  }}
+                  size="small"
+                  disableRipple
+                >
+                  <ExpandMoreIcon />
+                </IconButton>
+                <Box>
+                  <Typography variant="h6" gutterBottom>
+                    {func.name}
+                  </Typography>
+                  <Typography color="text.secondary" sx={{ mb: 2 }}>
+                    {func.description}
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Tooltip title="Show cURL Command">
+                  <IconButton onClick={() => handleCurlClick(func)} size="small">
+                    <ContentCopyIcon />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Edit Function">
+                  <IconButton 
+                    size="small"
+                    color="primary"
+                    onClick={() => setEditingFunction(func)}
+                  >
+                    <EditIcon />
+                  </IconButton>
+                </Tooltip>
+                {func._partyId === user?.party_id && (
+                  <Tooltip title="Delete Function">
+                    <IconButton 
+                      size="small"
+                      color="error"
+                      onClick={() => handleDelete(func)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Tooltip>
+                )}
               </Box>
             </Box>
 
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Tooltip title="Copy as cURL">
-                <IconButton onClick={() => copyAsCurl(func)} size="small">
-                  <ContentCopyIcon />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Edit Function">
-                <IconButton size="small">
-                  <EditIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          </Box>
+            {expandedFunctions[func.id] && (
+              <>
+                <Divider sx={{ my: 2 }} />
 
-          {expandedFunctions[func.id] && (
-            <>
-              <Divider sx={{ my: 2 }} />
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Input Variables:
+                  </Typography>
+                  <Typography variant="body2" sx={{ ml: 2 }}>
+                    {func.input_variables.join(', ')}
+                  </Typography>
+                </Box>
 
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Input Variables:
-                </Typography>
-                <Typography variant="body2" sx={{ ml: 2 }}>
-                  {func.input_variables.join(', ')}
-                </Typography>
-              </Box>
-
-              <Box sx={{ mt: 3 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Example:
-                </Typography>
-                <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.default' }}>
-                  <Box>
-                    <Typography variant="caption" display="block" gutterBottom>
-                      Input:
-                    </Typography>
-                    <pre style={{ margin: 0, fontSize: '0.875rem' }}>
-                      {JSON.stringify(func.example.input, null, 2)}
-                    </pre>
-                  </Box>
-                  <Divider sx={{ my: 2 }} />
-                  <Box>
-                    <Typography variant="caption" display="block" gutterBottom>
-                      Output:
-                    </Typography>
-                    <pre style={{ margin: 0, fontSize: '0.875rem' }}>
-                      {JSON.stringify(func.example.output, null, 2)}
-                    </pre>
-                  </Box>
-                </Paper>
-              </Box>
-            </>
-          )}
-        </Paper>
-      ))}
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Example:
+                  </Typography>
+                  <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.default' }}>
+                    <Box>
+                      <Typography variant="caption" display="block" gutterBottom>
+                        Input:
+                      </Typography>
+                      <pre style={{ margin: 0, fontSize: '0.875rem' }}>
+                        {JSON.stringify(func.example.input, null, 2)}
+                      </pre>
+                    </Box>
+                    <Divider sx={{ my: 2 }} />
+                    <Box>
+                      <Typography variant="caption" display="block" gutterBottom>
+                        Output:
+                      </Typography>
+                      <pre style={{ margin: 0, fontSize: '0.875rem' }}>
+                        {JSON.stringify(func.example.output, null, 2)}
+                      </pre>
+                    </Box>
+                  </Paper>
+                </Box>
+              </>
+            )}
+          </Paper>
+        ))
+      )}
+      <CurlDialog 
+        open={curlDialog.open}
+        onClose={() => setCurlDialog({ open: false, command: '' })}
+        curlCommand={curlDialog.command}
+      />
     </Box>
   );
 };

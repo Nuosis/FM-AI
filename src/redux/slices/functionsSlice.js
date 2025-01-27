@@ -1,6 +1,24 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from '../../utils/axios';
 
+export const deleteAIFunction = createAsyncThunk(
+  'functions/deleteAIFunction',
+  async (recordId, { rejectWithValue, dispatch }) => {
+    try {
+      await axios.delete(`/api/admin/aifunctions/${recordId}`);
+      dispatch(deleteFunction(recordId));
+      return recordId;
+    } catch (error) {
+      console.error('Delete function error:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      return rejectWithValue(error.response?.data || 'Failed to delete function');
+    }
+  }
+);
+
 export const fetchFunctions = createAsyncThunk(
   'functions/fetchFunctions',
   async (_, { rejectWithValue }) => {
@@ -85,8 +103,11 @@ const functionsSlice = createSlice({
             model: item.fieldData.model,
             provider: item.fieldData.provider,
             temperature: item.fieldData.temperature,
-            _partyId: item.fieldData._partyId,
-            createdAt: item.fieldData.createdAt || item.fieldData.__ID
+            prompt_template: item.fieldData.prompt_template,
+            system_instructions: item.fieldData.system_instructions || '',
+            _partyId: item.fieldData._partyID || item.fieldData.partyId, // Handle both field names
+            createdAt: item.fieldData.createdAt || item.fieldData.__ID,
+            recordId: item.recordId
           };
         }) || [];
         state.items = functions;

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Snackbar } from '@mui/material';
+import ProgressText from '../Functions/ProgressText';
 import axiosInstance from '../../utils/axios';
 import { createLog, LogType } from '../../redux/slices/appSlice';
 import { 
@@ -168,7 +169,7 @@ const LLMChat = () => {
         throw new Error('Selected module not found');
       }
 
-      let assistantMessage = { role: 'assistant', content: 'Thinking...' };
+      let assistantMessage = { role: 'assistant', content: <ProgressText text="Thinking..." /> };
       setMessages(prev => [...prev, assistantMessage]);
 
       const response = await axiosInstance.post(
