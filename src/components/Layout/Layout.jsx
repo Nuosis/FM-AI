@@ -10,6 +10,7 @@ import {
 } from '@mui/icons-material';
 import LLMChat from '../Chat/LLMChat';
 import SettingsForm from '../SettingsForm';
+import Functions from '../Functions';
 import { useSelector } from 'react-redux';
 import LogViewer from '../LogViewer/LogViewer';
 import { selectShowLogViewer } from '../../redux/slices/appSlice';
@@ -46,8 +47,8 @@ const Main = styled('main', {
 // Map component strings to actual components
 const componentMap = {
   LLMChat: LLMChat,
-  SettingsForm: SettingsForm
-  // Add other components as they become available
+  SettingsForm: SettingsForm,
+  Functions: Functions
 };
 
 const Layout = ({ children, onViewChange, currentView }) => {

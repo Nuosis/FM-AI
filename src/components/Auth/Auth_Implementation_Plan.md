@@ -1,7 +1,7 @@
 # Authentication Component Implementation Plan
 AI_NOTES:
 Axios has been set up to use accessToken for auth
-If we need ApiKey or LicenseKey Auth consider using fetch instead
+If we need ApiKey or LicenseKey Auth consider using custom axios/fetch instead
 
 ## Core Authentication Features
 
@@ -20,6 +20,7 @@ If we need ApiKey or LicenseKey Auth consider using fetch instead
   - 15-minute access token containing:
     - Organization ID
     - User ID
+    - Party ID
     - Permitted modules
 
 ### 3. Machine-to-Machine (M2M) Authentication [DONE]
@@ -27,7 +28,7 @@ Two distinct types implemented:
 
 #### A. Organization API Keys (ApiKey) [DONE]
 - Purpose: Organization-level access for license operations
-- Format: 'Authorization: ApiKey jwt:privateKey'
+- Format: 'Authorization: ApiKey public_key(orgID):privateKey'
 - Limited to:
   - License management
   - License Key operations

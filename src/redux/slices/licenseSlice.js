@@ -28,7 +28,7 @@ export const fetchOrgLicenses = createAsyncThunk(
         license.fieldData._orgID === orgId && 
         license.fieldData.f_active === 1
       );
-      console.log({activeLicense})
+      //console.log({activeLicense})
 
       dispatch(createLog(`Active license set to: ${activeLicense?.fieldData.__ID}`, LogType.DEBUG));
       

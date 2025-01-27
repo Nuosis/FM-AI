@@ -34,7 +34,8 @@ import {
 
 const LLMChat = () => {
   const dispatch = useDispatch();
-  const organizationId = useSelector(state => state.auth.user.org_id);
+  const organizationId = useSelector(state => state.auth.user?.org_id);
+  const isAuthenticated = useSelector(state => state.auth.isAuthenticated);
   const llmSettings = useSelector(state => state.llm);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -60,7 +61,7 @@ const LLMChat = () => {
       setError(null);
       dispatch(createLog('Fetching AI modules...', LogType.INFO));
       try {
-        const response = await axiosInstance.get('/api/admin/modules/', {});
+        const response = await axiosInstance.get('/api/admin/modules/');
         const moduleArray = Array.isArray(response.data.response.data) ? response.data.response.data : [];
         
         // Filter modules that start with "AI:"

@@ -25,7 +25,6 @@ const log = (message, type = LogType.INFO) => {
 };
 
 const API_BASE_URL = process.env.VITE_API_BASE_URL;
-const FRONTEND_BASE_URL = process.env.VITE_FRONTEND_BASE_URL;
 
 if (!API_BASE_URL) {
   throw new Error('Required environment variables are not set');

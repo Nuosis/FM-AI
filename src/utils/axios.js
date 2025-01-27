@@ -18,9 +18,25 @@ instance.interceptors.request.use(
     // Get access token from Redux store
     const accessToken = store.getState().auth.accessToken;
     
-    // Add Authorization header if token exists
+    // Debug: Log request URL and token presence
+    console.log(`Request to ${config.url}`, {
+      hasToken: !!accessToken,
+      authHeader: config.headers?.Authorization
+    });
+    
+    // Add Authorization header if token exists and is valid
     if (accessToken) {
+      // Debug: Log token format
+      console.log('Token format check:', {
+        token: accessToken,
+        isString: typeof accessToken === 'string',
+        length: accessToken.length
+      });
+      
       config.headers.Authorization = `Bearer ${accessToken}`;
+      
+      // Debug: Log final header
+      console.log('Final auth header:', config.headers.Authorization);
     }
     
     return config;
@@ -75,11 +91,30 @@ instance.interceptors.response.use(
           }
         };
 
-        // Update tokens in store
-        store.dispatch(refreshTokenSuccess(refreshData));
+        // Debug: Log refresh success and store state
+        console.log('Token refresh success:', {
+          hasNewToken: !!response.data.access_token,
+          storeStateBefore: store.getState().auth.accessToken
+        });
 
-        // Update Authorization header
-        originalRequest.headers.Authorization = `Bearer ${response.data.access_token}`;
+        // Update tokens in store and wait for state to be updated
+        await Promise.resolve(store.dispatch(refreshTokenSuccess(refreshData)));
+
+        // Get the updated token from store
+        const updatedToken = store.getState().auth.accessToken;
+        console.log('Store updated:', {
+          newStoreToken: updatedToken
+        });
+
+        // Update Authorization header with confirmed token from store
+        originalRequest.headers.Authorization = `Bearer ${updatedToken}`;
+        
+        // Debug: Log retry request
+        console.log('Retrying request with new token:', {
+          url: originalRequest.url,
+          hasAuthHeader: !!originalRequest.headers.Authorization,
+          authHeader: originalRequest.headers.Authorization
+        });
         
         // Retry original request
         return instance(originalRequest);
