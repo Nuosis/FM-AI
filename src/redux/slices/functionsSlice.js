@@ -84,7 +84,9 @@ const functionsSlice = createSlice({
             },
             model: item.fieldData.model,
             provider: item.fieldData.provider,
-            temperature: item.fieldData.temperature
+            temperature: item.fieldData.temperature,
+            _partyId: item.fieldData._partyId,
+            createdAt: item.fieldData.createdAt || item.fieldData.__ID
           };
         }) || [];
         state.items = functions;

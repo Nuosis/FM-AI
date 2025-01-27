@@ -1,5 +1,5 @@
 // eslint-disable-next-line no-unused-vars
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { 
   selectFunctions, 
@@ -15,20 +15,53 @@ import {
   Alert,
   Divider,
   IconButton,
-  Tooltip
+  Tooltip,
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
 import {
   ContentCopy as ContentCopyIcon,
   Edit as EditIcon,
-  ExpandMore as ExpandMoreIcon
+  ExpandMore as ExpandMoreIcon,
+  Search as SearchIcon
 } from '@mui/icons-material';
 
 const FunctionList = () => {
   const functions = useSelector(selectFunctions);
   const isLoading = useSelector(selectFunctionsLoading);
   const error = useSelector(selectFunctionsError);
+  const user = useSelector(state => state.auth.user);
   const dispatch = useDispatch();
+  
   const [expandedFunctions, setExpandedFunctions] = useState({});
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('name'); // 'name' or 'date'
+  const [showMyFunctionsOnly, setShowMyFunctionsOnly] = useState(false);
+
+  // Filter and sort functions
+  const filteredAndSortedFunctions = useMemo(() => {
+    // First filter by search term and optionally by user's party_id
+    let filtered = functions.filter(func => {
+      const matchesSearch = func.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesUser = !showMyFunctionsOnly || func._partyId === user?.party_id;
+      return matchesSearch && matchesUser;
+    });
+
+    // Then sort
+    return filtered.sort((a, b) => {
+      if (sortBy === 'name') {
+        return a.name.localeCompare(b.name);
+      } else {
+        // Assuming there's a createdAt field, fallback to comparing IDs if not available
+        return (b.createdAt || b.id) > (a.createdAt || a.id) ? 1 : -1;
+      }
+    });
+  }, [functions, user?.party_id, searchTerm, sortBy]);
 
   const toggleDetails = (functionId) => {
     setExpandedFunctions(prev => ({
@@ -85,8 +118,43 @@ const FunctionList = () => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Paper elevation={1} sx={{ p: 2, mb: 2 }}>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+          <TextField
+            size="small"
+            placeholder="Search functions..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            sx={{ flexGrow: 1 }}
+            InputProps={{
+              startAdornment: <SearchIcon sx={{ color: 'action.active', mr: 1 }} />
+            }}
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={showMyFunctionsOnly}
+                onChange={(e) => setShowMyFunctionsOnly(e.target.checked)}
+                size="small"
+              />
+            }
+            label="My Functions Only"
+          />
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel>Sort by</InputLabel>
+            <Select
+              value={sortBy}
+              label="Sort by"
+              onChange={(e) => setSortBy(e.target.value)}
+            >
+              <MenuItem value="name">Name</MenuItem>
+              <MenuItem value="date">Newest</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+      </Paper>
 
-      {functions.map((func) => (
+      {filteredAndSortedFunctions.map((func) => (
         <Paper 
           key={func.id} 
           elevation={1} 
