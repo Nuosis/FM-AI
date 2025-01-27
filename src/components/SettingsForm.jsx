@@ -25,11 +25,11 @@ import {
   Delete as DeleteIcon
 } from '@mui/icons-material';
 
-const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
+const SettingsForm = ({ onModuleUpdate, /*apiKeys = true*/ }) => {
   const dispatch = useDispatch();
   const currentUser = useSelector(state => state.auth.user);
   const licenseKey = useSelector(state => state.auth.licenseKey);
-  const activeLicense = useSelector(state => state.license.activeLicense);
+  //const activeLicense = useSelector(state => state.license.activeLicense);
   const authHeader = `LicenseKey ${licenseKey.jwt}:${licenseKey.privateKey}`;
   const [availableModules, setAvailableModules] = useState([]);
   const [selectedModule, setSelectedModule] = useState('');
@@ -206,7 +206,7 @@ const SettingsForm = ({ onModuleUpdate, apiKeys = true }) => {
     <>
       <Box sx={{ p: 3 }}>
         <Typography variant="h6" sx={{ mb: 3 }}>
-          {currentUser?.org_id ? 'Organization' : ''} Service Configuration
+          LLM Configuration
         </Typography>
 
         {/* Spinner overlay for the entire form */}

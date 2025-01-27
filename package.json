@@ -27,7 +27,8 @@
     "test:api-keys": "node src/components/LicenseList/tests/apiKeys.test.js",
     "test:user-auth": "node src/components/Auth/tests/userAuth.test.js",
     "test:user-registration": "node src/components/Auth/tests/userRegistration.test.js",
-    "test:health-auth": "node src/components/Auth/tests/healthAuth.test.js"
+    "test:health-auth": "node src/components/Auth/tests/healthAuth.test.js",
+    "test:llm": "node src/components/Chat/tests/llmChat.test.js"
   },
   "dependencies": {
     "@emotion/react": "^11.11.3",

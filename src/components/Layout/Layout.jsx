@@ -6,9 +6,10 @@ import {
   ManageSearch,
   Handyman,
   SmartToy,
-  QuestionAnswer
+  //QuestionAnswer
 } from '@mui/icons-material';
 import LLMChat from '../Chat/LLMChat';
+import SettingsForm from '../SettingsForm';
 import { useSelector } from 'react-redux';
 import LogViewer from '../LogViewer/LogViewer';
 import { selectShowLogViewer } from '../../redux/slices/appSlice';
@@ -44,7 +45,8 @@ const Main = styled('main', {
 
 // Map component strings to actual components
 const componentMap = {
-  LLMChat: LLMChat
+  LLMChat: LLMChat,
+  SettingsForm: SettingsForm
   // Add other components as they become available
 };
 
@@ -58,6 +60,10 @@ const Layout = ({ children, onViewChange, currentView }) => {
 
   const handleViewChange = (view) => {
     onViewChange(view);
+    if (view === 'settings') {
+      setCurrentComponent('SettingsForm');
+      return;
+    }
     const menuItem = menuItems.find(item => item.view === view);
     if (menuItem?.component) {
       setCurrentComponent(menuItem.component);
@@ -123,7 +129,7 @@ const Layout = ({ children, onViewChange, currentView }) => {
                 gap: 2
               }}>
                 <Typography variant="h6" color="text.secondary">
-                  Component "{currentComponent}" is not yet available
+                  Component &quot;{currentComponent}&quot; is not yet available
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   This feature is under development

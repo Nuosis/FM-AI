@@ -45,7 +45,7 @@ const PUBLIC_KEY = process.env.VITE_PUBLIC_KEY;
 const API_JWT = process.env.VITE_API_JWT;
 const API_KEY = process.env.VITE_API_KEY;
 
-if (!API_BASE_URL || !FRONTEND_BASE_URL || !PUBLIC_KEY || !API_JWT || !API_KEY) {
+if (!API_BASE_URL || !PUBLIC_KEY || !API_JWT || !API_KEY) {
   throw new Error('Required environment variables are not set');
 }
 

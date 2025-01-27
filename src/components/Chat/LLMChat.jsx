@@ -3,6 +3,12 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Snackbar } from '@mui/material';
 import axiosInstance from '../../utils/axios';
 import { createLog, LogType } from '../../redux/slices/appSlice';
+import { 
+  setTemperature, 
+  setSystemInstructions, 
+  setProvider, 
+  setModel 
+} from '../../redux/slices/llmSlice';
 import {
   Box,
   Paper,
@@ -28,7 +34,8 @@ import {
 
 const LLMChat = () => {
   const dispatch = useDispatch();
-  const organizationId = useSelector(state => state.auth.organizationId);
+  const organizationId = useSelector(state => state.auth.user.org_id);
+  const llmSettings = useSelector(state => state.llm);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [error, setError] = useState(null);
@@ -37,11 +44,8 @@ const LLMChat = () => {
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settings, setSettings] = useState({
-    systemPrompt: 'You are a helpful assistant.',
-    temperature: 0.7
-  });
   const messagesEndRef = useRef(null);
+  
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -56,8 +60,7 @@ const LLMChat = () => {
       setError(null);
       dispatch(createLog('Fetching AI modules...', LogType.INFO));
       try {
-        const response = await axiosInstance.get('/api/admin/modules/', {
-        });
+        const response = await axiosInstance.get('/api/admin/modules/', {});
         const moduleArray = Array.isArray(response.data.response.data) ? response.data.response.data : [];
         
         // Filter modules that start with "AI:"
@@ -75,6 +78,14 @@ const LLMChat = () => {
         });
         
         setAiModules(aiModules);
+        
+        // Set selected module if provider is stored
+        if (llmSettings.provider) {
+          const storedModule = aiModules.find(m => m.provider === llmSettings.provider);
+          if (storedModule) {
+            setSelectedModule(storedModule.id);
+          }
+        }
       } catch (err) {
         const errorMessage = err.response?.data?.error || err.message;
         console.error('Error fetching AI modules:', err);
@@ -84,7 +95,7 @@ const LLMChat = () => {
     };
 
     fetchAIModules();
-  }, [dispatch]);
+  }, [dispatch, llmSettings.provider]);
 
   // Fetch available models when AI module is selected
   useEffect(() => {
@@ -94,7 +105,6 @@ const LLMChat = () => {
       setError(null);
       dispatch(createLog('Fetching available models...', LogType.INFO));
       try {
-        // Find the selected module to get its provider
         const selectedModuleData = aiModules.find(m => m.id === selectedModule);
         if (!selectedModuleData) {
           throw new Error('Selected module not found');
@@ -107,7 +117,11 @@ const LLMChat = () => {
         });
         const availableModels = response.data?.models || [];
         setModels(availableModels);
-        if (availableModels.length > 0) {
+        
+        // Set selected model if stored
+        if (llmSettings.model && availableModels.includes(llmSettings.model)) {
+          setSelectedModel(llmSettings.model);
+        } else if (availableModels.length > 0) {
           setSelectedModel(availableModels[0]);
         }
       } catch (err) {
@@ -119,11 +133,25 @@ const LLMChat = () => {
     };
 
     fetchModels();
-  }, [selectedModule, dispatch, organizationId]);
+  }, [selectedModule, dispatch, organizationId, llmSettings.model]);
 
   const handleModuleChange = (event) => {
-    setSelectedModule(event.target.value);
-    setSelectedModel(''); // Reset selected model when module changes
+    const moduleId = event.target.value;
+    setSelectedModule(moduleId);
+    setSelectedModel('');
+    setModels([]);
+    
+    // Store provider
+    const selectedModuleData = aiModules.find(m => m.id === moduleId);
+    if (selectedModuleData) {
+      dispatch(setProvider(selectedModuleData.provider));
+    }
+  };
+
+  const handleModelChange = (event) => {
+    const model = event.target.value;
+    setSelectedModel(model);
+    dispatch(setModel(model));
   };
 
   const handleSubmit = async () => {
@@ -134,13 +162,11 @@ const LLMChat = () => {
     setInput('');
 
     try {
-      // Find the selected module to get its provider
       const selectedModuleData = aiModules.find(m => m.id === selectedModule);
       if (!selectedModuleData) {
         throw new Error('Selected module not found');
       }
 
-      // Add assistant message placeholder
       let assistantMessage = { role: 'assistant', content: 'Thinking...' };
       setMessages(prev => [...prev, assistantMessage]);
 
@@ -148,13 +174,13 @@ const LLMChat = () => {
         `/api/llm/${selectedModule}/completion`,
         {
           messages: [
-            { role: 'system', content: settings.systemPrompt },
+            { role: 'system', content: llmSettings.systemInstructions },
             ...messages,
             newMessage
           ],
           moduleId: selectedModule,
           model: selectedModel,
-          temperature: settings.temperature,
+          temperature: llmSettings.temperature,
           stream: false
         },
         {
@@ -164,7 +190,6 @@ const LLMChat = () => {
         }
       );
 
-      // Update assistant message with response
       setMessages(prev => [...prev.slice(0, -1), {
         role: 'assistant',
         content: response.data.content || 'No response received'
@@ -218,7 +243,7 @@ const LLMChat = () => {
           <Select
             value={selectedModel}
             label="Model"
-            onChange={(e) => setSelectedModel(e.target.value)}
+            onChange={handleModelChange}
             disabled={!selectedModule}
           >
             {models.map(model => (
@@ -301,15 +326,15 @@ const LLMChat = () => {
               multiline
               rows={4}
               label="System Instructions"
-              value={settings.systemPrompt}
-              onChange={(e) => setSettings(prev => ({ ...prev, systemPrompt: e.target.value }))}
+              value={llmSettings.systemInstructions}
+              onChange={(e) => dispatch(setSystemInstructions(e.target.value))}
             />
             
             <Box>
-              <Typography gutterBottom>Temperature: {settings.temperature}</Typography>
+              <Typography gutterBottom>Temperature: {llmSettings.temperature}</Typography>
               <Slider
-                value={settings.temperature}
-                onChange={(e, value) => setSettings(prev => ({ ...prev, temperature: value }))}
+                value={llmSettings.temperature}
+                onChange={(e, value) => dispatch(setTemperature(value))}
                 min={0}
                 max={2}
                 step={0.1}
