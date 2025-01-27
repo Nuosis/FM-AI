@@ -56,7 +56,7 @@ const Layout = ({ children, onViewChange, currentView }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null);
   const [openItem, setOpenItem] = useState(null);
-  const [currentComponent, setCurrentComponent] = useState(null);
+  const [currentComponent, setCurrentComponent] = useState('Functions');
   const showLogViewer = useSelector(selectShowLogViewer);
 
   const handleViewChange = (view) => {
@@ -117,27 +117,29 @@ const Layout = ({ children, onViewChange, currentView }) => {
         overflow: 'hidden'
       }}>
         <Main id="main" isMobile={isMobile}>
-          {currentComponent ? (
-            componentMap[currentComponent] ? (
-              React.createElement(componentMap[currentComponent])
-            ) : (
-              <Box sx={{ 
-                display: 'flex', 
-                justifyContent: 'center', 
-                alignItems: 'center',
-                height: '100%',
-                flexDirection: 'column',
-                gap: 2
-              }}>
-                <Typography variant="h6" color="text.secondary">
-                  Component &quot;{currentComponent}&quot; is not yet available
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  This feature is under development
-                </Typography>
-              </Box>
-            )
-          ) : children}
+          {currentView === 'login' || currentView === 'register' ? children : (
+            currentComponent ? (
+              componentMap[currentComponent] ? (
+                React.createElement(componentMap[currentComponent])
+              ) : (
+                <Box sx={{ 
+                  display: 'flex', 
+                  justifyContent: 'center', 
+                  alignItems: 'center',
+                  height: '100%',
+                  flexDirection: 'column',
+                  gap: 2
+                }}>
+                  <Typography variant="h6" color="text.secondary">
+                    Component &quot;{currentComponent}&quot; is not yet available
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    This feature is under development
+                  </Typography>
+                </Box>
+              )
+            ) : children
+          )}
         </Main>
         {showLogViewer && (
           <Box id="logs" sx={{

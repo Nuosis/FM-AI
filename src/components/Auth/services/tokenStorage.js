@@ -96,7 +96,7 @@ class TokenStorageService {
             baseURL: import.meta.env.VITE_API_BASE_URL
           });
           
-          const response = await refreshAxios.post('/auth/refresh', {
+          const response = await refreshAxios.post('/api/auth/refresh', {
             refresh_token: refreshToken
           });
 
@@ -219,7 +219,7 @@ class TokenStorageService {
           baseURL: import.meta.env.VITE_API_BASE_URL
         });
         
-        const response = await refreshAxios.post('/auth/refresh', {
+        const response = await refreshAxios.post('/api/auth/refresh', {
           refresh_token: refreshToken
         });
 

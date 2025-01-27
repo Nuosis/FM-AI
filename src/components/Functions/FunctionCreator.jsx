@@ -29,24 +29,22 @@ import ProgressText from './ProgressText';
 
 const FUNCTION_PROMPT_TEMPLATE = `Generate a JSON object containing a proposed name, full description, input variables, example input and output for a new function that {{description}}. Ensure the response is a JSON object.
 
-Here's an example for a function that removes all special characters and whitespace from the provided text:
+Here's an example for a function that checks if a number is even:
 {
-    "name": "Smart trim",
-    "description": "removes all leading and trailing whitespace along with carriage returns and tabs from the input text",
+    "name": "Is Even",
+    "description": "determines if a given number is even",
     "input_variables": [
         {
-            "name": "text",
-            "type": "string",
-            "description": "text to trim"
+            "name": "number",
+            "type": "number",
+            "description": "number to check"
         }
     ],
     "example": {
-        "input": [
-            {
-                "text": " \\n\\n \\tSample text "
-            }
-        ],
-        "output": "Sample text"
+        "input": {
+            "number": 4
+        },
+        "output": true
     }
 }`;
 
@@ -64,6 +62,7 @@ const FunctionCreator = ({ onCancel }) => {
   const isLoading = useSelector(selectFunctionsLoading);
   const error = useSelector(selectFunctionsError);
   const organizationId = useSelector(state => state.auth.user.org_id);
+  const partyId = useSelector(state => state.auth.user.party_id);
   const llmSettings = useSelector(state => state.llm);
 
   // Reset retry count when description changes
@@ -170,17 +169,9 @@ const FunctionCreator = ({ onCancel }) => {
       throw new Error('Each input variable must have name, type, and description');
     }
 
-    if (!response.example.input || !response.example.output) {
+    if (!('input' in response.example) || !('output' in response.example)) {
       dispatch(createLog(`Example Values... input:${JSON.stringify(response.example.input)}, output: ${JSON.stringify(response.example.output)}`, LogType.INFO));
-      throw new Error('Example must contain input and output');
-    }
-
-    try {
-      // Verify we can stringify the example input/output
-      JSON.stringify(response.example.input);
-      JSON.stringify(response.example.output);
-    } catch (error) {
-      throw new Error(`Example input/output must be JSON serializable: ${error.message}`);
+      throw new Error('Example must contain input and output keys');
     }
   };
 
@@ -203,7 +194,35 @@ const FunctionCreator = ({ onCancel }) => {
     return response;
   };
 
-  const tryParseJSON = (text) => {
+  const createNewPrompt = (functionData) => {
+  // Create example input string with placeholders
+  const inputExample = functionData.example.input;
+  let inputStr = '';
+  
+  // Build input section
+  Object.keys(inputExample).forEach(key => {
+    inputStr += `${key} = {{${key}}}\n`;
+  });
+
+  // Create the prompt template
+  return `Provide the expected output of a function that ${functionData.description}.
+
+// Example input -----
+${Object.entries(functionData.example.input).map(([key, value]) => 
+  `${key} = ${typeof value === 'object' ? JSON.stringify(value) : value}`
+).join('\n')}
+
+// Example output -----
+${JSON.stringify(functionData.example.output)}
+
+Provide expected output using the following input:
+
+// Input -----
+${inputStr}
+// Output -----`;
+};
+
+const tryParseJSON = (text) => {
     try {
       return JSON.parse(text);
     } catch {
@@ -276,12 +295,16 @@ const FunctionCreator = ({ onCancel }) => {
         }
       }
 
-      // Save function to backend
+      // Generate new prompt and save function
       setProgressStatus('compiling function');
       dispatch(createLog('Saving AI function...', LogType.INFO));
+      const newPrompt = createNewPrompt(functionData);
+      dispatch(createLog(`New Prompt... ${newPrompt}`, LogType.DEBUG));
       const saveResponse = await axiosInstance.post(
-        '/api/admin/ai-functions',
+        '/api/admin/aifunctions/',
         {
+          _orgID: organizationId,
+          _partyID: partyId,
           name: functionData.name,
           description: functionData.description,
           input_variables: JSON.stringify(functionData.input_variables.map(v => v.name).join(',')),
@@ -290,8 +313,8 @@ const FunctionCreator = ({ onCancel }) => {
           provider: selectedModuleData.provider,
           model: selectedModel,
           temperature: llmSettings.temperature,
-          prompt_template: FUNCTION_PROMPT_TEMPLATE,
-          system_instructions: llmSettings.systemInstructions
+          prompt_template: newPrompt,
+          system_instructions: llmSettings.systemInstructions,
         },
         {
           headers: {

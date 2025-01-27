@@ -4,6 +4,7 @@ import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material';
 import Layout from './components/Layout/Layout';
 import { LoginForm, RegistrationForm } from './components/Auth';
 import SettingsForm from './components/SettingsForm';
+import Functions from './components/Functions';
 import { createLog, LogType, /*toggleLogViewer*/ } from './redux/slices/appSlice';
 import tokenStorage from './components/Auth/services/tokenStorage';
 import { fetchOrgLicenses } from './redux/slices/licenseSlice';
@@ -165,18 +166,21 @@ function App() {
                 )}
               </Box>
             ) : (
-              currentView === 'settings' && (
-                <SettingsForm 
-                  onNotification={(notification) => {
-                    dispatch(createLog(notification.message, 
-                      notification.severity === 'error' ? LogType.ERROR : LogType.INFO
-                    ));
-                  }}
-                  onModuleUpdate={() => {
-                    dispatch(createLog('Module settings updated', LogType.INFO));
-                  }}
-                />
-              )
+              <>
+                {currentView === 'settings' && (
+                  <SettingsForm 
+                    onNotification={(notification) => {
+                      dispatch(createLog(notification.message, 
+                        notification.severity === 'error' ? LogType.ERROR : LogType.INFO
+                      ));
+                    }}
+                    onModuleUpdate={() => {
+                      dispatch(createLog('Module settings updated', LogType.INFO));
+                    }}
+                  />
+                )}
+                {currentView === 'functions' && <Functions />}
+              </>
             )}
           </Box>
           </Layout>
