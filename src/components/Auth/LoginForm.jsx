@@ -76,9 +76,9 @@ const LoginForm = ({ onViewChange }) => {
         .then(() => {
           dispatch(createLog('Licenses fetched successfully', LogType.DEBUG));
         })
-        .catch(error => {
-          dispatch(createLog(`Failed to fetch licenses: ${error.message}`, LogType.ERROR));
-        });
+        // .catch(error => {
+        //   dispatch(createLog(`Failed to fetch licenses: ${error.message}`, LogType.ERROR));
+        // });
     }
 
     return () => {
@@ -244,7 +244,7 @@ const LoginForm = ({ onViewChange }) => {
           alignItems: 'center',
         }}
       >
-        <Typography component="h1" variant="h5" sx={{ mb: 3 }}>
+        <Typography component="h1" variant="h5" sx={{ mb: 3, textAlign: 'center' }}>
           Sign in to your account
         </Typography>
         <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
@@ -355,6 +355,50 @@ const LoginForm = ({ onViewChange }) => {
               </Link>
             </Typography>
           </Box>
+        </Box>
+        <Box 
+          sx={{ 
+            textAlign: 'center',
+            position: 'fixed',
+            bottom: 0,
+            left: '240px',
+            right: 0,
+            padding: '20px',
+            backgroundColor: 'background.default',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            cursor: 'pointer'
+          }}
+          onClick={() => window.open('https://claritybusinesssolutions.ca', '_blank')}
+        >
+          <img 
+            src="https://server.claritybusinesssolutions.ca/clarity/clarity192x192.png"
+            alt="Clarity Logo"
+            style={{ width: '90px', height: '90px', marginBottom: '16px' }}
+          />
+          <Box>
+            <img 
+              src="https://server.claritybusinesssolutions.ca/clarity/logoTextWht.png"
+              alt="Clarity"
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.style.display = 'none';
+                e.target.nextSibling.style.display = 'block';
+              }}
+              style={{ height: '37.5px', marginBottom: '8px' }}
+            />
+            <Typography 
+              component="h2" 
+              variant="h4" 
+              sx={{ mb: 1, display: 'none' }}
+            >
+              Clarity
+            </Typography>
+          </Box>
+          <Typography variant="subtitle1" sx={{ color: 'text.secondary' }}>
+            automation ☯︎ integration ☯︎ insight
+          </Typography>
         </Box>
       </Box>
     </Container>

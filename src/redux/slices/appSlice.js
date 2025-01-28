@@ -1,5 +1,6 @@
 import { createSlice } from '@reduxjs/toolkit';
 import { writeToLog, readLogs, clearLogs as clearLogFile } from '../../utils/logging';
+import axios from 'axios';
 
 export const LogType = {
   INFO: 'info',
@@ -11,7 +12,11 @@ export const LogType = {
 const initialState = {
   isVerboseEnabled: false,
   showLogViewer: false,
-  logs: []
+  logs: [],
+  serverHealth: {
+    status: 'unknown', // 'healthy', 'unhealthy', 'unknown'
+    lastChecked: null
+  }
 };
 
 const appSlice = createSlice({
@@ -38,6 +43,12 @@ const appSlice = createSlice({
     },
     setLogContent: (state, action) => {
       state.logs = action.payload;
+    },
+    setServerHealth: (state, action) => {
+      state.serverHealth = {
+        status: action.payload.status,
+        lastChecked: new Date().toISOString()
+      };
     }
   }
 });
@@ -48,13 +59,36 @@ export const {
   toggleLogViewer,
   addLog,
   clearLogs,
-  setLogContent
+  setLogContent,
+  setServerHealth
 } = appSlice.actions;
 
 // Export selectors
 export const selectIsVerboseEnabled = (state) => state.app.isVerboseEnabled;
 export const selectShowLogViewer = (state) => state.app.showLogViewer;
 export const selectLogs = (state) => state.app.logs;
+export const selectServerHealth = (state) => state.app.serverHealth;
+
+// Thunk for checking server health
+export const checkServerHealth = () => async (dispatch) => {
+  try {
+    // console.log('Checking server health...');
+    // Create clean axios instance without auth headers
+    const cleanAxios = axios.create({
+      baseURL: import.meta.env.VITE_API_BASE_URL
+    });
+    const response = await cleanAxios.get('/health');
+    
+    if (!response.data.status || response.data.status !== 'healthy') {
+      throw new Error('Invalid response from health endpoint');
+    }
+    
+    dispatch(setServerHealth({ status: 'healthy' }));
+  } catch (error) {
+    console.error('Health check failed:', error);
+    dispatch(setServerHealth({ status: 'unhealthy' }));
+  }
+};
 
 // Thunk for handling log creation
 export const createLog = (message, type = LogType.INFO) => async (dispatch) => {

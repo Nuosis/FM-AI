@@ -115,12 +115,12 @@ function App() {
             LogType.INFO
           ));
         })
-        .catch(error => {
-          dispatch(createLog(
-            `Failed to fetch licenses: ${error.message}`, 
-            LogType.ERROR
-          ));
-        });
+        // .catch(error => {
+          // dispatch(createLog(
+          //   `Failed to fetch licenses: ${error.message}`, 
+          //   LogType.ERROR
+          // ));
+        // });
     }
   }, [dispatch, isAuthenticated, licenseStatus, isInitialized]);
 

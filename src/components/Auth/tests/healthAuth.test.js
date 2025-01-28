@@ -37,7 +37,6 @@ export async function testHealth() {
     
     const response = await fetch(`${API_BASE_URL}/health`, {
       headers: {
-        //'Origin': FRONTEND_BASE_URL
         'Content-Type': 'application/json'
       }
     });

@@ -1,10 +1,13 @@
 import { useSelector, useDispatch } from 'react-redux';
 import { 
   selectIsVerboseEnabled,
+  selectServerHealth,
   toggleVerbose,
   clearLogs,
-  setLogContent
+  setLogContent,
+  checkServerHealth
 } from '../../redux/slices/appSlice';
+import { selectActiveLicense } from '../../redux/slices/licenseSlice';
 import { useEffect } from 'react';
 import { readLogs } from '../../utils/logging';
 
@@ -12,12 +15,24 @@ const LogViewer = () => {
   const dispatch = useDispatch();
   const isVerboseEnabled = useSelector(selectIsVerboseEnabled);
   const logs = useSelector(state => state.app.logs) || [];
+  const serverHealth = useSelector(selectServerHealth);
+  const license = useSelector(selectActiveLicense);
 
   useEffect(() => {
     // Read logs from localStorage
     const storedLogs = readLogs();
     dispatch(setLogContent(storedLogs));
-  }, [dispatch]); // Only run once on mount
+    
+    // Check server health
+    dispatch(checkServerHealth());
+
+    // Set up interval to check health every 30 seconds
+    const healthInterval = setInterval(() => {
+      dispatch(checkServerHealth());
+    }, 30000);
+
+    return () => clearInterval(healthInterval);
+  }, [dispatch]);
 
   const handleToggleVerbose = () => {
     dispatch(toggleVerbose());
@@ -25,6 +40,21 @@ const LogViewer = () => {
 
   const handleClearLogs = () => {
     dispatch(clearLogs());
+  };
+
+  const getHealthColor = () => {
+    switch(serverHealth.status) {
+      case 'healthy':
+        return '#4CAF50'; // Green
+      case 'unhealthy':
+        return '#dc3545'; // Red
+      default:
+        return '#6c757d'; // Gray
+    }
+  };
+
+  const getHealthText = () => {
+    return serverHealth.status === 'unhealthy' ? 'Server Unavailable' : '';
   };
 
   return (
@@ -42,7 +72,31 @@ const LogViewer = () => {
         alignItems: 'center',
         marginBottom: '20px'
       }}>
-        <h2 style={{ margin: 0 }}>Logs</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h2 style={{ margin: 0 }}>Logs</h2>
+          <div style={{
+            width: '12px',
+            height: '12px',
+            borderRadius: '50%',
+            backgroundColor: getHealthColor(),
+          }} />
+          <span style={{ 
+            color: '#dc3545',
+            fontSize: '14px',
+            visibility: serverHealth.status === 'unhealthy' ? 'visible' : 'hidden'
+          }}>
+            {getHealthText()}
+          </span>
+          {serverHealth.status === 'healthy' && license && (
+            <span style={{ 
+              color: '#4CAF50',
+              fontSize: '14px',
+              marginLeft: '5px'
+            }}>
+              certified
+            </span>
+          )}
+        </div>
         <div>
           <button 
             onClick={handleToggleVerbose}
