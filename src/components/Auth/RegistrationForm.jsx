@@ -300,9 +300,9 @@ const RegistrationForm = ({ onViewChange }) => {
         throw new Error('User account is not active');
       }
 
-      // Validate permitted modules
-      if (!Array.isArray(loginData.user.permitted_modules)) {
-        throw new Error('Invalid permitted modules data');
+      // Validate modules
+      if (!Array.isArray(loginData.user.modules)) {
+        throw new Error('Invalid modules data');
       }
 
       dispatch(createLog('Registration and initial login successful', LogType.INFO));

@@ -27,7 +27,6 @@ import {
   Container,
   CircularProgress,
   Alert,
-  Link,
   Snackbar
 } from '@mui/material';
 import {
@@ -329,31 +328,16 @@ const LoginForm = ({ onViewChange }) => {
             {loading ? 'Signing in...' : 'Sign in'}
           </Button>
           <Box sx={{ textAlign: 'center', mt: 2 }}>
-            <Typography 
-              variant="body2" 
-              color="text.secondary"
-              component="span"
+            <Button
+              variant="outlined"
+              onClick={handleCreateAccount}
+              fullWidth
+              sx={{
+                textTransform: 'none'
+              }}
             >
-              Don&apos;t have an account?{' '}
-              <Link
-                component="button"
-                variant="body2"
-                onClick={handleCreateAccount}
-                sx={{ 
-                  textDecoration: 'none',
-                  cursor: 'pointer',
-                  background: 'none',
-                  border: 'none',
-                  padding: 0,
-                  color: 'inherit',
-                  '&:hover': {
-                    textDecoration: 'underline'
-                  }
-                }}
-              >
-                Create one
-              </Link>
-            </Typography>
+              Create Account
+            </Button>
           </Box>
         </Box>
         <Box 

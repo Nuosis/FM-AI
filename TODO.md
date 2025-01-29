@@ -2,6 +2,9 @@
 
 ## FEATURES 
 ### NEXT
+!!!
+- Mask API Keys
+
 CHAT
 - Refactor Chat as modal dialog
 

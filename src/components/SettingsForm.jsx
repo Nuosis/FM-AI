@@ -323,7 +323,7 @@ const SettingsForm = ({ onModuleUpdate, /*apiKeys = true*/ }) => {
                   color="primary"
                 />
                 <Typography>
-                  Value: {apiKey.fieldData.privateKey}
+                  Value: {'•'.repeat(Math.max(0, apiKey.fieldData.privateKey.length - 8)) + apiKey.fieldData.privateKey.slice(-8)}
                 </Typography>
               </Box>
               <IconButton
