@@ -125,11 +125,7 @@ const FunctionCreator = ({ onCancel }) => {
           throw new Error('Selected module not found');
         }
 
-        const response = await axiosInstance.get(`/api/llm/${selectedModule}/models`, {
-          headers: {
-            'X-Organization-Id': organizationId
-          }
-        });
+        const response = await axiosInstance.get(`/api/llm/${selectedModule}/models`);
         const availableModels = response.data?.models || [];
         setModels(availableModels);
         
@@ -184,11 +180,6 @@ const FunctionCreator = ({ onCancel }) => {
         model: selectedModel,
         temperature: llmSettings.temperature,
         stream: false
-      },
-      {
-        headers: {
-          'X-Organization-Id': organizationId
-        }
       }
     );
     return response;
@@ -315,11 +306,6 @@ const tryParseJSON = (text) => {
           temperature: llmSettings.temperature,
           prompt_template: newPrompt,
           system_instructions: llmSettings.systemInstructions,
-        },
-        {
-          headers: {
-            'X-Organization-Id': organizationId
-          }
         }
       );
 

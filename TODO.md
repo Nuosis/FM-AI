@@ -3,7 +3,8 @@
 ## FEATURES 
 ### NEXT
 !!!
-- Mask API Keys
+- Mask API Keys [done]
+= video "zero to LLM"
 
 CHAT
 - Refactor Chat as modal dialog

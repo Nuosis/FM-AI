@@ -112,11 +112,7 @@ const LLMChat = () => {
           throw new Error('Selected module not found');
         }
 
-        const response = await axiosInstance.get(`/api/llm/${selectedModule}/models`, {
-          headers: {
-            'X-Organization-Id': organizationId
-          }
-        });
+        const response = await axiosInstance.get(`/api/llm/${selectedModule}/models`);
         const availableModels = response.data?.models || [];
         setModels(availableModels);
         
@@ -184,11 +180,6 @@ const LLMChat = () => {
           model: selectedModel,
           temperature: llmSettings.temperature,
           stream: false
-        },
-        {
-          headers: {
-            'X-Organization-Id': organizationId
-          }
         }
       );
 

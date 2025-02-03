@@ -1,10 +1,15 @@
-/* global process */
 import fetch from 'node-fetch';
 import { Buffer } from 'buffer';
 import dotenv from 'dotenv';
+import https from 'https';
+import process from 'process';
 
-// Load environment variables from root .env
-dotenv.config();
+// Load environment variables from frontend/.env
+const result = dotenv.config({ path: process.cwd() + '/.env' });
+if (result.error) {
+  console.error('Error loading .env file:', result.error);
+  process.exit(1);
+}
 
 // Define log types
 const LogType = {
@@ -21,7 +26,6 @@ const log = (message, type = LogType.INFO) => {
 };
 
 const API_BASE_URL = process.env.VITE_API_BASE_URL;
-const FRONTEND_BASE_URL = process.env.VITE_FRONTEND_BASE_URL;
 const PUBLIC_KEY = process.env.VITE_PUBLIC_KEY;
 const API_JWT = process.env.VITE_API_JWT;
 const API_KEY = process.env.VITE_API_KEY;
@@ -41,6 +45,60 @@ const encodeCredentials = (username, password) => {
   return Buffer.from(`${username}:${password}`).toString('base64');
 };
 
+// Store cookies between requests
+let cookies = new Map();
+
+// Helper function to parse Set-Cookie headers
+const parseCookies = (headers) => {
+  const rawCookies = headers.raw()['set-cookie'];
+  if (!rawCookies) return;
+  
+  rawCookies.forEach(cookie => {
+    const parts = cookie.split(';');
+    const [nameValue] = parts;
+    const [name, value] = nameValue.split('=');
+    
+    // Store both the value and attributes
+    const attributes = {};
+    parts.slice(1).forEach(part => {
+      const [key, val] = part.trim().split('=');
+      attributes[key.toLowerCase()] = val || true;
+    });
+    
+    cookies.set(name, {
+      value,
+      ...attributes
+    });
+  });
+};
+
+// Helper to format cookies for request header
+const formatCookies = () => {
+  return Array.from(cookies.entries())
+    .map(([name, cookie]) => `${name}=${cookie.value}`)
+    .join('; ');
+};
+
+// Helper function for fetch options with credentials
+const getFetchOptions = (method = 'GET', headers = {}, body = null) => {
+  const options = {
+    method,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers
+    },
+    // Required for node-fetch to handle cookies
+    agent: API_BASE_URL.startsWith('https') ? 
+      new https.Agent({ rejectUnauthorized: false }) : // Only for testing environment
+      undefined
+  };
+  if (body) {
+    options.body = JSON.stringify(body);
+  }
+  return options;
+};
+
 async function runUserRegistrationTests() {
 
   // Check if email exists for organization
@@ -48,37 +106,27 @@ async function runUserRegistrationTests() {
     try {
       log(`Checking if email ${email} exists for org ${orgId}...`, LogType.INFO);
       
-      const response = await fetch(`${API_BASE_URL}/api/admin/email/find`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json',
-          'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
-        },
-        body: JSON.stringify({
-          email,
-          _orgID: orgId
-        })
-      });
+      const response = await fetch(`${API_BASE_URL}/api/admin/email/find`, getFetchOptions(
+        'POST',
+        { 'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}` },
+        { email, _orgID: orgId }
+      ));
 
-      if (!response.ok) {
+      // 401 means email not found, which is expected for new registrations
+      if (response.status === 401) {
+        log("No records found for the provided email.", LogType.INFO);
+        return null;
+      } else if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
+      log(`response ${email} exists for org ${orgId}... ${response}`, LogType.DEBUG);
       const emailResponse = await response.json();
-      // Ensure the response object has the expected structure
-      if (!emailResponse || !emailResponse.data) {
-        log(`Unexpected response structure: ${JSON.stringify(emailResponse)}`, LogType.ERROR);
-        throw new Error("Invalid response format from email service.");
-      }
-      const data = emailResponse.data
+      const data = emailResponse.data;
 
-      // log(`Email response...${JSON.stringify(data)}`, LogType.DEBUG);
-      // Check if data is an array before accessing properties
       if (Array.isArray(data) && data.length > 0) {
         const partyID = data[0]?.fieldData._fkID;
 
-        // Validate that partyID exists and is of the expected type
         if (partyID) {
             log(`Located partyID via Email`, LogType.DEBUG);
             return partyID;
@@ -101,20 +149,16 @@ async function runUserRegistrationTests() {
     try {
       log('Creating new party...', LogType.INFO);
       
-      const response = await fetch(`${API_BASE_URL}/api/admin/party`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json',
-          'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
-        },
-        body: JSON.stringify({
+      const response = await fetch(`${API_BASE_URL}/api/admin/party/`, getFetchOptions(
+        'POST',
+        { 'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}` },
+        {
           firstName: formData.firstName,
           lastName: formData.lastName,
           displayName: formData.displayName,
           _orgID: formData._orgID
-        })
-      });
+        }
+      ));
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -124,19 +168,15 @@ async function runUserRegistrationTests() {
       const partyID = responseData.response.data[0].fieldData.__ID;
       
       // Create email for new party
-      const emailResponse = await fetch(`${API_BASE_URL}/api/admin/email`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json',
-          'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
-        },
-        body: JSON.stringify({
+      const emailResponse = await fetch(`${API_BASE_URL}/api/admin/email/`, getFetchOptions(
+        'POST',
+        { 'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}` },
+        {
           email: formData.email,
           _fkID: partyID,
           _orgID: formData._orgID
-        })
-      });
+        }
+      ));
 
       if (!emailResponse.ok) {
         throw new Error(`Failed to create email for party: ${emailResponse.status}`);
@@ -154,18 +194,29 @@ async function runUserRegistrationTests() {
     try {
       log('Testing successful user registration...', LogType.INFO);
       
-      // Simulate form data submission
+      //Simulate form data submission
       const formData = {
         firstName: 'John',
         lastName: 'Doe',
         email: 'john.doe@example.com',
         displayName: 'John Doe',
-        userName: 'john.doe',
+        userName: 'john.doe@example.com',
         password: 'Password123!',
         _orgID: PUBLIC_KEY,
         f_active: 1,
         role: 'user'
       };
+      // const formData = {
+      //   firstName: 'Test',
+      //   lastName: 'Lockout',
+      //   email: 'test.user@example.com',
+      //   displayName: 'John Doe',
+      //   userName: 'test.user@example.com',
+      //   password: 'Password123!',
+      //   _orgID: PUBLIC_KEY,
+      //   f_active: 1,
+      //   role: 'user'
+      // };
 
       // Check if email exists
       let partyID = await checkEmailExists(formData.email, formData._orgID);
@@ -185,38 +236,65 @@ async function runUserRegistrationTests() {
         active_status: formData.f_active ? 'active' : 'inactive'
       };
 
-      const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json',
-          'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
-        },
-        body: JSON.stringify(userData)
-      });
+      const response = await fetch(`${API_BASE_URL}/api/auth/register`, getFetchOptions(
+        'POST',
+        { 'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}` },
+        userData
+      ));
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // If error is 400 and user exists, proceed to login verification
+        if (response.status === 400) {
+          log(`User already exists, proceeding to verify login`, LogType.INFO);
+        } else {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+      } else {
+        await response.json();
+        log(`User created`, LogType.INFO);
       }
 
-      await response.json();
-      log(`User created`, LogType.INFO);
-
-
       // Verify the new user can login
-      const loginResponse = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${encodeCredentials(formData.userName, formData.password)}`
-        },
-        body: JSON.stringify({ org_id: PUBLIC_KEY })
-      });
+      const loginResponse = await fetch(`${API_BASE_URL}/api/auth/login`, getFetchOptions(
+        'POST',
+        { 'Authorization': `Basic ${encodeCredentials(formData.userName, formData.password)}` },
+        { org_id: PUBLIC_KEY }
+      ));
 
       if (!loginResponse.ok) {
         log(`loginResponse ${JSON.stringify({loginResponse})}`, LogType.DEBUG);
         throw new Error('New user unable to login');
+      }
+
+      // Parse and store cookies from response
+      parseCookies(loginResponse.headers);
+      
+      // Get response data and store access token
+      const loginData = await loginResponse.json();
+      
+      // Store access token as cookie
+      cookies.set('access_token', {
+        value: loginData.access_token,
+        secure: true,
+        httponly: true,
+        path: '/'
+      });
+      
+      // Debug log cookies
+      console.log('Stored cookies:', Object.fromEntries(cookies));
+      
+      // Verify session with cookies
+      const validateResponse = await fetch(`${API_BASE_URL}/api/auth/validate`, getFetchOptions('GET', {
+        'Cookie': formatCookies()
+      }));
+
+      if (!validateResponse.ok) {
+        throw new Error('Failed to validate session after login');
+      }
+
+      const validateData = await validateResponse.json();
+      if (!validateData.user) {
+        throw new Error('No user data in validation response');
       }
 
       log('User registration successful', LogType.INFO);
@@ -238,22 +316,18 @@ async function runUserRegistrationTests() {
         lastName: 'Doe',
         email: 'invalid.email', // Invalid email format
         displayName: 'John Doe',
-        userName: 'john.doe',
+        userName: 'john.doe@example.com',
         password: 'Password123!',
         _orgID: PUBLIC_KEY,
         f_active: 1,
         role: 'user'
       };
 
-      let response = await fetch(`${API_BASE_URL}/api/auth/register`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json',
-          'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
-        },
-        body: JSON.stringify(invalidEmailData)
-      });
+      let response = await fetch(`${API_BASE_URL}/api/auth/register`, getFetchOptions(
+        'POST',
+        { 'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}` },
+        invalidEmailData
+      ));
 
       if (response.ok) {
         throw new Error('Invalid email registration should have failed but succeeded');
@@ -262,20 +336,16 @@ async function runUserRegistrationTests() {
 
       // Test case 2: Missing required fields
       const missingFieldsData = {
-        username: 'john.doe',
+        username: 'john.doe@example.com',
         password: 'Password123!',
         _orgID: PUBLIC_KEY
       };
 
-      response = await fetch(`${API_BASE_URL}/api/auth/register`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json',
-          'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
-        },
-        body: JSON.stringify(missingFieldsData)
-      });
+      response = await fetch(`${API_BASE_URL}/api/auth/register`, getFetchOptions(
+        'POST',
+        { 'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}` },
+        missingFieldsData
+      ));
 
       if (response.ok) {
         throw new Error('Missing fields registration should have failed but succeeded');
@@ -288,7 +358,7 @@ async function runUserRegistrationTests() {
         lastName: 'Doe',
         email: 'john.doe@example.com', // Same as successful registration
         displayName: 'Jane Doe',
-        userName: 'jane.doe',
+        userName: 'john.doe@example.com',
         password: 'Password123!',
         _orgID: PUBLIC_KEY,
         f_active: 1,
@@ -299,15 +369,11 @@ async function runUserRegistrationTests() {
       const partyID = await checkEmailExists(duplicateEmailData.email, duplicateEmailData._orgID);
       if (partyID) {
         // Attempt to register with existing email
-        response = await fetch(`${API_BASE_URL}/api/auth/register`, {
-          method: 'POST',
-          headers: {
-            //'Origin': FRONTEND_BASE_URL,
-            'Content-Type': 'application/json',
-            'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}`
-          },
-          body: JSON.stringify({ ...duplicateEmailData, _partyID: partyID })
-        });
+        response = await fetch(`${API_BASE_URL}/api/auth/register`, getFetchOptions(
+          'POST',
+          { 'Authorization': `ApiKey ${API_CREDENTIALS.jwt}:${API_CREDENTIALS.privateKey}` },
+          { ...duplicateEmailData, _partyID: partyID }
+        ));
 
         if (response.ok) {
           throw new Error('Duplicate email registration should have failed but succeeded');
@@ -334,14 +400,11 @@ async function runUserRegistrationTests() {
         f_active: 1
       };
 
-      const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(userData)
-      });
+      const response = await fetch(`${API_BASE_URL}/api/auth/register`, getFetchOptions(
+        'POST',
+        {},
+        userData
+      ));
 
       if (response.ok) {
         throw new Error('Unauthorized registration should have failed but succeeded');

@@ -138,9 +138,7 @@ const FunctionForm = ({ function: func, onClose }) => {
 
     const fetchModels = async () => {
       try {
-        const response = await axiosInstance.get(`/api/llm/${selectedModule}/models`, {
-          headers: { 'X-Organization-Id': organizationId }
-        });
+        const response = await axiosInstance.get(`/api/llm/${selectedModule}/models`);
         const availableModels = response.data?.models || [];
         setModels(availableModels);
 

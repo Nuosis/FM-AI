@@ -81,7 +81,7 @@ const RegistrationForm = ({ onViewChange }) => {
     });
 
     const emailData = await response.json();
-    if (response.status === 404) {
+    if (response.status === 401 || response.staus === 404) {
       dispatch(createLog('No existing email found', LogType.DEBUG));
       return null;
     }
@@ -113,7 +113,7 @@ const RegistrationForm = ({ onViewChange }) => {
         displayName,
         _orgID: formData._orgID,
         f_company: "0",
-        companyName: ""
+        type: "user"
       })
     });
 

@@ -2,8 +2,6 @@ import { createSlice } from '@reduxjs/toolkit';
 
 const initialState = {
   isAuthenticated: false,
-  accessToken: null,
-  refreshToken: null,
   user: null,
   loading: false,
   error: null,
@@ -26,26 +24,28 @@ const authSlice = createSlice({
       state.error = null;
     },
     loginSuccess: (state, action) => {
-      //console.log({action})
       state.isAuthenticated = true;
       state.loading = false;
-      state.accessToken = action.payload.access_token;
-      state.refreshToken = action.payload.refresh_token;
       state.user = action.payload.user;
       state.licenseId = action.payload.licenseId || null;
       state.error = null;
+      state.failedAttempts = 0;
     },
     loginFailure: (state, action) => {
       state.loading = false;
       state.error = action.payload;
-      state.failedAttempts += 1;
       
-      // Lock account after 5 failed attempts
-      if (state.failedAttempts >= 5 && !state.isLocked) {
-        state.isLocked = true;
-        // Lock for 15 minutes
-        state.lockoutExpiry = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-        state.error = 'Account locked due to too many failed attempts. Please try again in 15 minutes.';
+      // Skip account locking in development environment
+      if (import.meta.env.VITE_ENVIRONMENT !== 'Development') {
+        state.failedAttempts += 1;
+        
+        // Lock account after 5 failed attempts
+        if (state.failedAttempts >= 5 && !state.isLocked) {
+          state.isLocked = true;
+          // Lock for 15 minutes
+          state.lockoutExpiry = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+          state.error = 'Account locked due to too many failed attempts. Please try again in 15 minutes.';
+        }
       }
     },
     logoutSuccess: () => {
@@ -56,31 +56,6 @@ const authSlice = createSlice({
         licenseKey,
         loading: false,
         licenseId: null
-      };
-    },
-    refreshTokenStart: (state) => {
-      state.loading = true;
-      state.error = null;
-    },
-    refreshTokenSuccess: (state, action) => {
-      state.loading = false;
-      state.isAuthenticated = true;
-      state.accessToken = action.payload.access_token;
-      // Only update refresh token if a new one is provided
-      if (action.payload.refresh_token) {
-        state.refreshToken = action.payload.refresh_token;
-      }
-      state.user = action.payload.user;
-      state.error = null;
-    },
-    refreshTokenFailure: (state, action) => {
-      // On refresh failure, clear auth state but preserve license key and set loading false
-      const licenseKey = state.licenseKey;
-      return {
-        ...initialState,
-        licenseKey,
-        loading: false,
-        error: action.payload
       };
     },
     clearError: (state) => {
@@ -112,9 +87,6 @@ export const {
   loginSuccess,
   loginFailure,
   logoutSuccess,
-  refreshTokenStart,
-  refreshTokenSuccess,
-  refreshTokenFailure,
   clearError,
   checkLockoutExpiry,
   resetFailedAttempts,

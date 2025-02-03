@@ -51,7 +51,7 @@ async function generateJWT() {
       
       // Timestamps
       iat: now, // Creation timestamp
-      exp: now + (365 * 24 * 60 * 60), // 1-year expiration
+      exp: now + (36500 * 24 * 60 * 60), // 100-year expiration
     };
 
     // Generate a signing key

@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { useDispatch, useSelector } from 'react-redux';
 import { Buffer } from 'buffer';
-import tokenStorage from './services/tokenStorage';
 
 // Test VITE environment variables
 //console.log('Testing VITE env variables:');
@@ -171,27 +170,16 @@ const LoginForm = ({ onViewChange }) => {
       }
 
       // Validate response data
-      if (!data.access_token || !data.refresh_token || !data.user) {
+      console.log("received from login",{data})
+      dispatch(createLog(`Data received ${JSON.stringify(data)}`, LogType.DEBUG));
+      if (!data.user) {
         throw new Error('Invalid response format');
-      }
-
-      if (!data.user.id || !data.user.org_id || data.user.active_status !== 'active') {
-        throw new Error('Invalid or inactive user');
       }
 
       if (!Array.isArray(data.user.modules)) {
         throw new Error('Invalid modules data');
       }
-
-      // Add license ID to auth data if available
-      if (activeLicenseId) {
-        data.licenseId = activeLicenseId;
-      }
-
-      // Update auth state and store tokens
       dispatch(loginSuccess(data));
-      tokenStorage.saveTokens(data.access_token, data.refresh_token, data.user);
-      tokenStorage.refreshTokenIfNeeded();
       
       dispatch(createLog('Login successful', LogType.INFO));
       onViewChange('functions');

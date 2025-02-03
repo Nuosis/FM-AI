@@ -26,8 +26,7 @@ import {
   QuestionAnswer
 } from '@mui/icons-material';
 import { createLog, LogType, toggleLogViewer } from '../../redux/slices/appSlice';
-import tokenStorage from '../Auth/services/tokenStorage';
-import { store } from '../../redux/store';
+import { logoutSuccess } from '../../redux/slices/authSlice';
 
 const DrawerHeader = styled('div')(() => ({
   borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
@@ -176,21 +175,18 @@ const Sidebar = ({ width = 240, onViewChange, currentView }) => {
           <ListItemButton
             onClick={async () => {
               try {
-                const state = store.getState().auth;
                 await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/logout`, {
                   method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({ refresh_token: state.refreshToken })
+                  credentials: 'include'
                 });
-                tokenStorage.clearTokens();
+                dispatch(logoutSuccess());
                 dispatch(createLog('User logged out successfully', LogType.INFO));
                 handleViewChange('login');
               } catch (error) {
                 console.error('Logout error:', error);
                 dispatch(createLog('Logout failed: ' + error.message, LogType.ERROR));
-                tokenStorage.clearTokens();
+                // Still logout on error since server handles the token
+                dispatch(logoutSuccess());
                 handleViewChange('login');
               }
             }}

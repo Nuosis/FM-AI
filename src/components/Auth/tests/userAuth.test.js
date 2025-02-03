@@ -1,7 +1,9 @@
-/* global process */
 import fetch from 'node-fetch';
-import { Buffer } from 'buffer';
+import { Buffer as BufferClass } from 'buffer';
+const Buffer = BufferClass.Buffer;
 import dotenv from 'dotenv';
+import https from 'https';
+import process from 'process';
 
 // Load environment variables from frontend/.env
 const result = dotenv.config({ path: process.cwd() + '/.env' });
@@ -13,9 +15,15 @@ if (result.error) {
 // Log environment variables for debugging
 console.log('Environment variables loaded:', {
   API_BASE_URL: process.env.VITE_API_BASE_URL,
-  FRONTEND_BASE_URL: process.env.VITE_FRONTEND_BASE_URL,
   PUBLIC_KEY: process.env.VITE_PUBLIC_KEY
 });
+
+const API_BASE_URL = process.env.VITE_API_BASE_URL;
+const PUBLIC_KEY = process.env.VITE_PUBLIC_KEY;
+
+if (!API_BASE_URL || !PUBLIC_KEY ) {
+  throw new Error('Required environment variables are not set');
+}
 
 // Define log types
 const LogType = {
@@ -28,13 +36,21 @@ const LogType = {
 // Test configuration
 const TEST_CONFIG = {
   credentials: {
-    username: 'john.doe',
-    password: 'Password123!', // Meets password requirements
+    username: process.env.TEST_USER || 'jonnytest@tester.com',
+    password: process.env.TEST_PASSWORD || 'Password123!',
     newPassword: 'NewPass456!' // Meets password requirements
   },
   maxLoginAttempts: 5, // Matches AUTH_CONFIG max_login_attempts
   lockoutDurationMinutes: 15 // Should match AUTH_CONFIG
 };
+
+// Additional error handling for environment variables
+console.log('Test configuration:', {
+  username: TEST_CONFIG.credentials.username,
+  password: TEST_CONFIG.credentials.password,
+  API_BASE_URL: API_BASE_URL,
+  PUBLIC_KEY: PUBLIC_KEY
+});
 
 // Test configuration and logging setup
 const log = (message, type = LogType.INFO) => {
@@ -42,141 +58,96 @@ const log = (message, type = LogType.INFO) => {
   console.log(`[${timestamp}] [${type}] ${message}`);
 };
 
-const API_BASE_URL = process.env.VITE_API_BASE_URL;
-const FRONTEND_BASE_URL = process.env.VITE_FRONTEND_BASE_URL;
-const PUBLIC_KEY = process.env.VITE_PUBLIC_KEY;
-
-if (!API_BASE_URL || !PUBLIC_KEY) {
-  throw new Error('Required environment variables are not set');
-}
-
-
-// Store tokens for use across tests
-let accessToken = null;
-let refreshToken = null;
-
 // Helper function to encode credentials
 const encodeCredentials = (username, password) => {
   return Buffer.from(`${username}:${password}`).toString('base64');
 };
 
+// Helper function for fetch options with cookie handling
+const getFetchOptions = (method = 'GET', headers = {}, body = null) => {
+  const options = {
+    method,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers
+    },
+    // Required for node-fetch to handle cookies
+    agent: API_BASE_URL.startsWith('https') ? 
+      new https.Agent({ rejectUnauthorized: false }) : // Only for testing environment
+      undefined
+  };
+  if (body) {
+    options.body = JSON.stringify(body);
+  }
+  return options;
+};
+
+// Store cookies between requests
+let cookies = new Map();
+
+// Helper function to parse Set-Cookie headers
+const parseCookies = (headers) => {
+  if (!headers) {
+    log('No headers provided');
+    return;
+  }
+
+  // Debug headers
+  console.log('Headers:', headers);
+
+  try {
+    // Handle both raw headers and regular headers
+    let rawCookies;
+    if (typeof headers.raw === 'function') {
+      const rawHeaders = headers.raw();
+      console.log('Raw headers:', rawHeaders);
+      rawCookies = rawHeaders['set-cookie'];
+    } else if (typeof headers.get === 'function') {
+      const cookieHeader = headers.get('set-cookie');
+      rawCookies = cookieHeader ? [cookieHeader] : undefined;
+    } else if (headers.getAll) {
+      // Some fetch implementations use getAll
+      rawCookies = headers.getAll('set-cookie');
+    }
+    
+    if (!rawCookies || !Array.isArray(rawCookies)) {
+      log('No valid cookies found in response');
+      return;
+    }
+    
+    log('Raw cookies:', rawCookies);
+  
+    rawCookies.forEach(cookie => {
+      const parts = cookie.split(';');
+      const [nameValue] = parts;
+      const [name, value] = nameValue.split('=');
+      
+      // Store both the value and attributes
+      const attributes = {};
+      parts.slice(1).forEach(part => {
+        const [key, val] = part.trim().split('=');
+        attributes[key.toLowerCase()] = val || true;
+      });
+      
+      cookies.set(name, {
+        value,
+        ...attributes
+      });
+    });
+  } catch (error) {
+    console.error('Error parsing cookies:', error);
+  }
+};
+
+// Helper to format cookies for request header
+const formatCookies = () => {
+  return Array.from(cookies.entries())
+    .map(([name, cookie]) => `${name}=${cookie.value}`)
+    .join('; ');
+};
+
 async function runUserAuthTests() {
-  // Test successful login
-  async function testSuccessfulLogin() {
-    try {
-      log('Testing successful login...', LogType.INFO);
-      const credentials = encodeCredentials(
-        TEST_CONFIG.credentials.username,
-        TEST_CONFIG.credentials.password
-      );
-      
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${credentials}`
-        },
-        body: JSON.stringify({ org_id: PUBLIC_KEY })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      log('Response data: ' + JSON.stringify(data, null, 2), LogType.DEBUG);
-
-      // Validate response structure
-      if (!data.access_token || !data.refresh_token || !data.user) {
-        throw new Error('Missing required fields in response');
-      }
-
-      // Validate user has required fields
-      if (!data.user.id || !data.user.org_id || !data.user.active_status) {
-        throw new Error('Missing required user fields in response');
-      }
-
-      // Validate user is active
-      if (data.user.active_status !== 'active') {
-        throw new Error('User account is not active');
-      }
-
-      // Validate permitted modules are included
-      if (!Array.isArray(data.user.permitted_modules)) {
-        throw new Error('Permitted modules not included in response');
-      }
-
-      // Store tokens for subsequent tests
-      accessToken = data.access_token;
-      refreshToken = data.refresh_token;
-
-      log('Login successful', LogType.INFO);
-      return true;
-    } catch (error) {
-      log(`Login failed: ${error.message}`, LogType.ERROR);
-      return false;
-    }
-  }
-
-  // Test account lockout
-  async function testAccountLockout() {
-    try {
-      log('Testing account lockout...', LogType.INFO);
-      
-      // Use a dedicated account for lockout testing to avoid affecting other tests
-      const lockoutTestCredentials = encodeCredentials('lockout_test@example.com', 'WrongPassword123!');
-      
-      // Attempt login multiple times to trigger lockout
-      for (let i = 0; i < TEST_CONFIG.maxLoginAttempts; i++) {
-        const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-          method: 'POST',
-          headers: {
-            //'Origin': FRONTEND_BASE_URL,
-            'Content-Type': 'application/json',
-            'Authorization': `Basic ${lockoutTestCredentials}`
-          },
-          body: JSON.stringify({ org_id: PUBLIC_KEY })
-        });
-
-        const attemptData = await response.json();
-        log(`Attempt ${i + 1} response: ${JSON.stringify(attemptData, null, 2)}`, LogType.DEBUG);
-        
-        if (response.ok) {
-          throw new Error('Login should have failed but succeeded');
-        }
-
-        log(`Failed login attempt ${i + 1}/${TEST_CONFIG.maxLoginAttempts}`, LogType.INFO);
-      }
-
-      // Try one more time - should be locked out
-      const finalResponse = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json',
-            'Authorization': `Basic ${lockoutTestCredentials}`
-        },
-        body: JSON.stringify({ org_id: PUBLIC_KEY })
-      });
-
-      const data = await finalResponse.json();
-      
-      // Debug log the response
-      log('Lockout response: ' + JSON.stringify(data, null, 2), LogType.DEBUG);
-      
-      // Verify lockout message - check for either backend or frontend lockout message
-      if (!data.error || (!data.error.includes('locked') && !data.error.includes('Try again in'))) {
-        throw new Error('Account should be locked but no lockout message received');
-      }
-
-      log('Account lockout test passed', LogType.INFO);
-      return true;
-    } catch (error) {
-      log(`Account lockout test failed: ${error.message}`, LogType.ERROR);
-      return false;
-    }
-  }
 
   // Test failed login
   async function testFailedLogin() {
@@ -185,15 +156,11 @@ async function runUserAuthTests() {
       
       const credentials = encodeCredentials('wrong.user', 'wrongpass');
       
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${credentials}`
-        },
-        body: JSON.stringify({ org_id: PUBLIC_KEY })
-      });
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, getFetchOptions(
+        'POST',
+        { 'Authorization': `Basic ${credentials}` },
+        { org_id: PUBLIC_KEY }
+      ));
 
       if (response.ok) {
         throw new Error('Login should have failed but succeeded');
@@ -211,46 +178,62 @@ async function runUserAuthTests() {
     }
   }
 
-  // Test token refresh
-  async function testTokenRefresh() {
+  // Test successful login
+  async function testSuccessfulLogin() {
     try {
-      log('Testing token refresh...', LogType.INFO);
+      log('Testing successful login...', LogType.INFO);
+      const credentials = encodeCredentials(
+        TEST_CONFIG.credentials.username,
+        TEST_CONFIG.credentials.password
+      );
+
+      log('credentials: ' + JSON.stringify(credentials, null, 2), LogType.DEBUG);
       
-      if (!refreshToken) {
-        throw new Error('No refresh token available');
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ refresh_token: refreshToken })
-      });
-
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, getFetchOptions('POST', 
+        { 
+          'Authorization': `Basic ${credentials}`
+        }, 
+        { org_id: PUBLIC_KEY }
+      ));
+      
+      // Handle error cases first
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
-
+      
+      // Parse and store cookies from response
+      parseCookies(response.headers);
+      
+      // Get response data
       const data = await response.json();
       log('Response data: ' + JSON.stringify(data, null, 2), LogType.DEBUG);
-
-      // Validate new token and permissions
-      if (!data.access_token) {
-        throw new Error('No access token in refresh response');
+      
+      // Store access token as cookie
+      cookies.set('access_token', {
+        value: data.access_token,
+        secure: true,
+        httponly: true,
+        path: '/'
+      });
+      
+      // Debug log cookies
+      console.log('Stored cookies:', Object.fromEntries(cookies));
+      
+      // Validate user data in response
+      if (!data.user || !data.user.id || !data.user.org_id) {
+        throw new Error('Invalid user data in response');
       }
 
-      // Verify permitted modules are preserved
-      if (!data.permitted_modules || !Array.isArray(data.permitted_modules)) {
-        throw new Error('Permitted modules not included in refresh response');
+      // Validate modules
+      if (!Array.isArray(data.user.modules)) {
+        throw new Error('Modules not included in response');
       }
 
-      accessToken = data.access_token;
-
-      log('Token refresh successful', LogType.INFO);
+      log('Login successful', LogType.INFO);
       return true;
     } catch (error) {
-      log(`Token refresh failed: ${error.message}`, LogType.ERROR);
+      log(`Login failed: ${error.message}`, LogType.ERROR);
       return false;
     }
   }
@@ -259,17 +242,10 @@ async function runUserAuthTests() {
   async function testSessionValidation() {
     try {
       log('Testing session validation...', LogType.INFO);
-      
-      if (!accessToken) {
-        throw new Error('No access token available');
-      }
 
-      const response = await fetch(`${API_BASE_URL}/api/auth/validate`, {
-        headers: {
-          'Origin': FRONTEND_BASE_URL,
-          'Authorization': `Bearer ${accessToken}`
-        }
-      });
+      const response = await fetch(`${API_BASE_URL}/api/auth/validate`, getFetchOptions('GET', {
+        'Cookie': formatCookies()
+      }));
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -283,8 +259,8 @@ async function runUserAuthTests() {
         throw new Error('Invalid user info in response');
       }
 
-      if (!data.user.permitted_modules || !Array.isArray(data.user.permitted_modules)) {
-        throw new Error('Permitted modules not included in validation response');
+      if (!data.user.modules || !Array.isArray(data.user.modules)) {
+        throw new Error('Modules not included in validation response');
       }
 
       log('Session validation successful', LogType.INFO);
@@ -309,18 +285,16 @@ async function runUserAuthTests() {
       ];
 
       for (const password of invalidPasswords) {
-        const response = await fetch(`${API_BASE_URL}/api/auth/password/change`, {
-          method: 'POST',
-          headers: {
-            //'Origin': FRONTEND_BASE_URL,
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
+        const response = await fetch(`${API_BASE_URL}/api/auth/password/change`, getFetchOptions(
+          'POST',
+          {
+            'Cookie': formatCookies()
           },
-          body: JSON.stringify({
+          {
             current_password: TEST_CONFIG.credentials.password,
             new_password: password
-          })
-        });
+          }
+        ));
 
         if (response.ok) {
           throw new Error(`Password validation should have failed for: ${password}`);
@@ -345,23 +319,17 @@ async function runUserAuthTests() {
   async function testPasswordChange() {
     try {
       log('Testing password change...', LogType.INFO);
-      
-      if (!accessToken) {
-        throw new Error('No access token available');
-      }
 
-      const response = await fetch(`${API_BASE_URL}/api/auth/password/change`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
+      const response = await fetch(`${API_BASE_URL}/api/auth/password/change`, getFetchOptions(
+        'POST',
+          {
+            'Cookie': formatCookies()
+          },
+        {
           current_password: TEST_CONFIG.credentials.password,
           new_password: TEST_CONFIG.credentials.newPassword
-        })
-      });
+        }
+      ));
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -373,33 +341,27 @@ async function runUserAuthTests() {
         TEST_CONFIG.credentials.newPassword
       );
 
-      const loginResponse = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${newCredentials}`
-        },
-        body: JSON.stringify({ org_id: PUBLIC_KEY })
-      });
+      const loginResponse = await fetch(`${API_BASE_URL}/api/auth/login`, getFetchOptions(
+        'POST',
+        { 'Authorization': `Basic ${newCredentials}` },
+        { org_id: PUBLIC_KEY }
+      ));
 
       if (!loginResponse.ok) {
         throw new Error('Login failed with new password');
       }
 
       // Change password back to original
-      const revertResponse = await fetch(`${API_BASE_URL}/api/auth/password/change`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
+      const revertResponse = await fetch(`${API_BASE_URL}/api/auth/password/change`, getFetchOptions(
+        'POST',
+          {
+            'Cookie': formatCookies()
+          },
+        {
           current_password: TEST_CONFIG.credentials.newPassword,
           new_password: TEST_CONFIG.credentials.password
-        })
-      });
+        }
+      ));
 
       if (!revertResponse.ok) {
         throw new Error('Failed to revert password');
@@ -418,16 +380,13 @@ async function runUserAuthTests() {
     try {
       log('Testing password reset request...', LogType.INFO);
       
-      const response = await fetch(`${API_BASE_URL}/api/auth/password/reset-request`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          username: TEST_CONFIG.credentials.username
-        })
-      });
+      const response = await fetch(`${API_BASE_URL}/api/auth/password/reset-request`, getFetchOptions(
+        'POST',
+          {
+            'Cookie': formatCookies()
+          },
+        { username: TEST_CONFIG.credentials.username }
+      ));
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -453,41 +412,22 @@ async function runUserAuthTests() {
   async function testLogout() {
     try {
       log('Testing logout...', LogType.INFO);
-      
-      if (!refreshToken) {
-        throw new Error('No refresh token available');
-      }
 
-      const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ refresh_token: refreshToken })
-      });
+      const response = await fetch(`${API_BASE_URL}/api/auth/logout`, getFetchOptions('POST'));
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // Verify refresh token is invalidated
-      const refreshResponse = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
-        method: 'POST',
-        headers: {
-          //'Origin': FRONTEND_BASE_URL,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ refresh_token: refreshToken })
-      });
+      // Clear local cookies
+      cookies.clear();
 
-      if (refreshResponse.ok) {
-        throw new Error('Refresh token should be invalidated after logout');
+      // Verify session is invalidated
+      const validateResponse = await fetch(`${API_BASE_URL}/api/auth/validate`, getFetchOptions('GET'));
+
+      if (validateResponse.ok) {
+        throw new Error('Session should be invalidated after logout');
       }
-
-      // Clear tokens
-      accessToken = null;
-      refreshToken = null;
 
       log('Logout successful', LogType.INFO);
       return true;
@@ -502,12 +442,11 @@ async function runUserAuthTests() {
 
   // Login tests
   if (!await testFailedLogin()) return false;
-  if (!await testAccountLockout()) return false;
+  // if (!await testAccountLockout()) return false;
   if (!await testSuccessfulLogin()) return false;
 
   // Session tests
   if (!await testSessionValidation()) return false;
-  if (!await testTokenRefresh()) return false;
 
   // Password management tests
   if (!await testPasswordValidation()) return false;

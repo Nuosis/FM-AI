@@ -3,8 +3,6 @@
 import PropTypes from 'prop-types';
 import { useRef, useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { store } from '../../redux/store';
-import tokenStorage from '../Auth/services/tokenStorage';
 import { 
   styled,
   useTheme,
@@ -16,6 +14,7 @@ import {
   Logout as LogoutIcon
 } from '@mui/icons-material';
 import { createLog, LogType } from '../../redux/slices/appSlice';
+import { logoutSuccess } from '../../redux/slices/authSlice';
 import DropUpMenu from './DropUpMenu';
 
 const BottomBarContainer = styled('div')({
@@ -302,21 +301,18 @@ const BottomBar = ({
               data-path="logout"
               onClick={async () => {
                 try {
-                  const state = store.getState().auth;
                   await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/logout`, {
                     method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ refresh_token: state.refreshToken })
+                    credentials: 'include'
                   });
-                  tokenStorage.clearTokens();
+                  dispatch(logoutSuccess());
                   dispatch(createLog('User logged out successfully', LogType.INFO));
                   handleViewChange('login');
                 } catch (error) {
                   console.error('Logout error:', error);
                   dispatch(createLog('Logout failed: ' + error.message, LogType.ERROR));
-                  tokenStorage.clearTokens();
+                  // Still logout on error since server handles the token
+                  dispatch(logoutSuccess());
                   handleViewChange('login');
                 }
               }}

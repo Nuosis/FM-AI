@@ -54,11 +54,6 @@ const FunctionChat = ({ initialPrompt, provider, model, temperature, systemInstr
             model,
             temperature,
             stream: false
-          },
-          {
-            headers: {
-              'X-Organization-Id': organizationId
-            }
           }
         );
         

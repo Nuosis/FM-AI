@@ -28,9 +28,7 @@ import {
 const SettingsForm = ({ onModuleUpdate, /*apiKeys = true*/ }) => {
   const dispatch = useDispatch();
   const currentUser = useSelector(state => state.auth.user);
-  const licenseKey = useSelector(state => state.auth.licenseKey);
   //const activeLicense = useSelector(state => state.license.activeLicense);
-  const authHeader = `LicenseKey ${licenseKey.jwt}:${licenseKey.privateKey}`;
   const [availableModules, setAvailableModules] = useState([]);
   const [selectedModule, setSelectedModule] = useState('');
   const [selectedField, setSelectedField] = useState('');
@@ -55,12 +53,7 @@ const SettingsForm = ({ onModuleUpdate, /*apiKeys = true*/ }) => {
     try {
       console.log("initalizing module drop down")
       // Fetch modules selected details
-      const response = await axiosInstance.get(`/api/admin/modulesselected/license/${activeLicenseId}`, {
-        headers: {
-          'Authorization': authHeader,
-          'X-Organization-Id': currentUser.org_id
-        }
-      });
+      const response = await axiosInstance.get(`/api/admin/modulesselected/license/${activeLicenseId}`);
       
       const modulesSelected = response.data;
       //console.log({modulesSelected})
@@ -86,14 +79,7 @@ const SettingsForm = ({ onModuleUpdate, /*apiKeys = true*/ }) => {
     setIsLoading(true);
     try {
       const response = await axiosInstance.get(
-        `/api/admin/modulesselected/${moduleId}/parties/${currentUser.party_id}/keys`,
-        {
-          headers: {
-            'Authorization': authHeader,
-            'X-Organization-Id': currentUser.org_id
-          }
-        }
-      );
+        `/api/admin/modulesselected/${moduleId}/parties/${currentUser.party_id}/keys`);
       console.log("apiKeys fetch response: ",response)
       if (response.data.api_keys) {
         setApiKeysList(response.data.api_keys)
@@ -141,11 +127,6 @@ const SettingsForm = ({ onModuleUpdate, /*apiKeys = true*/ }) => {
           modules: [module.moduleId],
           type: "userKey",
           privateKey: fieldValue
-        },
-        {
-          headers: {
-            'X-Organization-Id': currentUser.org_id
-          }
         }
       );
 
@@ -174,14 +155,7 @@ const SettingsForm = ({ onModuleUpdate, /*apiKeys = true*/ }) => {
 
       // revoke API key
       await axiosInstance.post(
-        `/api/admin/modulesselected/${selectedModule}/parties/${currentUser.party_id}/keys/${apiKeyId}/revoke`,
-        {
-          headers: {
-            'Authorization': authHeader,
-            'X-Organization-Id': currentUser.org_id
-          }
-        }
-      );
+        `/api/admin/modulesselected/${selectedModule}/parties/${currentUser.party_id}/keys/${apiKeyId}/revoke`);
       
       // Reinitialize keys to refresh the list
       fetchModuleKeys(selectedModule);
