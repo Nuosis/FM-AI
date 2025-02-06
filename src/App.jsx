@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material';
 import Layout from './components/Layout/Layout';
-import { LoginForm, RegistrationForm } from './components/Auth';
+import { LoginForm, RegistrationForm, TestSecureApiCall } from './components/Auth';
 import SettingsForm from './components/SettingsForm';
 import Functions from './components/Functions';
 import { createLog, LogType, /*toggleLogViewer*/ } from './redux/slices/appSlice';
@@ -118,18 +118,17 @@ function App() {
               position: 'relative',
               maxWidth: '100%'
             }}>
-              {!isAuthenticated ? (
+              {currentView === 'test' ? (
+                <TestSecureApiCall />
+              ) : !isAuthenticated ? (
                 <Box sx={{ 
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   height: '100%'
                 }}>
-                  {currentView === 'register' ? (
-                    <RegistrationForm onViewChange={handleViewChange} />
-                  ) : (
-                    <LoginForm onViewChange={handleViewChange} />
-                  )}
+                  {currentView === 'register' && <RegistrationForm onViewChange={handleViewChange} />}
+                  {currentView === 'login' && <LoginForm onViewChange={handleViewChange} />}
                 </Box>
               ) : (
                 <>

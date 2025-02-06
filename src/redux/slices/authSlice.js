@@ -8,11 +8,7 @@ const initialState = {
   failedAttempts: 0,
   isLocked: false,
   lockoutExpiry: null,
-  licenseId: null,
-  licenseKey: {
-    jwt: import.meta.env.VITE_API_JWT || null,
-    privateKey: import.meta.env.VITE_API_KEY || null
-  }
+  licenseId: null
 };
 
 const authSlice = createSlice({
@@ -49,11 +45,8 @@ const authSlice = createSlice({
       }
     },
     logoutSuccess: () => {
-      // Preserve license key when logging out and set loading false
-      const licenseKey = initialState.licenseKey;
       return {
         ...initialState,
-        licenseKey,
         loading: false,
         licenseId: null
       };
@@ -75,9 +68,6 @@ const authSlice = createSlice({
       state.failedAttempts = 0;
       state.isLocked = false;
       state.lockoutExpiry = null;
-    },
-    setLicenseKey: (state, action) => {
-      state.licenseKey = action.payload;
     }
   }
 });
@@ -89,14 +79,7 @@ export const {
   logoutSuccess,
   clearError,
   checkLockoutExpiry,
-  resetFailedAttempts,
-  setLicenseKey
+  resetFailedAttempts
 } = authSlice.actions;
-
-// Helper function to get license key auth header
-export const getLicenseKeyAuth = (state) => {
-  const { jwt, privateKey } = state.auth.licenseKey;
-  return jwt && privateKey ? `LicenseKey ${jwt}:${privateKey}` : null;
-};
 
 export default authSlice.reducer;

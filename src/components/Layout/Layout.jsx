@@ -17,6 +17,7 @@ import { selectShowLogViewer } from '../../redux/slices/appSlice';
 import Sidebar from '../Sidebar/Sidebar';
 import Bottombar from '../Sidebar/Bottombar';
 import { menuItems } from '../../constants/menuItems';
+import { TestSecureApiCall } from '../Auth';
 
 const DRAWER_WIDTH = 240;
 
@@ -48,7 +49,8 @@ const Main = styled('main', {
 const componentMap = {
   LLMChat: LLMChat,
   SettingsForm: SettingsForm,
-  Functions: Functions
+  Functions: Functions,
+  TestSecureApiCall: TestSecureApiCall
 };
 
 const Layout = ({ children, onViewChange, currentView }) => {
@@ -63,6 +65,10 @@ const Layout = ({ children, onViewChange, currentView }) => {
     onViewChange(view);
     if (view === 'settings') {
       setCurrentComponent('SettingsForm');
+      return;
+    }
+    if (view === 'test') {
+      setCurrentComponent('TestSecureApiCall');
       return;
     }
     const menuItem = menuItems.find(item => item.view === view);

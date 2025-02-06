@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { useDispatch } from 'react-redux';
 import { Buffer } from 'buffer';
+import axios from '../../utils/axios';
 
 // Test VITE environment variables
 console.log('Testing VITE env variables:');
@@ -68,32 +69,31 @@ const RegistrationForm = ({ onViewChange }) => {
 
   const checkEmailExists = async (email, orgId) => {
     dispatch(createLog('Checking if email exists', LogType.DEBUG));
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/email/find`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-      },
-      body: JSON.stringify({
-        email,
-        _orgID: orgId
-      })
-    });
+    try {
+      const response = await axios.post('/api/admin/email/find', 
+        {
+          email,
+          _orgID: orgId
+        },
+        {
+          headers: {
+            'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
+          }
+        }
+      );
 
-    const emailData = await response.json();
-    if (response.status === 401 || response.staus === 404) {
+      if (response.data.data && response.data.data.length > 0) {
+        dispatch(createLog('Found existing email record', LogType.DEBUG));
+        return response.data.data[0].fieldData._fkID;
+      }
       dispatch(createLog('No existing email found', LogType.DEBUG));
-      return null;
-    }
-    
-    if (!response.ok) {
-      dispatch(createLog(`Response: ${JSON.stringify(response)}`, LogType.ERROR));
+    } catch (error) {
+      if (error.response?.status === 401 || error.response?.status === 404) {
+        dispatch(createLog('No existing email found', LogType.DEBUG));
+        return null;
+      }
+      dispatch(createLog(`Email check failed: ${error.message}`, LogType.ERROR));
       throw new Error('Failed when checking email existence (DEV ERROR)');
-    }
-
-    if (emailData.data && emailData.data.length > 0) {
-      dispatch(createLog('Found existing email record', LogType.DEBUG));
-      return emailData.data[0].fieldData._fkID;
     }
     return null;
   };
@@ -101,47 +101,38 @@ const RegistrationForm = ({ onViewChange }) => {
   const createParty = async (formData) => {
     dispatch(createLog('Creating new party record', LogType.DEBUG));
     const displayName = `${formData.firstName} ${formData.lastName}`;
-    const partyResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/party/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-      },
-      body: JSON.stringify({
+    const partyResponse = await axios.post('/api/admin/party/',
+      {
         firstName: formData.firstName,
         lastName: formData.lastName,
         displayName,
         _orgID: formData._orgID,
         f_company: "0",
         type: "user"
-      })
-    });
+      },
+      {
+        headers: {
+          'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
+        }
+      }
+    );
 
-    if (!partyResponse.ok) {
-      throw new Error('Failed to create party');
-    }
-
-    const partyData = await partyResponse.json();
-    const partyID = partyData.response.data[0].fieldData.__ID;
+    const partyID = partyResponse.data.response.data[0].fieldData.__ID;
 
     // Create email for new party
     dispatch(createLog('Creating new email record', LogType.DEBUG));
-    const emailResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/email/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-      },
-      body: JSON.stringify({
+    await axios.post('/api/admin/email/',
+      {
         email: formData.email,
         _fkID: partyID,
         _orgID: formData._orgID
-      })
-    });
-
-    if (!emailResponse.ok) {
-      throw new Error('Failed to create email');
-    }
+      },
+      {
+        headers: {
+          'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
+        }
+      }
+    );
 
     return partyID;
   };
@@ -245,62 +236,51 @@ const RegistrationForm = ({ onViewChange }) => {
 
       // Register user
       dispatch(createLog('Creating user account', LogType.DEBUG));
-      const registerResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-        },
-        body: JSON.stringify({
+      await axios.post('/api/auth/register',
+        {
           userName: formData.email,
           password: formData.password,
           _orgID: formData._orgID,
           _partyID: partyID,
           active_status: formData.f_active ? 'active' : 'inactive',
           role: 'user'
-        })
-      });
-
-      if (!registerResponse.ok) {
-        const errorData = await registerResponse.json();
-        throw new Error(errorData.error || 'Registration failed');
-      }
+        },
+        {
+          headers: {
+            'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
+          }
+        }
+      );
 
       // Verify the new user can login
       dispatch(createLog('Verifying user login', LogType.DEBUG));
       const username = formData.email;
       const credentials = Buffer.from(`${username}:${formData.password}`).toString('base64');
-      const loginResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${credentials}`
-        },
-        body: JSON.stringify({ org_id: formData._orgID })
-      });
+      const loginResponse = await axios.post('/api/auth/login',
+        { org_id: formData._orgID },
+        {
+          headers: {
+            'Authorization': `Basic ${credentials}`
+          }
+        }
+      );
 
-      const loginData = await loginResponse.json();
-      
-      if (!loginResponse.ok) {
-        throw new Error(loginData.error || 'New user unable to login');
-      }
+      const loginData = loginResponse.data;
 
-      // Validate login response structure
-      if (!loginData.access_token || !loginData.refresh_token || !loginData.user) {
+      // Validate login response
+      if (!loginData.user) {
         throw new Error('Invalid login response format');
       }
 
-      // Validate user object
+      // Validate user object and status
       if (!loginData.user.id || !loginData.user.org_id || !loginData.user.active_status) {
         throw new Error('Invalid user data in login response');
       }
 
-      // Validate user is active
       if (loginData.user.active_status !== 'active') {
         throw new Error('User account is not active');
       }
 
-      // Validate modules
       if (!Array.isArray(loginData.user.modules)) {
         throw new Error('Invalid modules data');
       }

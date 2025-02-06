@@ -2,22 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { useDispatch, useSelector } from 'react-redux';
 import { Buffer } from 'buffer';
-
-// Test VITE environment variables
-//console.log('Testing VITE env variables:');
-const requiredEnvVars = [
-  'VITE_API_BASE_URL',
-  'VITE_PUBLIC_KEY'
-];
-
-requiredEnvVars.forEach(varName => {
-  const value = import.meta.env[varName];
-  //console.log(`${varName}: ${value ? '✓ loaded' : '✗ missing'}`);
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${varName}`);
-  }
-});
-
 import {
   Box,
   TextField,
@@ -28,6 +12,8 @@ import {
   Alert,
   Snackbar
 } from '@mui/material';
+import axios from '../../utils/axios';
+import { TestSecureApiCall } from './';
 import {
   loginStart,
   loginSuccess,
@@ -37,21 +23,24 @@ import {
 import { createLog, LogType } from '../../redux/slices/appSlice';
 import { fetchOrgLicenses, selectActiveLicenseId } from '../../redux/slices/licenseSlice';
 
+// Test VITE environment variables
+const requiredEnvVars = [
+  'VITE_API_BASE_URL',
+  'VITE_PUBLIC_KEY'
+];
+
+requiredEnvVars.forEach(varName => {
+  const value = import.meta.env[varName];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${varName}`);
+  }
+});
+
 const LoginForm = ({ onViewChange }) => {
   const dispatch = useDispatch();
   const auth = useSelector((state) => state.auth);
   const activeLicenseId = useSelector(selectActiveLicenseId);
-  //const licenseState = useSelector((state) => state.license);
   
-  // Debug logging for license state changes
-  // useEffect(() => {
-  //   console.log('License state updated:', {
-  //     activeLicenseId,
-  //     licenses: licenseState.licenses,
-  //     status: licenseState.status
-  //   });
-  // }, [activeLicenseId, licenseState]);
-
   const { loading, error, isLocked, lockoutExpiry } = auth;
 
   const [formData, setFormData] = useState({
@@ -73,10 +62,7 @@ const LoginForm = ({ onViewChange }) => {
         .unwrap()
         .then(() => {
           dispatch(createLog('Licenses fetched successfully', LogType.DEBUG));
-        })
-        // .catch(error => {
-        //   dispatch(createLog(`Failed to fetch licenses: ${error.message}`, LogType.ERROR));
-        // });
+        });
     }
 
     return () => {
@@ -99,7 +85,8 @@ const LoginForm = ({ onViewChange }) => {
     if (!formData.email.trim()) {
       errors.email = 'Email is required';
     }
-    if (!formData.password) {
+    // Skip password validation for dev test mode
+    if (formData.email !== 'devCBS' && !formData.password) {
       errors.password = 'Password is required';
     }
     setValidationErrors(errors);
@@ -154,24 +141,19 @@ const LoginForm = ({ onViewChange }) => {
     try {
       const credentials = Buffer.from(`${formData.email}:${formData.password}`).toString('base64');
       
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${credentials}`,
-        },
-        body: JSON.stringify({ org_id: import.meta.env.VITE_PUBLIC_KEY })
-      });
+      const response = await axios.post('/api/auth/login', 
+        { org_id: import.meta.env.VITE_PUBLIC_KEY },
+        { 
+          headers: {
+            'Authorization': `Basic ${credentials}`,
+          }
+        }
+      );
 
-      const data = await response.json();
+      const data = response.data;
       
-      if (!response.ok) {
-        throw new Error(data.error || 'Login failed');
-      }
-
       // Validate response data
-      console.log("received from login",{data})
-      dispatch(createLog(`Data received ${JSON.stringify(data)}`, LogType.DEBUG));
+      dispatch(createLog(`Login response received`, LogType.DEBUG));
       if (!data.user) {
         throw new Error('Invalid response format');
       }
@@ -179,7 +161,8 @@ const LoginForm = ({ onViewChange }) => {
       if (!Array.isArray(data.user.modules)) {
         throw new Error('Invalid modules data');
       }
-      dispatch(loginSuccess(data));
+
+      dispatch(loginSuccess({ user: data.user, licenseId: data.licenseId }));
       
       dispatch(createLog('Login successful', LogType.INFO));
       onViewChange('functions');
@@ -328,49 +311,62 @@ const LoginForm = ({ onViewChange }) => {
             </Button>
           </Box>
         </Box>
-        <Box 
-          sx={{ 
-            textAlign: 'center',
-            position: 'fixed',
-            bottom: 0,
-            left: '240px',
-            right: 0,
-            padding: '20px',
-            backgroundColor: 'background.default',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            cursor: 'pointer'
-          }}
-          onClick={() => window.open('https://claritybusinesssolutions.ca', '_blank')}
-        >
-          <img 
-            src="https://server.claritybusinesssolutions.ca/clarity/clarity192x192.png"
-            alt="Clarity Logo"
-            style={{ width: '90px', height: '90px', marginBottom: '16px' }}
-          />
-          <Box>
+        <Box sx={{ position: 'relative', width: '100%', mt: 4 }}>
+          {formData.email === 'devCBS' && (
+            <Box sx={{ 
+              width: '100%', 
+              maxHeight: '400px', 
+              overflowY: 'auto',
+              mb: 20 // Add margin to avoid overlap with logo
+            }}>
+              <TestSecureApiCall />
+            </Box>
+          )}
+          <Box 
+            sx={{ 
+              textAlign: 'center',
+              position: 'fixed',
+              bottom: 0,
+              left: '240px',
+              right: 0,
+              padding: '20px',
+              backgroundColor: 'background.default',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              cursor: 'pointer',
+              zIndex: 1
+            }}
+            onClick={() => window.open('https://claritybusinesssolutions.ca', '_blank')}
+          >
             <img 
-              src="https://server.claritybusinesssolutions.ca/clarity/logoTextWht.png"
-              alt="Clarity"
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.style.display = 'none';
-                e.target.nextSibling.style.display = 'block';
-              }}
-              style={{ height: '37.5px', marginBottom: '8px' }}
+              src="https://server.claritybusinesssolutions.ca/clarity/clarity192x192.png"
+              alt="Clarity Logo"
+              style={{ width: '90px', height: '90px', marginBottom: '16px' }}
             />
-            <Typography 
-              component="h2" 
-              variant="h4" 
-              sx={{ mb: 1, display: 'none' }}
-            >
-              Clarity
+            <Box>
+              <img 
+                src="https://server.claritybusinesssolutions.ca/clarity/logoTextWht.png"
+                alt="Clarity"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.style.display = 'none';
+                  e.target.nextSibling.style.display = 'block';
+                }}
+                style={{ height: '37.5px', marginBottom: '8px' }}
+              />
+              <Typography 
+                component="h2" 
+                variant="h4" 
+                sx={{ mb: 1, display: 'none' }}
+              >
+                Clarity
+              </Typography>
+            </Box>
+            <Typography variant="subtitle1" sx={{ color: 'text.secondary' }}>
+              automation ☯︎ integration ☯︎ insight
             </Typography>
           </Box>
-          <Typography variant="subtitle1" sx={{ color: 'text.secondary' }}>
-            automation ☯︎ integration ☯︎ insight
-          </Typography>
         </Box>
       </Box>
     </Container>

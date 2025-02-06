@@ -1,6 +1,7 @@
 import axios from 'axios';
-import { store } from '../redux/store';
-import { createLog } from '../redux/slices/appSlice';
+import { store } from '../store/index.js';
+import { showError } from '../store/slices/errorSlice.js';
+import { createLog } from '../store/slices/logSlice.js';
 
 const instance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
@@ -42,6 +43,7 @@ instance.interceptors.response.use(
     // Handle timeout error specifically
     if (error.code === 'ECONNABORTED' && error.message.includes('timeout')) {
       store.dispatch(createLog('Request timed out after 1 minute', 'error'));
+      store.dispatch(showError('Request timed out. Please try again.'));
       return Promise.reject(new Error('Request timed out after 1 minute'));
     }
 
@@ -52,6 +54,13 @@ instance.interceptors.response.use(
     store.dispatch(createLog(`API Response Error: ${status} - ${message}`, 'error'));
     store.dispatch(createLog(`Failed Request Details: ${config.method?.toUpperCase()} ${config.url}`, 'error'));
     store.dispatch(createLog(`Response Headers: ${JSON.stringify(error.response?.headers)}`, 'debug'));
+    
+    // Show error in snackbar
+    if (status === 403) {
+      store.dispatch(showError(message)); // Just show the message for 403s
+    } else {
+      store.dispatch(showError(`Error ${status}: ${message}`));
+    }
     
     return Promise.reject(error);
   }
