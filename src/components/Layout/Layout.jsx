@@ -114,7 +114,9 @@ const Layout = ({ children, onViewChange, currentView }) => {
         flexDirection: 'column',
         minWidth: 0,
         height: '100%',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        position: 'relative',
+        paddingBottom: isMobile ? '300px' : '400px'
       }}>
         <Main id="main" isMobile={isMobile}>
           {currentView === 'login' || currentView === 'register' ? children : (
@@ -143,10 +145,14 @@ const Layout = ({ children, onViewChange, currentView }) => {
         </Main>
         {showLogViewer && (
           <Box id="logs" sx={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 50,
             width: '100%',
             height: isMobile ? '300px' : '400px',
-            backgroundColor: '#1e1e1e',
-            marginBottom: isMobile ? '96px' : 0
+            backgroundColor: '#1e1e1e'
           }}>
             <LogViewer />
           </Box>

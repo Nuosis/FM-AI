@@ -59,6 +59,8 @@ const LogViewer = () => {
 
   return (
     <div style={{ 
+      position: 'relative',
+      zIndex: 10,
       height: '100%',
       backgroundColor: '#1e1e1e',
       color: '#fff',
