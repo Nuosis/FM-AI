@@ -36,7 +36,7 @@ verify_frontend_env() {
     echo "Found .env file"
     
     # Required environment variables
-    local required_vars=("VITE_API_BASE_URL" "VITE_FRONTEND_BASE_URL" "VITE_PUBLIC_KEY")
+    local required_vars=("VITE_API_BASE_URL" "VITE_PUBLIC_KEY")
     local missing_vars=()
     
     for var in "${required_vars[@]}"; do

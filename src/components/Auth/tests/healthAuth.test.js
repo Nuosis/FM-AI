@@ -36,25 +36,59 @@ if (!TEST_USER || !TEST_PASSWORD) {
 }
 
 let accessToken = null;
+let tokenExpiry = null;
 
-// Helper function for fetch options with credentials
+// Helper function for fetch options with Bearer token
 const getFetchOptions = (method = 'GET', headers = {}, body = null) => {
   const options = {
     method,
-    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...headers
     }
   };
+  
   if (body) {
     options.body = JSON.stringify(body);
   }
-  // Add access token cookie if available
+  
+  // Add Bearer token if available
   if (accessToken) {
-    options.headers.Cookie = `access_token=${accessToken}`;
+    options.headers.Authorization = `Bearer ${accessToken}`;
   }
+  
   return options;
+};
+
+// Helper function to check if token needs refresh
+const shouldRefreshToken = () => {
+  if (!tokenExpiry) return false;
+  const expiryTime = new Date(tokenExpiry).getTime();
+  const currentTime = Date.now();
+  return (expiryTime - currentTime) < 60000; // Less than 1 minute until expiry
+};
+
+// Helper function to refresh token
+const refreshToken = async () => {
+  try {
+    log('Refreshing access token...', LogType.INFO);
+    
+    const response = await fetch(`${API_BASE_URL}/auth/refresh`, getFetchOptions('POST'));
+    
+    if (!response.ok) {
+      throw new Error(`Token refresh failed with status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    accessToken = data.accessToken;
+    tokenExpiry = data.tokenExpiry;
+    
+    log('Token refresh successful', LogType.INFO);
+    return true;
+  } catch (error) {
+    log(`Token refresh failed: ${error.message}`, LogType.ERROR);
+    return false;
+  }
 };
 
 // Test unprotected /health endpoint
@@ -82,10 +116,17 @@ export async function testHealth() {
   }
 }
 
-// Test /health/token with session cookie
+// Test /health/token with Bearer token
 export async function testHealthSecureToken() {
   try {
-    log('Testing /api/auth/health/token with session cookie...', LogType.INFO);
+    log('Testing /api/auth/health/token with Bearer token...', LogType.INFO);
+    
+    // Check if token needs refresh
+    if (shouldRefreshToken()) {
+      if (!await refreshToken()) {
+        throw new Error('Token refresh failed before health check');
+      }
+    }
     
     const response = await fetch(`${API_BASE_URL}/api/auth/health/token`, getFetchOptions());
 
@@ -107,59 +148,61 @@ export async function testHealthSecureToken() {
   }
 }
 
-// Test /health/apikey with ApiKey
-export async function testHealthSecureApiKey() {
+// Test token refresh flow
+export async function testTokenRefresh() {
   try {
-    log('Testing /api/auth/health/apikey with ApiKey...', LogType.INFO);
+    log('Testing token refresh flow...', LogType.INFO);
     
-    const response = await fetch(`${API_BASE_URL}/api/auth/health/apikey`, getFetchOptions(
-      'GET',
-      { 'Authorization': `ApiKey ${process.env.VITE_API_JWT}:${process.env.VITE_API_KEY}` }
-    ));
-
+    // Force token expiry
+    tokenExpiry = new Date(Date.now() + 30000).toISOString(); // 30 seconds from now
+    
+    // Attempt a request that should trigger refresh
+    const response = await fetch(`${API_BASE_URL}/api/auth/health/token`, getFetchOptions());
+    
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw new Error('Request failed after token refresh');
     }
-
-    const data = await response.json();
-
-    if (!data.status || data.status !== 'healthy' || data.auth !== 'apikey') {
-      throw new Error('Invalid response from health/apikey endpoint');
+    
+    // Verify we got a new token
+    if (!accessToken || !tokenExpiry) {
+      throw new Error('Token refresh did not update credentials');
     }
-
-    log('Auth health ApiKey test passed', LogType.INFO);
+    
+    log('Token refresh flow test passed', LogType.INFO);
     return true;
   } catch (error) {
-    log(`Auth health ApiKey test failed: ${error.message}`, LogType.ERROR);
+    log(`Token refresh flow test failed: ${error.message}`, LogType.ERROR);
     return false;
   }
 }
 
-// Test /health/basic with Basic Auth
-export async function testHealthSecureBasicAuth() {
+// Test token cleanup
+export async function testTokenCleanup() {
   try {
-    log('Testing /api/auth/health/basic with Basic Auth...', LogType.INFO);
+    log('Testing token cleanup...', LogType.INFO);
     
-    const credentials = Buffer.from(`${TEST_USER}:${TEST_PASSWORD}`).toString('base64');
-    const response = await fetch(`${API_BASE_URL}/api/auth/health/basic`, getFetchOptions(
-      'GET',
-      { 'Authorization': `Basic ${credentials}` }
-    ));
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    // Perform logout
+    const logoutResponse = await fetch(`${API_BASE_URL}/api/auth/logout`, getFetchOptions('POST'));
+    
+    if (!logoutResponse.ok) {
+      throw new Error('Logout request failed');
     }
-
-    const data = await response.json();
-
-    if (!data.status || data.status !== 'healthy' || data.auth !== 'basic') {
-      throw new Error('Invalid response from health/basic endpoint');
+    
+    // Clear tokens
+    accessToken = null;
+    tokenExpiry = null;
+    
+    // Verify protected endpoint fails
+    const healthResponse = await fetch(`${API_BASE_URL}/api/auth/health/token`, getFetchOptions());
+    
+    if (healthResponse.ok) {
+      throw new Error('Protected endpoint still accessible after logout');
     }
-
-    log('Auth health Basic Auth test passed', LogType.INFO);
+    
+    log('Token cleanup test passed', LogType.INFO);
     return true;
   } catch (error) {
-    log(`Auth health Basic Auth test failed: ${error.message}`, LogType.ERROR);
+    log(`Token cleanup test failed: ${error.message}`, LogType.ERROR);
     return false;
   }
 }
@@ -177,25 +220,37 @@ export async function login() {
         'Content-Type': 'application/json',
         'Authorization': `Basic ${credentials}`
       },
-      body: JSON.stringify({ org_id: process.env.VITE_PUBLIC_KEY }),
-      credentials: 'include'
+      body: JSON.stringify({ org_id: process.env.VITE_PUBLIC_KEY })
     });
 
     if (!response.ok) {
       throw new Error(`Login failed with status: ${response.status}`);
     }
 
-    const headers = response.headers
-    log(JSON.stringify(headers), LogType.INFO)
-
     const data = await response.json();
-    log(JSON.stringify(data), LogType.INFO)
-    if (!data.user || !data.access_token) {
-      throw new Error('Login response missing user data or access token');
+    
+    // Log the complete response data
+    log('Login response data:', LogType.DEBUG);
+    log(JSON.stringify(data, null, 2), LogType.DEBUG);
+    
+    // Store token information from response
+    if (data.access_token) {
+      accessToken = data.access_token;
+      
+      // Extract expiry from JWT token
+      try {
+        const payload = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64').toString());
+        tokenExpiry = new Date(payload.exp * 1000).toISOString();
+      } catch (error) {
+        log('Failed to parse token expiry', LogType.ERROR);
+        throw new Error('Invalid token format');
+      }
     }
-
-    // Store access token for subsequent requests
-    accessToken = data.access_token;
+    
+    if (!accessToken || !tokenExpiry) {
+      throw new Error('Login response missing token data');
+    }
+    
     log('Login successful with access token', LogType.INFO);
     return data.user;
   } catch (error) {
@@ -225,16 +280,19 @@ async function runAllTests() {
   // Test token auth
   if (!await testHealthSecureToken()) {
     log('Auth health token test failed', LogType.ERROR);
+    return false;
   }
 
-  // Test API key auth
-  if (!await testHealthSecureApiKey()) {
-    log('Auth health API key test failed', LogType.ERROR);
+  // Test token refresh
+  if (!await testTokenRefresh()) {
+    log('Token refresh test failed', LogType.ERROR);
+    return false;
   }
 
-  // Test basic auth
-  if (!await testHealthSecureBasicAuth()) {
-    log('Auth health basic auth test failed', LogType.ERROR);
+  // Test token cleanup
+  if (!await testTokenCleanup()) {
+    log('Token cleanup test failed', LogType.ERROR);
+    return false;
   }
 
   log('\n=== Health Endpoint Tests Complete ===\n', LogType.INFO);

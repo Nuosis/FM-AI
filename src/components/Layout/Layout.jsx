@@ -42,7 +42,7 @@ const Main = styled('main', {
   backgroundColor: theme.palette.background.default,
   color: theme.palette.text.primary,
   overflow: 'auto',
-  marginBottom: isMobile ? '96px' : 0
+  marginBottom: isMobile ? '100px' : 0
 }));
 
 // Map component strings to actual components
@@ -122,7 +122,7 @@ const Layout = ({ children, onViewChange, currentView }) => {
         height: '100%',
         overflow: 'hidden',
         position: 'relative',
-        paddingBottom: isMobile ? '300px' : '400px'
+        paddingBottom: showLogViewer ? (isMobile ? '300px' : '400px') : 0
       }}>
         <Main id="main" isMobile={isMobile}>
           {currentView === 'login' || currentView === 'register' ? children : (

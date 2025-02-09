@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import PropTypes from 'prop-types';
 import { createLog, LogType } from '../redux/slices/appSlice';
-import { selectActiveLicenseId } from '../redux/slices/licenseSlice';
 import axiosInstance from '../utils/axios';
+import { selectActiveLicenseId } from '../redux/slices/licenseSlice';
 import {
   Box,
   Button,
@@ -79,12 +79,19 @@ const SettingsForm = ({ onModuleUpdate, /*apiKeys = true*/ }) => {
     setIsLoading(true);
     try {
       const response = await axiosInstance.get(
-        `/api/admin/modulesselected/${moduleId}/parties/${currentUser.party_id}/keys`);
-      console.log("apiKeys fetch response: ",response)
+        `/api/admin/modulesselected/${moduleId}/parties/${currentUser.id}/keys`);
+      console.log("apiKeys fetch response: ", response);
       if (response.data.api_keys) {
-        setApiKeysList(response.data.api_keys)
+        const limitedApiKeys = response.data.api_keys.map(key => ({
+          ...key,
+          fieldData: {
+            ...key.fieldData,
+            privateKey: key.fieldData.privateKey.slice(-20)
+          }
+        }));
+        setApiKeysList(limitedApiKeys);
       } else {
-        setApiKeysList([])
+        setApiKeysList([]);
       }
     } catch (error) {
       dispatch(createLog(`Failed to fetch module keys: ${error.message}`, LogType.ERROR));
@@ -121,7 +128,7 @@ const SettingsForm = ({ onModuleUpdate, /*apiKeys = true*/ }) => {
 
       // Create new API key
       await axiosInstance.post(
-        `/api/admin/modulesselected/${selectedModule}/parties/${currentUser.party_id}/keys`,
+        `/api/admin/modulesselected/${selectedModule}/parties/${currentUser.id}/keys`,
         {
           description: selectedField,
           modules: [module.moduleId],
@@ -130,8 +137,7 @@ const SettingsForm = ({ onModuleUpdate, /*apiKeys = true*/ }) => {
         }
       );
 
-      // Reinitialize modules to refresh the list
-      await initializeModules();
+      fetchModuleKeys(selectedModule);
 
       // Reset field inputs
       setSelectedField('');
@@ -155,7 +161,7 @@ const SettingsForm = ({ onModuleUpdate, /*apiKeys = true*/ }) => {
 
       // revoke API key
       await axiosInstance.post(
-        `/api/admin/modulesselected/${selectedModule}/parties/${currentUser.party_id}/keys/${apiKeyId}/revoke`);
+        `/api/admin/modulesselected/${selectedModule}/parties/${currentUser.id}/keys/${apiKeyId}/revoke`);
       
       // Reinitialize keys to refresh the list
       fetchModuleKeys(selectedModule);

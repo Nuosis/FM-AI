@@ -8,7 +8,11 @@ const initialState = {
   failedAttempts: 0,
   isLocked: false,
   lockoutExpiry: null,
-  licenseId: null
+  licenseId: null,
+  // New JWT-related state
+  accessToken: null,
+  tokenExpiry: null,
+  isRefreshing: false
 };
 
 const authSlice = createSlice({
@@ -26,6 +30,9 @@ const authSlice = createSlice({
       state.licenseId = action.payload.licenseId || null;
       state.error = null;
       state.failedAttempts = 0;
+      // Set JWT token and expiry
+      state.accessToken = action.payload.accessToken;
+      state.tokenExpiry = action.payload.tokenExpiry;
     },
     loginFailure: (state, action) => {
       state.loading = false;
@@ -68,6 +75,30 @@ const authSlice = createSlice({
       state.failedAttempts = 0;
       state.isLocked = false;
       state.lockoutExpiry = null;
+    },
+    // New JWT-related reducers
+    setAccessToken: (state, action) => {
+      state.accessToken = action.payload.token;
+      state.tokenExpiry = action.payload.expiry;
+    },
+    clearAccessToken: (state) => {
+      state.accessToken = null;
+      state.tokenExpiry = null;
+    },
+    refreshStart: (state) => {
+      state.isRefreshing = true;
+    },
+    refreshSuccess: (state, action) => {
+      state.accessToken = action.payload.accessToken;
+      state.tokenExpiry = action.payload.tokenExpiry;
+      state.isRefreshing = false;
+    },
+    refreshFailure: (state) => {
+      state.isRefreshing = false;
+      state.isAuthenticated = false;
+      state.accessToken = null;
+      state.tokenExpiry = null;
+      state.user = null;
     }
   }
 });
@@ -79,7 +110,12 @@ export const {
   logoutSuccess,
   clearError,
   checkLockoutExpiry,
-  resetFailedAttempts
+  resetFailedAttempts,
+  setAccessToken,
+  clearAccessToken,
+  refreshStart,
+  refreshSuccess,
+  refreshFailure
 } = authSlice.actions;
 
 export default authSlice.reducer;

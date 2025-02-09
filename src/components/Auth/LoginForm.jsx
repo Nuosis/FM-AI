@@ -154,7 +154,7 @@ const LoginForm = ({ onViewChange }) => {
       
       // Validate response data
       dispatch(createLog(`Login response received`, LogType.DEBUG));
-      if (!data.user) {
+      if (!data.user || !data.access_token) {
         throw new Error('Invalid response format');
       }
 
@@ -162,7 +162,21 @@ const LoginForm = ({ onViewChange }) => {
         throw new Error('Invalid modules data');
       }
 
-      dispatch(loginSuccess({ user: data.user, licenseId: data.licenseId }));
+      // Extract token expiry from JWT
+      let tokenExpiry;
+      try {
+        const payload = JSON.parse(Buffer.from(data.access_token.split('.')[1], 'base64').toString());
+        tokenExpiry = new Date(payload.exp * 1000).toISOString();
+      } catch (error) {
+        throw new Error('Invalid token format');
+      }
+
+      dispatch(loginSuccess({
+        user: data.user,
+        accessToken: data.access_token,
+        tokenExpiry,
+        licenseId: data.user.org_id // Using org_id as licenseId since they represent the same thing
+      }));
       
       dispatch(createLog('Login successful', LogType.INFO));
       onViewChange('functions');

@@ -126,7 +126,7 @@ const LLMChat = () => {
         const errorMessage = err.response?.data?.error || err.message;
         console.error('Error fetching models:', err);
         dispatch(createLog(`Failed to fetch models: ${errorMessage}`, LogType.ERROR));
-        setError('Failed to load models. Please try again.');
+        setError(`Failed to load models: ${errorMessage}`);
       }
     };
 
@@ -209,10 +209,23 @@ const LLMChat = () => {
     }}>
       <Snackbar
         open={Boolean(error)}
-        autoHideDuration={6000}
+        autoHideDuration={3000}
         onClose={() => setError(null)}
         message={error}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        TransitionProps={{
+          direction: 'left',
+          timeout: {
+            enter: 500,
+            exit: 500
+          }
+        }}
+        sx={{
+          '& .MuiSnackbarContent-root': {
+            backgroundColor: 'error.main',
+            color: 'error.contrastText'
+          }
+        }}
       />
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3, gap: 2 }}>

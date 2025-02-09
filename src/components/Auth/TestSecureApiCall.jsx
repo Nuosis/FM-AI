@@ -124,11 +124,16 @@ const TestSecureApiCall = () => {
     try {
       setCurrentTest('Testing login...');
       const credentials = btoa('test.user@example.com:Password123!');
-      await axios.post('/api/auth/login', 
+      const response = await axios.post('/api/auth/login',
         { org_id: import.meta.env.VITE_PUBLIC_KEY },
         { headers: { Authorization: `Basic ${credentials}` } }
       );
-      addResult('Login', 'Login successful');
+      // Store the access token in Redux
+      store.dispatch(loginSuccess({
+        user: response.data.user,
+        accessToken: response.data.access_token
+      }));
+      addResult('Login', 'Login successful with token');
       return true;
     } catch (error) {
       addResult('Login', error.message, true);
@@ -188,8 +193,16 @@ const TestSecureApiCall = () => {
         }
       }, true));
 
+      // Store token if login was successful
+      if (loginResponse.status === 200) {
+        store.dispatch(loginSuccess({
+          user: loginResponse.data.user,
+          accessToken: loginResponse.data.access_token
+        }));
+        addResult('Login', 'Login successful with token');
+      }
       // If forbidden, user doesn't exist - create and retry login
-      if (loginResponse.status === 403) {
+      else if (loginResponse.status === 403) {
         if (!await registerTestUser()) {
           if (mounted) setLoading(false);
           return;
@@ -199,8 +212,6 @@ const TestSecureApiCall = () => {
           if (mounted) setLoading(false);
           return;
         }
-      } else if (loginResponse.status === 200) {
-        addResult('Login', 'Login successful');
       } else {
         addResult('Login', `Unexpected response: ${loginResponse.status}`, true);
         if (mounted) setLoading(false);
@@ -223,8 +234,7 @@ const TestSecureApiCall = () => {
       axios.post('/api/auth/logout')
         .catch(() => {/* Ignore logout errors during cleanup */})
         .finally(() => {
-          // Clear cookies
-          document.cookie = 'access_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+          // Clear refresh token cookie
           document.cookie = 'refresh_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
         });
     };

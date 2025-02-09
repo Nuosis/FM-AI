@@ -268,21 +268,28 @@ const RegistrationForm = ({ onViewChange }) => {
       const loginData = loginResponse.data;
 
       // Validate login response
-      if (!loginData.user) {
+      if (!loginData.user || !loginData.access_token) {
         throw new Error('Invalid login response format');
       }
 
-      // Validate user object and status
-      if (!loginData.user.id || !loginData.user.org_id || !loginData.user.active_status) {
+      // Validate user object
+      if (!loginData.user.id || !loginData.user.org_id) {
         throw new Error('Invalid user data in login response');
       }
 
-      if (loginData.user.active_status !== 'active') {
-        throw new Error('User account is not active');
-      }
-
+      // Validate modules array
       if (!Array.isArray(loginData.user.modules)) {
         throw new Error('Invalid modules data');
+      }
+
+      // Extract token expiry from JWT
+      try {
+        const payload = JSON.parse(Buffer.from(loginData.access_token.split('.')[1], 'base64').toString());
+        if (!payload.exp) {
+          throw new Error('Token missing expiry');
+        }
+      } catch (error) {
+        throw new Error('Invalid token format');
       }
 
       dispatch(createLog('Registration and initial login successful', LogType.INFO));
