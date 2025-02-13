@@ -1,6 +1,5 @@
 import fetch from 'node-fetch';
-import { Buffer as BufferClass } from 'buffer';
-const Buffer = BufferClass.Buffer;
+import { Buffer } from 'buffer';
 import dotenv from 'dotenv';
 import https from 'https';
 import process from 'process';
@@ -60,7 +59,28 @@ const log = (message, type = LogType.INFO) => {
 
 // Helper function to encode credentials
 const encodeCredentials = (username, password) => {
-  return Buffer.from(`${username}:${password}`).toString('base64');
+  try {
+    log('Encoding credentials...', LogType.DEBUG);
+    log(`Username: ${username}`, LogType.DEBUG);
+    log('Password: [REDACTED]', LogType.DEBUG);
+
+    if (!username || !password) {
+      throw new Error('Username and password are required');
+    }
+
+    const credentialString = `${username}:${password}`;
+    log(`Credential string created (length: ${credentialString.length})`, LogType.DEBUG);
+
+    const encoded = Buffer.from(credentialString).toString('base64');
+    log(`Credentials encoded successfully (length: ${encoded.length})`, LogType.DEBUG);
+    
+    return encoded;
+  } catch (error) {
+    log(`Failed to encode credentials: ${error.message}`, LogType.ERROR);
+    log(`Buffer.from available: ${typeof Buffer.from === 'function'}`, LogType.DEBUG);
+    log(`Buffer type: ${typeof Buffer}`, LogType.DEBUG);
+    throw error;
+  }
 };
 
 // Helper function for fetch options with cookie handling

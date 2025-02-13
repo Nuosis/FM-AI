@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { useDispatch } from 'react-redux';
 import { Buffer } from 'buffer';
-import axios from '../../utils/axios';
+import axios, { makeRequestReturnError } from '../../utils/axios';
 
 // Test VITE environment variables
 console.log('Testing VITE env variables:');
@@ -69,32 +69,38 @@ const RegistrationForm = ({ onViewChange }) => {
 
   const checkEmailExists = async (email, orgId) => {
     dispatch(createLog('Checking if email exists', LogType.DEBUG));
-    try {
-      const response = await axios.post('/api/admin/email/find', 
-        {
-          email,
-          _orgID: orgId
-        },
-        {
-          headers: {
-            'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-          }
-        }
-      );
+    
+    const response = await makeRequestReturnError({
+      method: 'POST',
+      url: '/api/admin/email/find',
+      data: {
+        email,
+        _orgID: orgId
+      },
+      headers: {
+        'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
+      }
+    });
 
-      if (response.data.data && response.data.data.length > 0) {
-        dispatch(createLog('Found existing email record', LogType.DEBUG));
-        return response.data.data[0].fieldData._fkID;
-      }
+    // Handle 401/404 as valid "email doesn't exist" cases
+    if (response.status === 401 || response.status === 404) {
       dispatch(createLog('No existing email found', LogType.DEBUG));
-    } catch (error) {
-      if (error.response?.status === 401 || error.response?.status === 404) {
-        dispatch(createLog('No existing email found', LogType.DEBUG));
-        return null;
-      }
-      dispatch(createLog(`Email check failed: ${error.message}`, LogType.ERROR));
+      return null;
+    }
+
+    // Handle other error cases
+    if (response.isError) {
+      dispatch(createLog(`Email check failed: ${response.error}`, LogType.ERROR));
       throw new Error('Failed when checking email existence (DEV ERROR)');
     }
+
+    // Check if email exists in successful response
+    if (response.data?.data && response.data.data.length > 0) {
+      dispatch(createLog('Found existing email record', LogType.DEBUG));
+      return response.data.data[0].fieldData._fkID;
+    }
+
+    dispatch(createLog('No existing email found', LogType.DEBUG));
     return null;
   };
 

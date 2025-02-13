@@ -25,6 +25,29 @@ export const createRequest = (config, suppressErrors = false) => {
   };
 };
 
+// Helper function to make a request that returns response data even for error status codes
+export const makeRequestReturnError = async (config) => {
+  try {
+    const response = await instance(createRequest(config, true));
+    return {
+      data: response.data,
+      status: response.status,
+      headers: response.headers,
+      error: null,
+      isError: response.status >= 400
+    };
+  } catch (error) {
+    // Handle network errors or other non-HTTP errors
+    return {
+      data: null,
+      status: error.response?.status || 0,
+      headers: error.response?.headers || {},
+      error: error.message,
+      isError: true
+    };
+  }
+};
+
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -83,12 +106,19 @@ instance.interceptors.request.use(
     const state = store.getState().auth;
     const originalRequest = config;
 
-    // Add organization ID header for all requests
-    originalRequest.headers['X-Organization-Id'] = import.meta.env.VITE_PUBLIC_KEY;
-
-    // Skip token handling for auth endpoints
-    if (config.url?.includes('/auth/') && !config.url?.includes('/auth/refresh')) {
-      return config;
+    // Skip header modifications for auth endpoints
+    if (config.url?.includes('/auth/')) {
+      // Don't add org ID header for login endpoint
+      if (!config.url.endsWith('/auth/login')) {
+        originalRequest.headers['X-Organization-Id'] = import.meta.env.VITE_PUBLIC_KEY;
+      }
+      // Skip token handling for non-refresh auth endpoints
+      if (!config.url.includes('/auth/refresh')) {
+        return config;
+      }
+    } else {
+      // Add organization ID header for non-auth requests
+      originalRequest.headers['X-Organization-Id'] = import.meta.env.VITE_PUBLIC_KEY;
     }
 
     if (state.accessToken) {
@@ -149,7 +179,20 @@ instance.interceptors.response.use(
     const message = error.response?.data?.message || error.message;
     const config = error.config;
     
+    // Log detailed error information
+    store.dispatch(createLog(`API Error Details:
+Status: ${status}
+URL: ${config.method?.toUpperCase()} ${config.url}
+Message: ${message}
+Request Headers: ${JSON.stringify(config.headers)}
+Response Data: ${JSON.stringify(error.response?.data)}`, 'error'));
+
     // Handle authentication errors
+    if (status === 403 && config.url?.includes('/auth/login')) {
+      store.dispatch(createLog('Login failed - Invalid credentials or missing organization ID', 'error'));
+      return Promise.reject(new Error('Invalid credentials or missing organization ID'));
+    }
+    
     if (status === 401 && !config.url?.includes('/auth/refresh')) {
       if (!isRefreshing) {
         isRefreshing = true;
