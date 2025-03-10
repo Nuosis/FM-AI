@@ -23,7 +23,8 @@ import {
   ManageSearch,
   Handyman,
   SmartToy,
-  QuestionAnswer
+  QuestionAnswer,
+  FileDownload
 } from '@mui/icons-material';
 import { createLog, LogType, toggleLogViewer } from '../../redux/slices/appSlice';
 import { logoutSuccess } from '../../redux/slices/authSlice';
@@ -104,6 +105,7 @@ const Sidebar = ({ width = 240, onViewChange, currentView }) => {
                 case 'Handyman': return <Handyman />;
                 case 'SmartToy': return <SmartToy />;
                 case 'QuestionAnswer': return <QuestionAnswer />;
+                case 'FileDownload': return <FileDownload />;
                 default: return null;
               }
             })();

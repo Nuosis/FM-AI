@@ -6,11 +6,13 @@ import {
   ManageSearch,
   Handyman,
   SmartToy,
+  FileDownload,
   //QuestionAnswer
 } from '@mui/icons-material';
 import LLMChat from '../Chat/LLMChat';
 import SettingsForm from '../SettingsForm';
 import Functions from '../Functions';
+import DemoFiles from '../DemoFiles';
 import { useSelector } from 'react-redux';
 import LogViewer from '../LogViewer/LogViewer';
 import { selectShowLogViewer } from '../../redux/slices/appSlice';
@@ -50,6 +52,7 @@ const componentMap = {
   LLMChat: LLMChat,
   SettingsForm: SettingsForm,
   Functions: Functions,
+  DemoFiles: DemoFiles,
   TestSecureApiCall: TestSecureApiCall
 };
 
@@ -94,6 +97,7 @@ const Layout = ({ children, onViewChange, currentView }) => {
                   case 'ManageSearch': return <ManageSearch />;
                   case 'Handyman': return <Handyman />;
                   case 'SmartToy': return <SmartToy />;
+                  case 'FileDownload': return <FileDownload />;
                   default: return null;
                 }
               })()
