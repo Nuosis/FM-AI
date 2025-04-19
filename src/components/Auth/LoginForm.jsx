@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { useDispatch, useSelector } from 'react-redux';
-import { Buffer } from 'buffer';
 import {
   Box,
   TextField,
@@ -12,12 +11,9 @@ import {
   Alert,
   Snackbar
 } from '@mui/material';
-import axios from '../../utils/axios';
 import { TestSecureApiCall } from './';
 import {
-  loginStart,
-  loginSuccess,
-  loginFailure,
+  signInWithEmail,
   checkLockoutExpiry
 } from '../../redux/slices/authSlice';
 import { createLog, LogType } from '../../redux/slices/appSlice';
@@ -121,7 +117,10 @@ const LoginForm = ({ onViewChange }) => {
 
     // Ensure we have a valid license before proceeding
     if (!activeLicenseId) {
-      dispatch(loginFailure('No valid license found. Please contact support.'));
+      dispatch({
+        type: 'auth/loginFailure',
+        payload: 'No valid license found. Please contact support.'
+      });
       dispatch(createLog('Login blocked - no valid license', LogType.WARNING));
       return;
     }
@@ -130,59 +129,33 @@ const LoginForm = ({ onViewChange }) => {
       const remainingTime = new Date(lockoutExpiry) - new Date();
       if (remainingTime > 0) {
         const minutes = Math.ceil(remainingTime / 60000);
-        dispatch(loginFailure(`Account is locked. Please try again in ${minutes} minutes.`));
+        dispatch({
+          type: 'auth/loginFailure',
+          payload: `Account is locked. Please try again in ${minutes} minutes.`
+        });
         dispatch(createLog('Login attempt blocked due to account lockout', LogType.WARNING));
         return;
       }
     }
 
-    dispatch(loginStart());
-
     try {
-      const credentials = Buffer.from(`${formData.email}:${formData.password}`).toString('base64');
-      
-      const response = await axios.post('/api/auth/login', 
-        { org_id: import.meta.env.VITE_PUBLIC_KEY },
-        { 
-          headers: {
-            'Authorization': `Basic ${credentials}`,
-          }
-        }
-      );
-
-      const data = response.data;
-      
-      // Validate response data
-      dispatch(createLog(`Login response received`, LogType.DEBUG));
-      if (!data.user || !data.access_token) {
-        throw new Error('Invalid response format');
-      }
-
-      if (!Array.isArray(data.user.modules)) {
-        throw new Error('Invalid modules data');
-      }
-
-      // Extract token expiry from JWT
-      let tokenExpiry;
-      try {
-        const payload = JSON.parse(Buffer.from(data.access_token.split('.')[1], 'base64').toString());
-        tokenExpiry = new Date(payload.exp * 1000).toISOString();
-      } catch (error) {
-        throw new Error('Invalid token format');
-      }
-
-      dispatch(loginSuccess({
-        user: data.user,
-        accessToken: data.access_token,
-        tokenExpiry,
-        licenseId: data.user.org_id // Using org_id as licenseId since they represent the same thing
+      // Use the signInWithEmail async thunk
+      const resultAction = await dispatch(signInWithEmail({
+        email: formData.email,
+        password: formData.password
       }));
       
-      dispatch(createLog('Login successful', LogType.INFO));
-      onViewChange('functions');
+      // Check if the login was successful
+      if (signInWithEmail.fulfilled.match(resultAction)) {
+        dispatch(createLog('Login successful', LogType.INFO));
+        onViewChange('functions');
+      } else if (signInWithEmail.rejected.match(resultAction)) {
+        // Error is handled by the thunk and stored in state
+        dispatch(createLog(`Login failed: ${resultAction.payload || 'Unknown error'}`, LogType.ERROR));
+      }
     } catch (err) {
       const errorMessage = err.message || 'Unknown login error';
-      dispatch(loginFailure(errorMessage));
+      dispatch({ type: 'auth/loginFailure', payload: errorMessage });
       dispatch(createLog(`Login failed: ${errorMessage}`, LogType.ERROR));
     }
   };
@@ -205,9 +178,9 @@ const LoginForm = ({ onViewChange }) => {
       <Snackbar
         open={!!error}
         autoHideDuration={6000}
-        onClose={() => dispatch(loginFailure(null))}
+        onClose={() => dispatch({ type: 'auth/clearError' })}
       >
-        <Alert severity="error" onClose={() => dispatch(loginFailure(null))}>
+        <Alert severity="error" onClose={() => dispatch({ type: 'auth/clearError' })}>
           {error}
         </Alert>
       </Snackbar>
@@ -287,6 +260,11 @@ const LoginForm = ({ onViewChange }) => {
           {error && (
             <Alert severity="error" sx={{ mt: 2 }}>
               {error}
+              {error && error.includes('Authentication failed') && (
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  We recently migrated to a new authentication system. If you&apos;re having trouble logging in, you may need to sign up again.
+                </Typography>
+              )}
             </Alert>
           )}
 

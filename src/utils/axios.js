@@ -1,12 +1,8 @@
 import axios from 'axios';
 import { store } from '../redux/store';
 import { createLog } from '../redux/slices/appSlice';
-import {
-  refreshStart,
-  refreshSuccess,
-  refreshFailure,
-  logoutSuccess
-} from '../redux/slices/authSlice';
+import { getSession, signOut } from '../redux/slices/authSlice';
+import supabase from './supabase';
 
 const instance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
@@ -48,52 +44,27 @@ export const makeRequestReturnError = async (config) => {
   }
 };
 
-let isRefreshing = false;
-let failedQueue = [];
-
-const processQueue = (error, token = null) => {
-  failedQueue.forEach(prom => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
-  });
-  failedQueue = [];
-};
-
-// Function to check if token needs refresh
-const shouldRefreshToken = () => {
-  const state = store.getState().auth;
-  if (!state.tokenExpiry) return false;
-  
-  // Refresh if token expires in less than 1 minute
-  const expiryTime = new Date(state.tokenExpiry).getTime();
-  const currentTime = Date.now();
-  return (expiryTime - currentTime) < 60000;
-};
-
-// Function to refresh token
-const refreshToken = async () => {
+// Function to get current Supabase session
+const getSupabaseSession = async () => {
   try {
-    store.dispatch(refreshStart());
-    const response = await axios.post(
-      `${import.meta.env.VITE_API_BASE_URL}/auth/refresh`,
-      {},
-      { withCredentials: true }
-    );
-    
-    // New response format has access_token in body
-    const { access_token } = response.data;
-    store.dispatch(refreshSuccess({
-      accessToken: access_token,
-      // Token expiry can be extracted from JWT if needed
-      tokenExpiry: new Date(Date.now() + 15 * 60 * 1000).toISOString() // Default 15min
-    }));
-    return access_token;
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    return data.session;
   } catch (error) {
-    store.dispatch(refreshFailure());
-    store.dispatch(logoutSuccess());
+    store.dispatch(createLog(`Failed to get Supabase session: ${error.message}`, 'error'));
+    return null;
+  }
+};
+
+// Function to refresh Supabase session if needed
+const refreshSupabaseSession = async () => {
+  try {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error) throw error;
+    return data.session;
+  } catch (error) {
+    store.dispatch(createLog(`Failed to refresh Supabase session: ${error.message}`, 'error'));
+    store.dispatch(signOut());
     throw error;
   }
 };
@@ -106,50 +77,19 @@ instance.interceptors.request.use(
     const state = store.getState().auth;
     const originalRequest = config;
 
-    // Skip header modifications for auth endpoints
-    if (config.url?.includes('/auth/')) {
-      // Don't add org ID header for login endpoint
-      if (!config.url.endsWith('/auth/login')) {
-        originalRequest.headers['X-Organization-Id'] = import.meta.env.VITE_PUBLIC_KEY;
-      }
-      // Skip token handling for non-refresh auth endpoints
-      if (!config.url.includes('/auth/refresh')) {
-        return config;
-      }
-    } else {
-      // Add organization ID header for non-auth requests
-      originalRequest.headers['X-Organization-Id'] = import.meta.env.VITE_PUBLIC_KEY;
-    }
+    // Add organization ID header for all requests
+    originalRequest.headers['X-Organization-Id'] = import.meta.env.VITE_PUBLIC_KEY;
 
-    if (state.accessToken) {
-      // Check if token needs refresh
-      if (shouldRefreshToken()) {
-        if (!isRefreshing) {
-          isRefreshing = true;
-          try {
-            const newToken = await refreshToken();
-            isRefreshing = false;
-            processQueue(null, newToken);
-            originalRequest.headers.Authorization = `Bearer ${newToken}`;
-          } catch (error) {
-            isRefreshing = false;
-            processQueue(error, null);
-            throw error;
-          }
-        } else {
-          // Add request to queue if refresh is in progress
-          return new Promise((resolve, reject) => {
-            failedQueue.push({ resolve, reject });
-          }).then(token => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            return originalRequest;
-          }).catch(err => {
-            return Promise.reject(err);
-          });
-        }
-      } else {
-        // Add token to request header
-        originalRequest.headers.Authorization = `Bearer ${state.accessToken}`;
+    // Add Supabase session token if authenticated
+    if (state.isAuthenticated && state.session) {
+      originalRequest.headers.Authorization = `Bearer ${state.session.access_token}`;
+    } else {
+      // Try to get current session
+      const session = await getSupabaseSession();
+      if (session) {
+        // Update Redux state with current session
+        store.dispatch(getSession());
+        originalRequest.headers.Authorization = `Bearer ${session.access_token}`;
       }
     }
 
@@ -188,34 +128,23 @@ Request Headers: ${JSON.stringify(config.headers)}
 Response Data: ${JSON.stringify(error.response?.data)}`, 'error'));
 
     // Handle authentication errors
-    if (status === 403 && config.url?.includes('/auth/login')) {
-      store.dispatch(createLog('Login failed - Invalid credentials or missing organization ID', 'error'));
-      return Promise.reject(new Error('Invalid credentials or missing organization ID'));
-    }
-    
-    if (status === 401 && !config.url?.includes('/auth/refresh')) {
-      if (!isRefreshing) {
-        isRefreshing = true;
-        try {
-          const newToken = await refreshToken();
-          isRefreshing = false;
-          processQueue(null, newToken);
-          config.headers.Authorization = `Bearer ${newToken}`;
+    if (status === 401) {
+      try {
+        // Try to refresh the session
+        const session = await refreshSupabaseSession();
+        if (session) {
+          // Update the request with the new token and retry
+          config.headers.Authorization = `Bearer ${session.access_token}`;
           return instance(config);
-        } catch (refreshError) {
-          isRefreshing = false;
-          processQueue(refreshError, null);
-          return Promise.reject(refreshError);
+        } else {
+          // If refresh fails, sign out
+          store.dispatch(signOut());
+          return Promise.reject(new Error('Authentication failed. Please sign in again.'));
         }
-      } else {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        }).then(token => {
-          config.headers.Authorization = `Bearer ${token}`;
-          return instance(config);
-        }).catch(err => {
-          return Promise.reject(err);
-        });
+      } catch (refreshError) {
+        // If refresh fails, sign out
+        store.dispatch(signOut());
+        return Promise.reject(refreshError);
       }
     }
     

@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
-import axios, { createRequest } from '../../utils/axios';
+import { useDispatch } from 'react-redux';
+import supabase from '../../utils/supabase';
+import { signInWithEmail, signUpWithEmail, signOut } from '../../redux/slices/authSlice';
 
 const TestSecureApiCall = () => {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [currentTest, setCurrentTest] = useState('');
+  const dispatch = useDispatch();
 
   const addResult = (step, data, isError = false) => {
     setResults(prev => [...prev, { 
@@ -17,20 +20,16 @@ const TestSecureApiCall = () => {
 
   const checkHealth = async () => {
     try {
-      setCurrentTest('Testing /health endpoint...');
-      const response = await axios(createRequest({
-        method: 'GET',
-        url: '/health',
-        withCredentials: false
-      }, true));
-      if (response.data.status !== 'healthy') {
-        throw new Error('Health check failed');
-      }
-      addResult('Health Check', response.data);
-      console.log('/health passed')
+      setCurrentTest('Testing Supabase connection...');
+      const { data, error } = await supabase.from('health').select('*').limit(1);
+      
+      if (error) throw error;
+      
+      addResult('Supabase Health Check', { status: 'healthy', data });
+      console.log('Supabase connection test passed');
       return true;
     } catch (error) {
-      addResult('Health Check', error.message, true);
+      addResult('Supabase Health Check', error.message, true);
       return false;
     }
   };
@@ -42,78 +41,39 @@ const TestSecureApiCall = () => {
         firstName: 'Test',
         lastName: 'User',
         email: 'test.user@example.com',
-        displayName: 'Test User',
         password: 'Password123!',
-        _orgID: import.meta.env.VITE_PUBLIC_KEY
+        organizationId: import.meta.env.VITE_PUBLIC_KEY
       };
 
-      // Check if email exists
-      setCurrentTest('Checking if email exists...');
-      const emailResponse = await axios(createRequest({
-        method: 'POST',
-        url: '/api/admin/email/find',
-        data: {
-          email: formData.email,
-          _orgID: formData._orgID
-        },
-        headers: {
-          Authorization: `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-        }
-      }, true));
+      // Check if user exists
+      setCurrentTest('Checking if user exists...');
+      const { data: existingUser } = await supabase
+        .from('Users')
+        .select('*')
+        .eq('email', formData.email)
+        .single();
 
-      let partyID;
-      
-      // 401 means no email found, which is what we want for a new registration
-      if (emailResponse.status === 401 || emailResponse.data.data?.length === 0) {
-        // Create new party
-        setCurrentTest('Creating new party...');
-        const partyResponse = await axios.post('/api/admin/party/', {
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          displayName: formData.displayName,
-          _orgID: formData._orgID,
-          type: 'user'
-        }, {
-          headers: {
-            Authorization: `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-          }
-        });
-        
-        partyID = partyResponse.data.response.data[0].fieldData.__ID;
-        
-        // Create email
-        setCurrentTest('Creating email record...');
-        await axios.post('/api/admin/email/', {
-          email: formData.email,
-          _fkID: partyID,
-          _orgID: formData._orgID
-        }, {
-          headers: {
-            Authorization: `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-          }
-        });
-      } else if (emailResponse.data.data?.length > 0) {
-        partyID = emailResponse.data.data[0].fieldData._fkID;
-      } else {
-        throw new Error('Unexpected response from email check');
+      if (existingUser) {
+        addResult('User Check', 'Test user already exists');
+        return true;
       }
 
-      // Register user
-      setCurrentTest('Registering user in auth system...');
-      await axios.post('/api/auth/register', {
-        userName: formData.email,
+      // Register user with Supabase
+      setCurrentTest('Creating user in Supabase...');
+      const resultAction = await dispatch(signUpWithEmail({
+        email: formData.email,
         password: formData.password,
-        _orgID: formData._orgID,
-        _partyID: partyID,
-        active_status: 'active'
-      }, {
-        headers: {
-          Authorization: `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-        }
-      });
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        organizationId: formData.organizationId
+      }));
 
-      addResult('Registration', 'Test user registered successfully');
-      return true;
+      if (signUpWithEmail.fulfilled.match(resultAction)) {
+        addResult('Registration', 'Test user registered successfully');
+        return true;
+      } else {
+        throw new Error(resultAction.payload || 'Registration failed');
+      }
     } catch (error) {
       addResult('Registration', error.message, true);
       return false;
@@ -122,19 +82,18 @@ const TestSecureApiCall = () => {
 
   const loginTestUser = async () => {
     try {
-      setCurrentTest('Testing login...');
-      const credentials = btoa('test.user@example.com:Password123!');
-      const response = await axios.post('/api/auth/login',
-        { org_id: import.meta.env.VITE_PUBLIC_KEY },
-        { headers: { Authorization: `Basic ${credentials}` } }
-      );
-      // Store the access token in Redux
-      store.dispatch(loginSuccess({
-        user: response.data.user,
-        accessToken: response.data.access_token
+      setCurrentTest('Testing login with Supabase...');
+      const resultAction = await dispatch(signInWithEmail({
+        email: 'test.user@example.com',
+        password: 'Password123!'
       }));
-      addResult('Login', 'Login successful with token');
-      return true;
+      
+      if (signInWithEmail.fulfilled.match(resultAction)) {
+        addResult('Login', 'Login successful with Supabase session');
+        return true;
+      } else {
+        throw new Error(resultAction.payload || 'Login failed');
+      }
     } catch (error) {
       addResult('Login', error.message, true);
       return false;
@@ -143,28 +102,45 @@ const TestSecureApiCall = () => {
 
   const validateAuth = async () => {
     try {
-      setCurrentTest('Validating authentication...');
-      const [validateResponse, healthResponse] = await Promise.all([
-        axios.get('/api/auth/validate'),
-        axios.get('/api/auth/health/token')
-      ]);
+      setCurrentTest('Validating Supabase session...');
+      const { data, error } = await supabase.auth.getSession();
+      
+      if (error) throw error;
+      
+      if (!data.session) {
+        throw new Error('No active session found');
+      }
+      
+      // Test accessing a protected resource
+      const { data: userData, error: userError } = await supabase
+        .from('Users')
+        .select('*')
+        .eq('id', data.session.user.id)
+        .single();
+        
+      if (userError) throw userError;
 
-      addResult('Token Validation', {
-        validate: validateResponse.data,
-        health: healthResponse.data
+      addResult('Session Validation', {
+        session: data.session,
+        user: userData
       });
       return true;
     } catch (error) {
-      addResult('Token Validation', error.message, true);
+      addResult('Session Validation', error.message, true);
       return false;
     }
   };
 
   const logoutTestUser = async () => {
     try {
-      setCurrentTest('Testing logout...');
-      await axios.post('/api/auth/logout');
-      addResult('Logout', 'Logout successful');
+      setCurrentTest('Testing logout with Supabase...');
+      const resultAction = await dispatch(signOut());
+      
+      if (signOut.fulfilled.match(resultAction)) {
+        addResult('Logout', 'Logout successful');
+      } else {
+        throw new Error(resultAction.payload || 'Logout failed');
+      }
     } catch (error) {
       addResult('Logout', error.message, true);
     }
@@ -182,40 +158,28 @@ const TestSecureApiCall = () => {
         return;
       }
 
-      // Try login first with suppressed errors
+      // Try login first
       setCurrentTest('Attempting login...');
-      const loginResponse = await axios(createRequest({
-        method: 'POST',
-        url: '/api/auth/login',
-        data: { org_id: import.meta.env.VITE_PUBLIC_KEY },
-        headers: { 
-          Authorization: `Basic ${btoa('test.user@example.com:Password123!')}` 
-        }
-      }, true));
-
-      // Store token if login was successful
-      if (loginResponse.status === 200) {
-        store.dispatch(loginSuccess({
-          user: loginResponse.data.user,
-          accessToken: loginResponse.data.access_token
-        }));
-        addResult('Login', 'Login successful with token');
-      }
-      // If forbidden, user doesn't exist - create and retry login
-      else if (loginResponse.status === 403) {
-        if (!await registerTestUser()) {
-          if (mounted) setLoading(false);
-          return;
-        }
-        // Retry login with error reporting
-        if (!await loginTestUser()) {
-          if (mounted) setLoading(false);
-          return;
+      const { data, error } = await supabase.auth.getSession();
+      
+      if (error || !data.session) {
+        // No session or error, try login
+        const loginResult = await loginTestUser();
+        if (!loginResult) {
+          // If login fails, try to register
+          if (!await registerTestUser()) {
+            if (mounted) setLoading(false);
+            return;
+          }
+          // Retry login after registration
+          if (!await loginTestUser()) {
+            if (mounted) setLoading(false);
+            return;
+          }
         }
       } else {
-        addResult('Login', `Unexpected response: ${loginResponse.status}`, true);
-        if (mounted) setLoading(false);
-        return;
+        // Already logged in
+        addResult('Login', 'Already logged in with existing session');
       }
 
       if (mounted) {
@@ -231,12 +195,8 @@ const TestSecureApiCall = () => {
     return () => {
       mounted = false;
       // Clean up auth state
-      axios.post('/api/auth/logout')
-        .catch(() => {/* Ignore logout errors during cleanup */})
-        .finally(() => {
-          // Clear refresh token cookie
-          document.cookie = 'refresh_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-        });
+      supabase.auth.signOut()
+        .catch(() => {/* Ignore logout errors during cleanup */});
     };
   }, []);
 

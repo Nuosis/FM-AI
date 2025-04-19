@@ -1,25 +1,8 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { useDispatch } from 'react-redux';
-import { Buffer } from 'buffer';
-import axios, { makeRequestReturnError } from '../../utils/axios';
-
-// Test VITE environment variables
-console.log('Testing VITE env variables:');
-const requiredEnvVars = [
-  'VITE_API_BASE_URL',
-  'VITE_PUBLIC_KEY',
-  'VITE_API_JWT',
-  'VITE_API_KEY'
-];
-
-requiredEnvVars.forEach(varName => {
-  const value = import.meta.env[varName];
-  console.log(`${varName}: ${value ? '✓ loaded' : '✗ missing'}`);
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${varName}`);
-  }
-});
+import { signUpWithEmail } from '../../redux/slices/authSlice';
+import { createLog, LogType } from '../../redux/slices/appSlice';
 import {
   Box,
   TextField,
@@ -30,7 +13,22 @@ import {
   Alert,
   Link
 } from '@mui/material';
-import { createLog, LogType } from '../../redux/slices/appSlice';
+
+// Test VITE environment variables
+console.log('Testing VITE env variables:');
+const requiredEnvVars = [
+  'VITE_SUPABASE_URL',
+  'VITE_SUPABASE_ANON_KEY',
+  'VITE_PUBLIC_KEY'
+];
+
+requiredEnvVars.forEach(varName => {
+  const value = import.meta.env[varName];
+  console.log(`${varName}: ${value ? '✓ loaded' : '✗ missing'}`);
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${varName}`);
+  }
+});
 
 const inputStyles = {
   '& .MuiOutlinedInput-root': {
@@ -52,8 +50,7 @@ const RegistrationForm = ({ onViewChange }) => {
     email: '',
     password: '',
     confirmPassword: '',
-    _orgID: import.meta.env.VITE_PUBLIC_KEY || '',
-    f_active: 1  // Default to active
+    organizationId: import.meta.env.VITE_PUBLIC_KEY || ''
   });
 
   const [loading, setLoading] = useState(false);
@@ -67,81 +64,6 @@ const RegistrationForm = ({ onViewChange }) => {
     };
   }, [dispatch]);
 
-  const checkEmailExists = async (email, orgId) => {
-    dispatch(createLog('Checking if email exists', LogType.DEBUG));
-    
-    const response = await makeRequestReturnError({
-      method: 'POST',
-      url: '/api/admin/email/find',
-      data: {
-        email,
-        _orgID: orgId
-      },
-      headers: {
-        'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-      }
-    });
-
-    // Handle 401/404 as valid "email doesn't exist" cases
-    if (response.status === 401 || response.status === 404) {
-      dispatch(createLog('No existing email found', LogType.DEBUG));
-      return null;
-    }
-
-    // Handle other error cases
-    if (response.isError) {
-      dispatch(createLog(`Email check failed: ${response.error}`, LogType.ERROR));
-      throw new Error('Failed when checking email existence (DEV ERROR)');
-    }
-
-    // Check if email exists in successful response
-    if (response.data?.data && response.data.data.length > 0) {
-      dispatch(createLog('Found existing email record', LogType.DEBUG));
-      return response.data.data[0].fieldData._fkID;
-    }
-
-    dispatch(createLog('No existing email found', LogType.DEBUG));
-    return null;
-  };
-
-  const createParty = async (formData) => {
-    dispatch(createLog('Creating new party record', LogType.DEBUG));
-    const displayName = `${formData.firstName} ${formData.lastName}`;
-    const partyResponse = await axios.post('/api/admin/party/',
-      {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        displayName,
-        _orgID: formData._orgID,
-        f_company: "0",
-        type: "user"
-      },
-      {
-        headers: {
-          'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-        }
-      }
-    );
-
-    const partyID = partyResponse.data.response.data[0].fieldData.__ID;
-
-    // Create email for new party
-    dispatch(createLog('Creating new email record', LogType.DEBUG));
-    await axios.post('/api/admin/email/',
-      {
-        email: formData.email,
-        _fkID: partyID,
-        _orgID: formData._orgID
-      },
-      {
-        headers: {
-          'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-        }
-      }
-    );
-
-    return partyID;
-  };
 
   const validatePassword = (password) => {
     const errors = [];
@@ -232,86 +154,36 @@ const RegistrationForm = ({ onViewChange }) => {
     setError(null);
 
     try {
-      // Check if email exists
-      let partyID = await checkEmailExists(formData.email, formData._orgID);
+      // Register user with Supabase
+      dispatch(createLog('Creating user account with Supabase', LogType.DEBUG));
       
-      // If email doesn't exist, create new party
-      if (!partyID) {
-        partyID = await createParty(formData);
+      const resultAction = await dispatch(signUpWithEmail({
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        organizationId: formData.organizationId
+      }));
+      
+      if (signUpWithEmail.fulfilled.match(resultAction)) {
+        dispatch(createLog('Registration successful', LogType.INFO));
+        
+        // Reset form and redirect to login
+        setFormData({
+          firstName: '',
+          lastName: '',
+          email: '',
+          password: '',
+          confirmPassword: '',
+          organizationId: import.meta.env.VITE_PUBLIC_KEY || ''
+        });
+        
+        dispatch(createLog('Redirecting to login', LogType.DEBUG));
+        onViewChange('login');
+      } else if (signUpWithEmail.rejected.match(resultAction)) {
+        setError(resultAction.payload || 'Registration failed');
+        dispatch(createLog(`Registration failed: ${resultAction.payload || 'Unknown error'}`, LogType.ERROR));
       }
-
-      // Register user
-      dispatch(createLog('Creating user account', LogType.DEBUG));
-      await axios.post('/api/auth/register',
-        {
-          userName: formData.email,
-          password: formData.password,
-          _orgID: formData._orgID,
-          _partyID: partyID,
-          active_status: formData.f_active ? 'active' : 'inactive',
-          role: 'user'
-        },
-        {
-          headers: {
-            'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-          }
-        }
-      );
-
-      // Verify the new user can login
-      dispatch(createLog('Verifying user login', LogType.DEBUG));
-      const username = formData.email;
-      const credentials = Buffer.from(`${username}:${formData.password}`).toString('base64');
-      const loginResponse = await axios.post('/api/auth/login',
-        { org_id: formData._orgID },
-        {
-          headers: {
-            'Authorization': `Basic ${credentials}`
-          }
-        }
-      );
-
-      const loginData = loginResponse.data;
-
-      // Validate login response
-      if (!loginData.user || !loginData.access_token) {
-        throw new Error('Invalid login response format');
-      }
-
-      // Validate user object
-      if (!loginData.user.id || !loginData.user.org_id) {
-        throw new Error('Invalid user data in login response');
-      }
-
-      // Validate modules array
-      if (!Array.isArray(loginData.user.modules)) {
-        throw new Error('Invalid modules data');
-      }
-
-      // Extract token expiry from JWT
-      try {
-        const payload = JSON.parse(Buffer.from(loginData.access_token.split('.')[1], 'base64').toString());
-        if (!payload.exp) {
-          throw new Error('Token missing expiry');
-        }
-      } catch (error) {
-        throw new Error('Invalid token format');
-      }
-
-      dispatch(createLog('Registration and initial login successful', LogType.INFO));
-
-      // Reset form and redirect to login
-      setFormData({
-        firstName: '',
-        lastName: '',
-        email: '',
-        password: '',
-        confirmPassword: '',
-        _orgID: import.meta.env.VITE_PUBLIC_KEY || ''
-      });
-
-      dispatch(createLog('Redirecting to login', LogType.DEBUG));
-      onViewChange('login');
     } catch (err) {
       setError(err.message);
       dispatch(createLog(`Registration failed: ${err.message}`, LogType.ERROR));
