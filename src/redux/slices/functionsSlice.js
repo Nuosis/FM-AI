@@ -1,11 +1,50 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axios from '../../utils/axios';
+import supabase from '../../utils/supabase';
+
+/**
+ * Supabase realtime subscription for aifunctions table
+ */
+export const subscribeToAIFunctions = () => (dispatch) => {
+  const channel = supabase.channel('aifunctions-changes')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'aifunctions' },
+      (payload) => {
+        switch (payload.eventType) {
+          case 'INSERT':
+            dispatch({ type: 'functions/addFunction', payload: payload.new });
+            break;
+          case 'UPDATE':
+            dispatch({ type: 'functions/updateFunction', payload: payload.new });
+            break;
+          case 'DELETE':
+            dispatch({ type: 'functions/deleteFunction', payload: payload.old.id });
+            break;
+          default:
+            break;
+        }
+      }
+    )
+    .subscribe();
+
+  // Return unsubscribe function
+  return () => {
+    supabase.removeChannel(channel);
+  };
+};
+
 
 export const deleteAIFunction = createAsyncThunk(
   'functions/deleteAIFunction',
   async (recordId, { rejectWithValue, dispatch }) => {
     try {
-      await axios.delete(`/api/admin/aifunctions/${recordId}`);
+      const { error } = await supabase
+        .from('aifunctions')
+        .delete()
+        .eq('id', recordId);
+
+      if (error) throw error;
+
       dispatch(deleteFunction(recordId));
       return recordId;
     } catch (error) {
@@ -24,9 +63,16 @@ export const fetchFunctions = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       console.log('Fetching functions...');
-      const response = await axios.get('/api/admin/aifunctions/');
-      console.log('Functions API response:', response.data);
-      return response.data;
+      const { data, error } = await supabase
+        .from('aifunctions')
+        .select('*');
+
+      if (error) throw error;
+
+      console.log('Functions API response:', data);
+
+
+      return data;
     } catch (error) {
       console.error('Functions API error:', {
         status: error.response?.status,

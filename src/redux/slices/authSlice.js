@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import supabase from '../../utils/supabase';
+import supabase from '../../utils/supabase'; // Supabase client for all auth operations
 
 const initialState = {
   isAuthenticated: false,
@@ -20,22 +20,23 @@ export const signInWithEmail = createAsyncThunk(
   'auth/signInWithEmail',
   async ({ email, password }, { rejectWithValue }) => {
     try {
+      // Sign in with Supabase Auth
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
 
       if (error) throw error;
-      
-      // Get user profile from Supabase
+
+      // Fetch user profile from Supabase Users table
       const { data: profileData, error: profileError } = await supabase
         .from('Users')
         .select('*')
         .eq('id', data.user.id)
         .single();
-      
+
       if (profileError) throw profileError;
-      
+
       return {
         session: data.session,
         user: {
@@ -55,6 +56,7 @@ export const signUpWithEmail = createAsyncThunk(
   async ({ email, password, firstName, lastName, organizationId }, { rejectWithValue }) => {
     try {
       // Create the user in Supabase Auth
+      // Sign up with Supabase Auth
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -67,8 +69,8 @@ export const signUpWithEmail = createAsyncThunk(
       });
 
       if (error) throw error;
-      
-      // Create user profile in the Users table
+
+      // Insert user profile into Users table
       const { error: profileError } = await supabase
         .from('Users')
         .insert([
@@ -81,9 +83,9 @@ export const signUpWithEmail = createAsyncThunk(
             active_status: 'active'
           }
         ]);
-      
+
       if (profileError) throw profileError;
-      
+
       return {
         session: data.session,
         user: {
@@ -116,26 +118,129 @@ export const getSession = createAsyncThunk(
   'auth/getSession',
   async (_, { rejectWithValue }) => {
     try {
+      // Get current session from Supabase
       const { data, error } = await supabase.auth.getSession();
-      
+
       if (error) throw error;
       if (!data.session) return null;
-      
-      // Get user profile
+
+      // Fetch user profile from Users table
       const { data: profileData, error: profileError } = await supabase
         .from('Users')
         .select('*')
         .eq('id', data.session.user.id)
         .single();
-      
+
       if (profileError) throw profileError;
-      
+
       return {
         session: data.session,
         user: {
           ...data.session.user,
           ...profileData,
           org_id: profileData.organization_id
+        }
+      };
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const updatePassword = createAsyncThunk(
+  'auth/updatePassword',
+  async ({ currentPassword, newPassword }, { rejectWithValue }) => {
+    try {
+      // Check if we should mock auth in development
+      const isDevelopment = import.meta.env.VITE_ENVIRONMENT === 'Development';
+      const shouldMockAuth = isDevelopment &&
+                            (import.meta.env.VITE_AD_AUTH_MOCK === 'true' ||
+                             import.meta.env.VITE_AD_AUTH_MOCK === true);
+      
+      if (shouldMockAuth) {
+        // Mock successful password update
+        return { success: true, message: 'Password updated successfully (mocked)' };
+      }
+      
+      // Real implementation using Supabase
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+        currentPassword: currentPassword
+      });
+      
+      if (error) throw error;
+      
+      return { success: true, message: 'Password updated successfully' };
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const updateProfile = createAsyncThunk(
+  'auth/updateProfile',
+  async (profileData, { rejectWithValue, getState }) => {
+    try {
+      // Check if we should mock auth in development
+      const isDevelopment = import.meta.env.VITE_ENVIRONMENT === 'Development';
+      const shouldMockAuth = isDevelopment &&
+                            (import.meta.env.VITE_AUTH_MOCK === 'true' ||
+                             import.meta.env.VITE_AUTH_MOCK === true);
+      
+      if (shouldMockAuth) {
+        // Mock successful profile update
+        return {
+          success: true,
+          message: 'Profile updated successfully (mocked)',
+          user: {
+            ...getState().auth.user,
+            ...profileData
+          }
+        };
+      }
+      
+      // Get current user ID
+      const userId = getState().auth.user?.id;
+      if (!userId) throw new Error('User not authenticated');
+      
+      // Update user metadata in Supabase Auth
+      const { error: authError } = await supabase.auth.updateUser({
+        data: {
+          first_name: profileData.first_name,
+          last_name: profileData.last_name
+        }
+      });
+      
+      if (authError) throw authError;
+      
+      // Update user profile in Users table
+      const { error: profileError } = await supabase
+        .from('Users')
+        .update({
+          first_name: profileData.first_name,
+          last_name: profileData.last_name,
+          phone: profileData.phone,
+          location: profileData.location
+        })
+        .eq('id', userId);
+      
+      if (profileError) throw profileError;
+      
+      // Fetch updated user profile
+      const { data: updatedProfile, error: fetchError } = await supabase
+        .from('Users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (fetchError) throw fetchError;
+      
+      return {
+        success: true,
+        message: 'Profile updated successfully',
+        user: {
+          ...getState().auth.user,
+          ...updatedProfile
         }
       };
     } catch (error) {
@@ -279,6 +384,35 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
         state.user = null;
         state.session = null;
+      })
+      
+      // Update Password
+      .addCase(updatePassword.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(updatePassword.fulfilled, (state) => {
+        state.loading = false;
+        state.error = null;
+      })
+      .addCase(updatePassword.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || 'Failed to update password';
+      })
+      
+      // Update Profile
+      .addCase(updateProfile.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(updateProfile.fulfilled, (state, action) => {
+        state.loading = false;
+        state.error = null;
+        state.user = action.payload.user;
+      })
+      .addCase(updateProfile.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || 'Failed to update profile';
       });
   }
 });

@@ -7,12 +7,14 @@ import {
   Handyman,
   SmartToy,
   FileDownload,
+  Home,
   //QuestionAnswer
 } from '@mui/icons-material';
 import LLMChat from '../Chat/LLMChat';
-import SettingsForm from '../SettingsForm';
+import { SettingsForm } from '../Settings';
 import Functions from '../Functions';
 import DemoFiles from '../DemoFiles';
+import Welcome from '../Welcome/Welcome';
 import { useSelector } from 'react-redux';
 import LogViewer from '../LogViewer/LogViewer';
 import { selectShowLogViewer } from '../../redux/slices/appSlice';
@@ -20,6 +22,7 @@ import Sidebar from '../Sidebar/Sidebar';
 import Bottombar from '../Sidebar/Bottombar';
 import { menuItems } from '../../constants/menuItems';
 import { TestSecureApiCall } from '../Auth';
+import { Tools } from '../Tools';
 
 const DRAWER_WIDTH = 240;
 
@@ -53,7 +56,9 @@ const componentMap = {
   SettingsForm: SettingsForm,
   Functions: Functions,
   DemoFiles: DemoFiles,
-  TestSecureApiCall: TestSecureApiCall
+  TestSecureApiCall: TestSecureApiCall,
+  Welcome: Welcome,
+  Tools: Tools
 };
 
 const Layout = ({ children, onViewChange, currentView }) => {
@@ -63,6 +68,7 @@ const Layout = ({ children, onViewChange, currentView }) => {
   const [openItem, setOpenItem] = useState(null);
   const [currentComponent, setCurrentComponent] = useState('Functions');
   const showLogViewer = useSelector(selectShowLogViewer);
+  const { isAuthenticated } = useSelector((state) => state.auth);
 
   const handleViewChange = (view) => {
     onViewChange(view);
@@ -72,6 +78,10 @@ const Layout = ({ children, onViewChange, currentView }) => {
     }
     if (view === 'test') {
       setCurrentComponent('TestSecureApiCall');
+      return;
+    }
+    if (view === 'login' || view === 'register') {
+      // These views are handled directly in App.jsx
       return;
     }
     const menuItem = menuItems.find(item => item.view === view);
@@ -93,6 +103,7 @@ const Layout = ({ children, onViewChange, currentView }) => {
               ...item,
               icon: (() => {
                 switch (item.iconType) {
+                  case 'Home': return <Home />;
                   case 'Code': return <Code />;
                   case 'ManageSearch': return <ManageSearch />;
                   case 'Handyman': return <Handyman />;
@@ -107,15 +118,17 @@ const Layout = ({ children, onViewChange, currentView }) => {
             setOpenItem={setOpenItem}
             onViewChange={handleViewChange}
             currentView={currentView}
+            isAuthenticated={isAuthenticated}
           />
         </BottomBarContainer>
       ) : (
-        <Sidebar 
-          width={DRAWER_WIDTH} 
+        <Sidebar
+          width={DRAWER_WIDTH}
           onViewChange={handleViewChange}
           currentView={currentView}
           openItem={openItem}
           setOpenItem={setOpenItem}
+          isAuthenticated={isAuthenticated}
         />
       )}
       <Box sx={{ 
@@ -129,14 +142,18 @@ const Layout = ({ children, onViewChange, currentView }) => {
         paddingBottom: showLogViewer ? (isMobile ? '300px' : '400px') : 0
       }}>
         <Main id="main" isMobile={isMobile}>
-          {currentView === 'login' || currentView === 'register' ? children : (
+          {currentView === 'login' || currentView === 'register' ? (
+            children
+          ) : !isAuthenticated && currentView !== 'tools' ? (
+            <Welcome onSignInClick={() => handleViewChange('login')} />
+          ) : (
             currentComponent ? (
               componentMap[currentComponent] ? (
                 React.createElement(componentMap[currentComponent])
               ) : (
-                <Box sx={{ 
-                  display: 'flex', 
-                  justifyContent: 'center', 
+                <Box sx={{
+                  display: 'flex',
+                  justifyContent: 'center',
                   alignItems: 'center',
                   height: '100%',
                   flexDirection: 'column',
@@ -175,7 +192,8 @@ const Layout = ({ children, onViewChange, currentView }) => {
 Layout.propTypes = {
   children: PropTypes.node.isRequired,
   onViewChange: PropTypes.func.isRequired,
-  currentView: PropTypes.string.isRequired
+  currentView: PropTypes.string.isRequired,
+  isAuthenticated: PropTypes.bool
 };
 
 export default Layout;

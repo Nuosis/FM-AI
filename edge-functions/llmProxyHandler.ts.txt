@@ -1,0 +1,253 @@
+// LLMProxyHandler: Unified proxy for multiple LLM providers (OpenAI, Anthropic, Gemini, LM Studio, Ollama)
+// Supports: chat completions, embeddings, model listing
+// Security: authentication, input validation, rate limiting
+
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { corsHeaders } from "./cors.ts";
+
+// Provider endpoints and API key environment variables
+const PROVIDER_CONFIG = {
+  openai: {
+    endpoint: "https://api.openai.com/v1",
+    key: Deno.env.get("OPENAI_API_KEY"),
+  },
+  anthropic: {
+    endpoint: "https://api.anthropic.com/v1",
+    key: Deno.env.get("ANTHROPIC_API_KEY"),
+  },
+  gemini: {
+    endpoint: "https://generativelanguage.googleapis.com/v1beta",
+    key: Deno.env.get("GEMINI_API_KEY"),
+  },
+  lmstudio: {
+    endpoint: "http://localhost:1234/v1",
+    key: null, // Local, no key
+  },
+  ollama: {
+    endpoint: "http://localhost:11434/api",
+    key: null, // Local, no key
+  },
+};
+
+const RATE_LIMIT = 60; // requests per minute per user (example)
+const rateLimitMap = new Map<string, { count: number; last: number }>();
+
+function rateLimit(ip: string): boolean {
+  const now = Date.now();
+  const windowMs = 60 * 1000;
+  const entry = rateLimitMap.get(ip) || { count: 0, last: now };
+  if (now - entry.last > windowMs) {
+    entry.count = 1;
+    entry.last = now;
+  } else {
+    entry.count += 1;
+  }
+  rateLimitMap.set(ip, entry);
+  return entry.count <= RATE_LIMIT;
+}
+
+function validateInput(provider: string, body: any): string | null {
+  if (!provider || !(provider in PROVIDER_CONFIG)) return "Invalid provider";
+  if (!body) return "Missing request body";
+  // Basic validation for supported endpoints
+  if (!["chat", "embeddings", "models"].includes(body.type)) return "Invalid type";
+  if (body.type === "chat" && !body.messages) return "Missing messages for chat";
+  if (body.type === "embeddings" && !body.input) return "Missing input for embeddings";
+  return null;
+}
+
+async function proxyRequest(provider: string, type: string, body: any, headers: Headers) {
+  const config = PROVIDER_CONFIG[provider];
+  let url = config.endpoint;
+  let method = "POST";
+  let reqBody = {};
+  let reqHeaders: Record<string, string> = {};
+
+  switch (provider) {
+    case "openai":
+      if (type === "chat") {
+        url += "/v1/responses";
+        reqBody = {
+          model: body.model,
+          messages: body.messages,
+          ...body.options,
+        };
+      } else if (type === "embeddings") {
+        url += "/embeddings";
+        reqBody = {
+          model: body.model,
+          input: body.input,
+          ...body.options,
+        };
+      } else if (type === "models") {
+        url += "/models";
+        method = "GET";
+      }
+      reqHeaders = {
+        "Authorization": `Bearer ${config.key}`,
+        "Content-Type": "application/json",
+      };
+      break;
+    case "anthropic":
+      if (type === "chat") {
+        url += "/messages";
+        reqBody = {
+          model: body.model,
+          messages: body.messages,
+          ...body.options,
+        };
+      } else if (type === "embeddings") {
+        url += "/embeddings";
+        reqBody = {
+          model: body.model,
+          input: body.input,
+          ...body.options,
+        };
+      } else if (type === "models") {
+        url += "/models";
+        method = "GET";
+      }
+      reqHeaders = {
+        "x-api-key": config.key,
+        "Content-Type": "application/json",
+      };
+      break;
+    case "gemini":
+      if (type === "chat") {
+        url += `/models/${body.model}:generateContent?key=${config.key}`;
+        reqBody = {
+          contents: [{ parts: [{ text: body.prompt }] }],
+          ...body.options,
+        };
+      } else if (type === "embeddings") {
+        url += `/models/${body.model}:embedContent?key=${config.key}`;
+        reqBody = {
+          content: { parts: [{ text: body.input }] },
+          ...body.options,
+        };
+      } else if (type === "models") {
+        url += `/models?key=${config.key}`;
+        method = "GET";
+      }
+      reqHeaders = {
+        "Content-Type": "application/json",
+      };
+      break;
+    case "lmstudio":
+      if (type === "chat") {
+        url += "/chat/completions";
+        reqBody = {
+          model: body.model,
+          messages: body.messages,
+          ...body.options,
+        };
+      } else if (type === "embeddings") {
+        url += "/embeddings";
+        reqBody = {
+          model: body.model,
+          input: body.input,
+          ...body.options,
+        };
+      } else if (type === "models") {
+        url += "/models";
+        method = "GET";
+      }
+      reqHeaders = {
+        "Content-Type": "application/json",
+      };
+      break;
+    case "ollama":
+      if (type === "chat") {
+        url += "/chat";
+        reqBody = {
+          model: body.model,
+          messages: body.messages,
+          ...body.options,
+        };
+      } else if (type === "embeddings") {
+        url += "/embeddings";
+        reqBody = {
+          model: body.model,
+          input: body.input,
+          ...body.options,
+        };
+      } else if (type === "models") {
+        url += "/tags";
+        method = "GET";
+      }
+      reqHeaders = {
+        "Content-Type": "application/json",
+      };
+      break;
+    default:
+      throw new Error("Unsupported provider");
+  }
+
+  const fetchOptions: RequestInit = {
+    method,
+    headers: reqHeaders,
+  };
+  if (method === "POST") fetchOptions.body = JSON.stringify(reqBody);
+
+  const resp = await fetch(url, fetchOptions);
+  const data = await resp.json();
+  return { status: resp.status, data };
+}
+
+serve(async (req) => {
+  // CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  // Basic authentication (e.g., via Authorization header or Supabase JWT)
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: corsHeaders,
+    });
+  }
+  // Optionally: validate JWT here
+
+  // Rate limiting by IP
+  const ip = req.headers.get("x-forwarded-for") || "unknown";
+  if (!rateLimit(ip)) {
+    return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+      status: 429,
+      headers: corsHeaders,
+    });
+  }
+
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+      status: 400,
+      headers: corsHeaders,
+    });
+  }
+
+  const { provider, ...rest } = body;
+  const validationError = validateInput(provider, rest);
+  if (validationError) {
+    return new Response(JSON.stringify({ error: validationError }), {
+      status: 400,
+      headers: corsHeaders,
+    });
+  }
+
+  try {
+    const { status, data } = await proxyRequest(provider, rest.type, rest, req.headers);
+    return new Response(JSON.stringify(data), {
+      status,
+      headers: corsHeaders,
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: corsHeaders,
+    });
+  }
+});

@@ -1,0 +1,220 @@
+// License & Module Management Edge Function
+// - License validation and enforcement
+// - Module feature access control and usage tracking
+// - Rate limiting enforcement
+// - Supabase integration
+// - Security, input validation, error handling
+
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { corsHeaders } from "./cors.ts";
+
+// Supabase Edge client
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.42.5";
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+type ModuleUsage = {
+  module: string;
+  usageType: string; // e.g., "tokens", "actions"
+  amount: number;
+  timestamp: string;
+};
+
+type License = {
+  id: string;
+  org_id: string;
+  active: boolean;
+  dateStart: string;
+  licenseTerm: number;
+  licenseTermUnit: string; // e.g., "days", "months"
+  dateEnd?: string;
+};
+
+type Module = {
+  id: string;
+  moduleName: string;
+  enabled: boolean;
+  rateLimit?: number; // e.g., tokens per day
+  rateWindow?: string; // e.g., "day", "month"
+};
+
+function errorResponse(message: string, status = 400) {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function parseDate(dateStr: string): Date {
+  // Handles ISO or YYYY-MM-DD
+  return new Date(dateStr);
+}
+
+function addTerm(start: Date, term: number, unit: string): Date {
+  const end = new Date(start);
+  switch (unit) {
+    case "days":
+      end.setDate(end.getDate() + term);
+      break;
+    case "months":
+      end.setMonth(end.getMonth() + term);
+      break;
+    case "years":
+      end.setFullYear(end.getFullYear() + term);
+      break;
+    default:
+      throw new Error("Invalid license term unit");
+  }
+  return end;
+}
+
+async function validateLicense(licenseId: string): Promise<License | null> {
+  const { data, error } = await supabase
+    .from("licenses")
+    .select("*")
+    .eq("id", licenseId)
+    .single();
+  if (error || !data) return null;
+  if (!data.f_active) return null;
+  const start = parseDate(data.dateStart);
+  const end = data.dateEnd
+    ? parseDate(data.dateEnd)
+    : addTerm(start, data.licenseTerm, data.licenseTermUnit);
+  if (new Date() < start || new Date() > end) return null;
+  return {
+    id: data.id,
+    org_id: data._orgID,
+    active: data.f_active,
+    dateStart: data.dateStart,
+    licenseTerm: data.licenseTerm,
+    licenseTermUnit: data.licenseTermUnit,
+    dateEnd: data.dateEnd,
+  };
+}
+
+async function getEnabledModules(licenseId: string): Promise<Module[]> {
+  // Join modules with module_selected (enabled for license)
+  const { data, error } = await supabase
+    .from("module_selected")
+    .select("*, modules(*)")
+    .eq("_licenseID", licenseId)
+    .eq("f_active", 1);
+  if (error || !data) return [];
+  return data
+    .filter((ms: any) => ms.modules && ms.modules.f_active)
+    .map((ms: any) => ({
+      id: ms.modules.id,
+      moduleName: ms.modules.moduleName,
+      enabled: ms.f_active,
+      rateLimit: ms.modules.rateLimit,
+      rateWindow: ms.modules.rateWindow,
+    }));
+}
+
+async function getModuleUsage(
+  licenseId: string,
+  moduleName: string,
+  usageType: string,
+  window: string
+): Promise<number> {
+  // Calculate usage in the current window (e.g., day, month)
+  const now = new Date();
+  let windowStart: Date;
+  if (window === "day") {
+    windowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  } else if (window === "month") {
+    windowStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  } else {
+    windowStart = new Date(0);
+  }
+  const { data, error } = await supabase
+    .from("usage")
+    .select("amount")
+    .eq("_licenseID", licenseId)
+    .eq("module", moduleName)
+    .eq("usageType", usageType)
+    .gte("timestamp", windowStart.toISOString());
+  if (error || !data) return 0;
+  return data.reduce((sum: number, row: any) => sum + (row.amount || 0), 0);
+}
+
+async function recordUsage(
+  licenseId: string,
+  moduleName: string,
+  usageType: string,
+  amount: number
+) {
+  await supabase.from("usage").insert([
+    {
+      _licenseID: licenseId,
+      module: moduleName,
+      usageType,
+      amount,
+      timestamp: new Date().toISOString(),
+    },
+  ]);
+}
+
+serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { licenseId, module, usageType, amount, action } = await req.json();
+
+    // Input validation
+    if (!licenseId || !module || !usageType || typeof amount !== "number") {
+      return errorResponse(
+        "Missing required fields: licenseId, module, usageType, amount"
+      );
+    }
+
+    // 1. License validation
+    const license = await validateLicense(licenseId);
+    if (!license) return errorResponse("License is invalid or expired", 403);
+
+    // 2. Module access check
+    const enabledModules = await getEnabledModules(licenseId);
+    const mod = enabledModules.find((m) => m.moduleName === module);
+    if (!mod) return errorResponse("Module not enabled for this license", 403);
+
+    // 3. Rate limiting
+    if (mod.rateLimit && mod.rateWindow) {
+      const usage = await getModuleUsage(
+        licenseId,
+        module,
+        usageType,
+        mod.rateWindow
+      );
+      if (usage + amount > mod.rateLimit) {
+        return errorResponse(
+          `Rate limit exceeded for module '${module}' (${usage + amount}/${mod.rateLimit} ${usageType} this ${mod.rateWindow})`,
+          429
+        );
+      }
+    }
+
+    // 4. Record usage
+    await recordUsage(licenseId, module, usageType, amount);
+
+    // 5. Success
+    return new Response(
+      JSON.stringify({
+        success: true,
+        license: licenseId,
+        module,
+        usageType,
+        amount,
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  } catch (err) {
+    return errorResponse("Invalid request or server error", 500);
+  }
+});

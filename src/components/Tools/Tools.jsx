@@ -1,14 +1,19 @@
-// eslint-disable-next-line no-unused-vars
-import React, { useState } from 'react';
-import { Box, Typography, IconButton, Tooltip } from '@mui/material';
+import { useState } from 'react';
+import { Box, Typography, IconButton, Tooltip, Tabs, Tab } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
-import FunctionCreator from './FunctionCreator';
-import FunctionList from './FunctionList';
 import { useSelector } from 'react-redux';
+import ToolList from './ToolList';
+import ToolCreator from './ToolCreator';
+import ToolChat from './ToolChat';
 
-const Functions = () => {
+const Tools = () => {
+  const [activeTab, setActiveTab] = useState(0);
   const [creating, setCreating] = useState(false);
   const isAuthenticated = useSelector(state => state.auth.isAuthenticated);
+
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+  };
 
   return (
     <Box sx={{ 
@@ -22,12 +27,12 @@ const Functions = () => {
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center',
-        mb: 4
+        mb: 2
       }}>
         <Typography variant="h4">
-          AI Function Generator
+          AI Tool System
         </Typography>
-        {!creating && (
+        {!creating && activeTab === 0 && (
           isAuthenticated ? (
             <IconButton
               onClick={() => setCreating(true)}
@@ -41,7 +46,7 @@ const Functions = () => {
               <AddIcon />
             </IconButton>
           ) : (
-            <Tooltip title="Login to create functions">
+            <Tooltip title="Login to create tools">
               <span>
                 <IconButton
                   disabled
@@ -59,15 +64,39 @@ const Functions = () => {
         )}
       </Box>
       
+      <Tabs
+        value={activeTab}
+        onChange={handleTabChange}
+        sx={{
+          mb: 2,
+          '& .MuiTab-root': {
+            '&:focus': {
+              outline: 'none'
+            },
+            '&.Mui-focusVisible': {
+              outline: 'none'
+            }
+          }
+        }}
+      >
+        <Tab label="Tools" />
+        {isAuthenticated && <Tab label="Tool Chat" />}
+      </Tabs>
+      
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, overflow: 'auto' }}>
-        {creating ? (
-          <FunctionCreator onCancel={() => setCreating(false)} />
-        ) : (
-          <FunctionList />
+        {activeTab === 0 && (
+          creating ? (
+            <ToolCreator onCancel={() => setCreating(false)} />
+          ) : (
+            <ToolList />
+          )
+        )}
+        {isAuthenticated && activeTab === 1 && (
+          <ToolChat />
         )}
       </Box>
     </Box>
   );
 };
 
-export default Functions;
+export default Tools;

@@ -238,7 +238,16 @@ const BottomBar = ({
     <BottomBarContainer>
       <ScrollContainer ref={scrollContainerRef}>
         <MobileIconList ref={iconListRef}>
-          {isAuthenticated && menuItems.filter(item => item.enabled).map(({ name, icon, path, view }) => (
+          {menuItems
+            .filter(item => {
+              // When not authenticated, only show Welcome and Tools
+              if (!isAuthenticated) {
+                return item.enabled && (item.path === 'welcome' || item.path === 'tools');
+              }
+              // When authenticated, show all enabled items
+              return item.enabled;
+            })
+            .map(({ name, icon, path, view }) => (
             <IconButton
               key={name}
               className="icon-button"

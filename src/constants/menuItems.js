@@ -1,5 +1,13 @@
 export const menuItems = [
   {
+    name: 'Welcome',
+    path: 'welcome',
+    view: 'welcome',
+    iconType: 'Home',
+    enabled: true,
+    component: "Welcome"
+  },
+  {
     name: 'Chat',
     path: 'chat',
     view: 'chat',
@@ -12,7 +20,7 @@ export const menuItems = [
     path: 'functions',
     view: 'functions',
     iconType: 'Code',
-    enabled: true,
+    enabled: false,
     component: "Functions"
   },
   {
@@ -36,7 +44,7 @@ export const menuItems = [
     path: 'tools',
     view: 'tools',
     iconType: 'Handyman',
-    enabled: false,
+    enabled: true,
     component: "Tools"
   },
   {

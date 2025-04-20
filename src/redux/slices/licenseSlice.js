@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { createLog, LogType } from './appSlice';
-import axios from '../../utils/axios';
+import supabase from '../../utils/supabase';
 
 export const fetchOrgLicenses = createAsyncThunk(
   'license/fetchOrgLicenses',
@@ -12,26 +12,24 @@ export const fetchOrgLicenses = createAsyncThunk(
     }
     dispatch(createLog(`Fetching organization licenses ${orgId}`, LogType.DEBUG));
     
-    const response = await axios.get(`/api/admin/licenses/?org_id=${orgId}`, {
-      headers: {
-        'Authorization': `ApiKey ${import.meta.env.VITE_API_JWT}:${import.meta.env.VITE_API_KEY}`
-      }
-    });
-    
-    const data = response.data;
-    
+    const { data, error } = await supabase
+      .from('licenses')
+      .select('*')
+      .eq('organization_id', orgId);
+
+    if (error) throw error;
+
     dispatch(createLog(`Licenses data: ${JSON.stringify(data)}`, LogType.DEBUG));
-    
+
     // Filter for active license matching org_id and f_active=1
-    const activeLicense = data.find(license => 
-      license.fieldData._orgID === orgId && 
-      license.fieldData.f_active === 1
+    const activeLicense = data.find(license =>
+      license.organization_id === orgId &&
+      license.f_active === 1
     );
-    //console.log({activeLicense})
 
     return {
       licenses: data,
-      activeLicenseId: activeLicense?.fieldData.__ID
+      activeLicenseId: activeLicense?.id
     };
   }
 );

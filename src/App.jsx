@@ -3,11 +3,13 @@ import { useDispatch, useSelector } from 'react-redux';
 import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material';
 import Layout from './components/Layout/Layout';
 import { LoginForm, RegistrationForm, TestSecureApiCall } from './components/Auth';
-import SettingsForm from './components/SettingsForm';
+import { SettingsForm } from './components/Settings';
 import Functions from './components/Functions';
+import { Tools } from './components/Tools';
 import { createLog, LogType, /*toggleLogViewer*/ } from './redux/slices/appSlice';
 import { fetchOrgLicenses } from './redux/slices/licenseSlice';
 import UnderRepair from './components/UnderRepair';
+import Welcome from './components/Welcome/Welcome';
 
 const theme = createTheme({
   palette: {
@@ -57,10 +59,9 @@ const theme = createTheme({
 function App() {
   const isRepair = import.meta.env.VITE_FLAG_REPAIR === 'true';
   const dispatch = useDispatch();
-  const [currentView, setCurrentView] = useState('login');
   const auth = useSelector(state => state.auth);
   const { isAuthenticated } = auth;
-
+  const [currentView, setCurrentView] = useState(() => (isAuthenticated ? 'functions' : 'welcome'));
   useEffect(() => {
     // Log auth state changes
     dispatch(createLog(`Current auth state: ${JSON.stringify(auth, null, 2)}`, LogType.DEBUG));
@@ -103,9 +104,10 @@ function App() {
       <CssBaseline />
       <Box sx={{ minHeight: '100vh', display: 'flex' }}>
         { isRepair ? <UnderRepair /> : 
-          <Layout 
+          <Layout
             currentView={currentView}
             onViewChange={handleViewChange}
+            isAuthenticated={isAuthenticated}
           >
             <Box sx={{ 
               display: 'flex', 
@@ -120,8 +122,10 @@ function App() {
             }}>
               {currentView === 'test' ? (
                 <TestSecureApiCall />
-              ) : !isAuthenticated ? (
-                <Box sx={{ 
+              ) : currentView === 'welcome' ? (
+                <Welcome onSignInClick={() => handleViewChange('login')} />
+              ) : currentView === 'login' || currentView === 'register' ? (
+                <Box sx={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -132,10 +136,10 @@ function App() {
                 </Box>
               ) : (
                 <>
-                  {currentView === 'settings' && (
-                    <SettingsForm 
+                  {currentView === 'settings' && isAuthenticated && (
+                    <SettingsForm
                       onNotification={(notification) => {
-                        dispatch(createLog(notification.message, 
+                        dispatch(createLog(notification.message,
                           notification.severity === 'error' ? LogType.ERROR : LogType.INFO
                         ));
                       }}
@@ -145,6 +149,7 @@ function App() {
                     />
                   )}
                   {currentView === 'functions' && <Functions />}
+                  {currentView === 'tools' && <Tools />}
                 </>
               )}
             </Box>

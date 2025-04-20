@@ -18,6 +18,30 @@ export const PROVIDERS = {
       'x-api-key': '{apiKey}', // apiKey will be replaced at runtime
       'anthropic-version': '2023-06-01'
     }
+  },
+  GEMINI: {
+    name: 'Gemini',
+    endpoint: 'https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': '{apiKey}' // apiKey will be replaced at runtime
+    }
+  },
+  LMSTUDIO: {
+    name: 'LM Studio',
+    endpoint: 'http://localhost:1234/v1/chat/completions', // Default LM Studio local endpoint
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer {apiKey}' // apiKey will be replaced at runtime
+    }
+  },
+  OLLAMA: {
+    name: 'Ollama',
+    endpoint: 'http://localhost:11434/api/chat', // Default Ollama local endpoint
+    headers: {
+      'Content-Type': 'application/json'
+      // Ollama typically doesn't require an API key for local usage
+    }
   }
 };
 

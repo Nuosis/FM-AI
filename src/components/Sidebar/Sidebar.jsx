@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
 import Charlie from '../../assets/Charlie.png';
 import { 
   Drawer, 
@@ -15,7 +15,8 @@ import {
 import {
   Settings,
   Login as LoginIcon,
-  Logout as LogoutIcon
+  Logout as LogoutIcon,
+  Home
 } from '@mui/icons-material';
 import { menuItems } from '../../constants/menuItems';
 import {
@@ -47,11 +48,10 @@ const HeaderImage = styled('img')({
   bottom: 0
 });
 
-const Sidebar = ({ width = 240, onViewChange, currentView }) => {
+const Sidebar = ({ width = 240, onViewChange, currentView, isAuthenticated }) => {
   const [openItem, setOpenItem] = useState(null);
   const theme = useTheme();
   const dispatch = useDispatch();
-  const { isAuthenticated } = useSelector((state) => state.auth);
 
   const handleClick = (path) => {
     if (openItem === path) {
@@ -97,42 +97,52 @@ const Sidebar = ({ width = 240, onViewChange, currentView }) => {
       
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
         <List sx={{ flex: 1 }}>
-          {isAuthenticated && menuItems.filter(item => item.enabled).map(({ name, iconType, path, view }) => {
-            const icon = (() => {
-              switch (iconType) {
-                case 'Code': return <Code />;
-                case 'ManageSearch': return <ManageSearch />;
-                case 'Handyman': return <Handyman />;
-                case 'SmartToy': return <SmartToy />;
-                case 'QuestionAnswer': return <QuestionAnswer />;
-                case 'FileDownload': return <FileDownload />;
-                default: return null;
+          {menuItems
+            .filter(item => {
+              // When not authenticated, only show Welcome and Tools
+              if (!isAuthenticated) {
+                return item.enabled && (item.path === 'welcome' || item.path === 'tools');
               }
-            })();
-            return (
-            <div key={name}>
-              <ListItemButton 
-                onClick={() => {
-                  handleClick(path);
-                  handleViewChange(view);
-                }}
-                sx={{
-                  '&:hover': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                  },
-                  ...(currentView === view && {
-                    backgroundColor: 'rgba(144, 202, 249, 0.16)',
-                  })
-                }}
-              >
-                <ListItemIcon sx={{ color: theme.palette.primary.main }}>
-                  {icon}
-                </ListItemIcon>
-                <ListItemText primary={name} />
-              </ListItemButton>
-            </div>
-            );
-          })}
+              // When authenticated, show all enabled items
+              return item.enabled;
+            })
+            .map(({ name, iconType, path, view }) => {
+              const icon = (() => {
+                switch (iconType) {
+                  case 'Home': return <Home />;
+                  case 'Code': return <Code />;
+                  case 'ManageSearch': return <ManageSearch />;
+                  case 'Handyman': return <Handyman />;
+                  case 'SmartToy': return <SmartToy />;
+                  case 'QuestionAnswer': return <QuestionAnswer />;
+                  case 'FileDownload': return <FileDownload />;
+                  default: return null;
+                }
+              })();
+              return (
+              <div key={name}>
+                <ListItemButton
+                  onClick={() => {
+                    handleClick(path);
+                    handleViewChange(view);
+                  }}
+                  sx={{
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                    },
+                    ...(currentView === view && {
+                      backgroundColor: 'rgba(144, 202, 249, 0.16)',
+                    })
+                  }}
+                >
+                  <ListItemIcon sx={{ color: theme.palette.primary.main }}>
+                    {icon}
+                  </ListItemIcon>
+                  <ListItemText primary={name} />
+                </ListItemButton>
+              </div>
+              );
+            })}
         </List>
       </div>
 
@@ -213,6 +223,7 @@ Sidebar.propTypes = {
   width: PropTypes.number,
   onViewChange: PropTypes.func.isRequired,
   currentView: PropTypes.string.isRequired,
+  isAuthenticated: PropTypes.bool.isRequired,
   menuItems: PropTypes.arrayOf(PropTypes.shape({
     name: PropTypes.string.isRequired,
     iconType: PropTypes.string.isRequired,

@@ -18,8 +18,7 @@ import {
 console.log('Testing VITE env variables:');
 const requiredEnvVars = [
   'VITE_SUPABASE_URL',
-  'VITE_SUPABASE_ANON_KEY',
-  'VITE_PUBLIC_KEY'
+  'VITE_SUPABASE_ANON_KEY'
 ];
 
 requiredEnvVars.forEach(varName => {

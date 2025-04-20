@@ -9,7 +9,13 @@ const getInitialState = () => {
     temperature: 0.7,
     systemInstructions: 'You are a helpful assistant.',
     provider: '',
-    model: ''
+    model: '',
+    // New preferences
+    darkMode: 'system', // 'system', 'dark', 'light'
+    defaultProvider: 'openAI', // 'openAI', 'anthropic', 'gemini', 'lmStudio', 'ollama'
+    preferredStrongModel: '',
+    preferredWeakModel: '',
+    apiKeyStorage: 'local', // 'session', 'local', 'saved'
   };
 };
 
@@ -32,6 +38,32 @@ const llmSlice = createSlice({
     setModel: (state, action) => {
       state.model = action.payload;
       localStorage.setItem('llmSettings', JSON.stringify(state));
+    },
+    // New preference reducers
+    setDarkMode: (state, action) => {
+      state.darkMode = action.payload;
+      localStorage.setItem('llmSettings', JSON.stringify(state));
+    },
+    setDefaultProvider: (state, action) => {
+      state.defaultProvider = action.payload;
+      localStorage.setItem('llmSettings', JSON.stringify(state));
+    },
+    setPreferredStrongModel: (state, action) => {
+      state.preferredStrongModel = action.payload;
+      localStorage.setItem('llmSettings', JSON.stringify(state));
+    },
+    setPreferredWeakModel: (state, action) => {
+      state.preferredWeakModel = action.payload;
+      localStorage.setItem('llmSettings', JSON.stringify(state));
+    },
+    setApiKeyStorage: (state, action) => {
+      state.apiKeyStorage = action.payload;
+      localStorage.setItem('llmSettings', JSON.stringify(state));
+    },
+    deleteSavedApiKey: (state) => {
+      // This action will trigger the deletion of the saved API key
+      // The actual deletion will be handled in the component
+      return state;
     }
   }
 });
@@ -40,7 +72,14 @@ export const {
   setTemperature,
   setSystemInstructions,
   setProvider,
-  setModel
+  setModel,
+  // New preference actions
+  setDarkMode,
+  setDefaultProvider,
+  setPreferredStrongModel,
+  setPreferredWeakModel,
+  setApiKeyStorage,
+  deleteSavedApiKey
 } = llmSlice.actions;
 
 export default llmSlice.reducer;

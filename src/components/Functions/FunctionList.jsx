@@ -245,15 +245,29 @@ curl -X POST "${provider.endpoint}" \\
                     <ContentCopyIcon />
                   </IconButton>
                 </Tooltip>
-                <Tooltip title="Edit Function">
-                  <IconButton 
-                    size="small"
-                    color="primary"
-                    onClick={() => setEditingFunction(func)}
-                  >
-                    <EditIcon />
-                  </IconButton>
-                </Tooltip>
+                {func._partyId === user?.party_id ? (
+                  <Tooltip title="Edit Function">
+                    <IconButton
+                      size="small"
+                      color="primary"
+                      onClick={() => setEditingFunction(func)}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                  </Tooltip>
+                ) : (
+                  <Tooltip title="Only the owner can edit this function">
+                    <span>
+                      <IconButton
+                        size="small"
+                        color="primary"
+                        disabled
+                      >
+                        <EditIcon />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                )}
                 {func._partyId === user?.party_id && (
                   <Tooltip title="Delete Function">
                     <IconButton 
