@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import supabase from '../../utils/supabase';
+import supabaseService from '../../services/supabaseService';
 import { signInWithEmail, signUpWithEmail, signOut } from '../../redux/slices/authSlice';
 
 const TestSecureApiCall = () => {
@@ -21,7 +21,9 @@ const TestSecureApiCall = () => {
   const checkHealth = async () => {
     try {
       setCurrentTest('Testing Supabase connection...');
-      const { data, error } = await supabase.from('health').select('*').limit(1);
+      const { data, error } = await supabaseService.executeQuery(supabase =>
+        supabase.from('health').select('*').limit(1)
+      );
       
       if (error) throw error;
       
@@ -47,11 +49,13 @@ const TestSecureApiCall = () => {
 
       // Check if user exists
       setCurrentTest('Checking if user exists...');
-      const { data: existingUser } = await supabase
-        .from('Users')
-        .select('*')
-        .eq('email', formData.email)
-        .single();
+      const { data: existingUser } = await supabaseService.executeQuery(supabase =>
+        supabase
+          .from('user_profile')
+          .select('*')
+          .eq('email', formData.email)
+          .single()
+      );
 
       if (existingUser) {
         addResult('User Check', 'Test user already exists');
@@ -103,7 +107,9 @@ const TestSecureApiCall = () => {
   const validateAuth = async () => {
     try {
       setCurrentTest('Validating Supabase session...');
-      const { data, error } = await supabase.auth.getSession();
+      const { data, error } = await supabaseService.executeQuery(supabase =>
+        supabase.auth.getSession()
+      );
       
       if (error) throw error;
       
@@ -112,11 +118,13 @@ const TestSecureApiCall = () => {
       }
       
       // Test accessing a protected resource
-      const { data: userData, error: userError } = await supabase
-        .from('Users')
-        .select('*')
-        .eq('id', data.session.user.id)
-        .single();
+      const { data: userData, error: userError } = await supabaseService.executeQuery(supabase =>
+        supabase
+          .from('user_profile')
+          .select('*')
+          .eq('id', data.session.user.id)
+          .single()
+      );
         
       if (userError) throw userError;
 
@@ -160,7 +168,9 @@ const TestSecureApiCall = () => {
 
       // Try login first
       setCurrentTest('Attempting login...');
-      const { data, error } = await supabase.auth.getSession();
+      const { data, error } = await supabaseService.executeQuery(supabase =>
+        supabase.auth.getSession()
+      );
       
       if (error || !data.session) {
         // No session or error, try login
@@ -195,8 +205,9 @@ const TestSecureApiCall = () => {
     return () => {
       mounted = false;
       // Clean up auth state
-      supabase.auth.signOut()
-        .catch(() => {/* Ignore logout errors during cleanup */});
+      supabaseService.executeQuery(supabase =>
+        supabase.auth.signOut()
+      ).catch(() => {/* Ignore logout errors during cleanup */});
     };
   }, []);
 

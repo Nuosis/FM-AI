@@ -1,15 +1,16 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import supabase from '../../utils/supabase';
+import supabaseService from '../../services/supabaseService';
 
 /**
  * Supabase realtime subscription for functions table
  */
 export const subscribeToTools = () => (dispatch) => {
-  const channel = supabase.channel('functions-changes')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'functions' },
-      (payload) => {
+  const channel = supabaseService.executeQuery(supabase => {
+    return supabase.channel('functions-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'functions' },
+        (payload) => {
         switch (payload.eventType) {
           case 'INSERT':
             dispatch({ type: 'tools/addTool', payload: payload.new });
@@ -26,10 +27,11 @@ export const subscribeToTools = () => (dispatch) => {
       }
     )
     .subscribe();
+  });
 
   // Return unsubscribe function
   return () => {
-    supabase.removeChannel(channel);
+    supabaseService.executeQuery(supabase => supabase.removeChannel(channel));
   };
 };
 
@@ -37,10 +39,12 @@ export const deleteTool = createAsyncThunk(
   'tools/deleteTool',
   async (id, { rejectWithValue, dispatch }) => {
     try {
-      const { error } = await supabase
-        .from('functions')
-        .delete()
-        .eq('id', id);
+      const { error } = await supabaseService.executeQuery(supabase =>
+        supabase
+          .from('functions')
+          .delete()
+          .eq('id', id)
+      );
 
       if (error) throw error;
 
@@ -62,9 +66,11 @@ export const fetchTools = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       console.log('Fetching tools...');
-      const { data, error } = await supabase
-        .from('functions')
-        .select('*');
+      const { data, error } = await supabaseService.executeQuery(supabase =>
+        supabase
+          .from('functions')
+          .select('*')
+      );
 
       if (error) throw error;
 
@@ -85,10 +91,12 @@ export const saveTool = createAsyncThunk(
   'tools/saveTool',
   async (toolData, { rejectWithValue }) => {
     try {
-      const { data, error } = await supabase
-        .from('functions')
-        .insert([toolData])
-        .select();
+      const { data, error } = await supabaseService.executeQuery(supabase =>
+        supabase
+          .from('functions')
+          .insert([toolData])
+          .select()
+      );
 
       if (error) throw error;
 

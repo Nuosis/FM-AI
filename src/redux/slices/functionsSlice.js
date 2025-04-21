@@ -1,15 +1,16 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import supabase from '../../utils/supabase';
+import supabaseService from '../../services/supabaseService';
 
 /**
  * Supabase realtime subscription for aifunctions table
  */
 export const subscribeToAIFunctions = () => (dispatch) => {
-  const channel = supabase.channel('aifunctions-changes')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'aifunctions' },
-      (payload) => {
+  const channel = supabaseService.executeQuery(supabase => {
+    return supabase.channel('aifunctions-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'aifunctions' },
+        (payload) => {
         switch (payload.eventType) {
           case 'INSERT':
             dispatch({ type: 'functions/addFunction', payload: payload.new });
@@ -23,13 +24,14 @@ export const subscribeToAIFunctions = () => (dispatch) => {
           default:
             break;
         }
-      }
-    )
-    .subscribe();
+        }
+      )
+      .subscribe();
+  });
 
   // Return unsubscribe function
   return () => {
-    supabase.removeChannel(channel);
+    supabaseService.executeQuery(supabase => supabase.removeChannel(channel));
   };
 };
 
@@ -38,10 +40,12 @@ export const deleteAIFunction = createAsyncThunk(
   'functions/deleteAIFunction',
   async (recordId, { rejectWithValue, dispatch }) => {
     try {
-      const { error } = await supabase
-        .from('aifunctions')
-        .delete()
-        .eq('id', recordId);
+      const { error } = await supabaseService.executeQuery(supabase =>
+        supabase
+          .from('aifunctions')
+          .delete()
+          .eq('id', recordId)
+      );
 
       if (error) throw error;
 
@@ -63,9 +67,11 @@ export const fetchFunctions = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       console.log('Fetching functions...');
-      const { data, error } = await supabase
-        .from('aifunctions')
-        .select('*');
+      const { data, error } = await supabaseService.executeQuery(supabase =>
+        supabase
+          .from('aifunctions')
+          .select('*')
+      );
 
       if (error) throw error;
 

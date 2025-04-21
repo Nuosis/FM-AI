@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { createLog, LogType } from './appSlice';
-import supabase from '../../utils/supabase';
+import supabaseService from '../../services/supabaseService';
 
 export const fetchOrgLicenses = createAsyncThunk(
   'license/fetchOrgLicenses',
@@ -12,10 +12,12 @@ export const fetchOrgLicenses = createAsyncThunk(
     }
     dispatch(createLog(`Fetching organization licenses ${orgId}`, LogType.DEBUG));
     
-    const { data, error } = await supabase
-      .from('licenses')
-      .select('*')
-      .eq('organization_id', orgId);
+    const { data, error } = await supabaseService.executeQuery(supabase =>
+      supabase
+        .from('licenses')
+        .select('*')
+        .eq('organization_id', orgId)
+    );
 
     if (error) throw error;
 

@@ -6,8 +6,11 @@ import { LoginForm, RegistrationForm, TestSecureApiCall } from './components/Aut
 import { SettingsForm } from './components/Settings';
 import Functions from './components/Functions';
 import { Tools } from './components/Tools';
+import LLMChat from './components/Chat/LLMChat';
 import { createLog, LogType, /*toggleLogViewer*/ } from './redux/slices/appSlice';
 import { fetchOrgLicenses } from './redux/slices/licenseSlice';
+import { logoutSuccess, setSession } from './redux/slices/authSlice';
+import supabase from './utils/supabase';
 import UnderRepair from './components/UnderRepair';
 import Welcome from './components/Welcome/Welcome';
 
@@ -61,11 +64,52 @@ function App() {
   const dispatch = useDispatch();
   const auth = useSelector(state => state.auth);
   const { isAuthenticated } = auth;
-  const [currentView, setCurrentView] = useState(() => (isAuthenticated ? 'functions' : 'welcome'));
+  const [currentView, setCurrentView] = useState(() => (isAuthenticated ? 'chat' : 'welcome'));
+  const [sessionChecked, setSessionChecked] = useState(false);
+  
+  // Check session on app startup
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        // Get current session directly from Supabase
+        const { data, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          throw error;
+        }
+        
+        // If no session, ensure Redux state reflects logged out state
+        if (!data.session) {
+          dispatch(logoutSuccess());
+          dispatch(createLog('No active session found on startup', LogType.INFO));
+        } else {
+          // If session exists, update Redux state with session
+          dispatch(setSession(data.session));
+          dispatch(createLog('Active session restored on startup', LogType.INFO));
+        }
+      } catch (error) {
+        console.error('Session check failed:', error);
+        dispatch(logoutSuccess());
+        dispatch(createLog(`Session check error: ${error.message}`, LogType.ERROR));
+      } finally {
+        setSessionChecked(true);
+      }
+    };
+    
+    checkSession();
+  }, [dispatch]);
+  
   useEffect(() => {
     // Log auth state changes
     dispatch(createLog(`Current auth state: ${JSON.stringify(auth, null, 2)}`, LogType.DEBUG));
   }, [auth, dispatch]);
+
+  // Effect to update currentView when authentication state changes
+  useEffect(() => {
+    if (isAuthenticated) {
+      setCurrentView('chat');
+    }
+  }, [isAuthenticated]);
 
   const licenseStatus = useSelector(state => state.license.status);
 
@@ -103,12 +147,13 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ minHeight: '100vh', display: 'flex' }}>
-        { isRepair ? <UnderRepair /> : 
-          <Layout
-            currentView={currentView}
-            onViewChange={handleViewChange}
-            isAuthenticated={isAuthenticated}
-          >
+        { isRepair ? <UnderRepair /> :
+          sessionChecked ? (
+            <Layout
+              currentView={currentView}
+              onViewChange={handleViewChange}
+              isAuthenticated={isAuthenticated}
+            >
             <Box sx={{ 
               display: 'flex', 
               flexDirection: 'column', 
@@ -123,7 +168,14 @@ function App() {
               {currentView === 'test' ? (
                 <TestSecureApiCall />
               ) : currentView === 'welcome' ? (
-                <Welcome onSignInClick={() => handleViewChange('login')} />
+                isAuthenticated ? (
+                  // Redirect authenticated users to chat when they try to access welcome
+                  <Box sx={{ display: 'none' }}>
+                    {setTimeout(() => handleViewChange('chat'), 0)}
+                  </Box>
+                ) : (
+                  <Welcome onSignInClick={() => handleViewChange('login')} />
+                )
               ) : currentView === 'login' || currentView === 'register' ? (
                 <Box sx={{
                   display: 'flex',
@@ -150,10 +202,16 @@ function App() {
                   )}
                   {currentView === 'functions' && <Functions />}
                   {currentView === 'tools' && <Tools />}
+                  {currentView === 'chat' && <LLMChat />}
                 </>
               )}
             </Box>
-          </Layout>
+            </Layout>
+          ) : (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+              <p>Loading...</p>
+            </Box>
+          )
         }
       </Box>
     </ThemeProvider>

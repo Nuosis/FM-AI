@@ -8,520 +8,222 @@ Our application uses a hierarchical data model with Organizations as the top-lev
 
 ## Tables
 
-### 1. Organizations
+<!--
+  THIS SECTION IS AUTO-GENERATED FROM THE CURRENT SUPABASE DDL.
+  DO NOT EDIT MANUALLY. TO UPDATE, RE-RUN THE DDL EXTRACTION.
+-->
 
-**Purpose:** Base entity for licenses, users, and modules.
-
-**Fields:**
-- `id`: UUID, primary key.
-- `name`: string.
-- `created_at`: timestamp.
-- `updated_at`: timestamp.
-
-**RLS Recommendations:**
-- Enable RLS with policies based on role hierarchy:
-  - Developer: Full access to all organizations (FULL CRUD)
-  - Admin: Can view and update their own organization
-  - User: Can only view their own organization
-- Example policy:
-  ```sql
-  -- Developer has full access to everything
-  CREATE POLICY "Developers have full access to organizations"
-  ON organizations
-  USING (auth.jwt() ->> 'role' = 'developer');
-  
-  -- Admin can view and update their organization
-  CREATE POLICY "Admins can view their organization"
-  ON organizations
-  FOR SELECT
-  USING (auth.uid() IN (
-    SELECT id FROM users WHERE organization_id = organizations.id
-  ) AND auth.jwt() ->> 'role' = 'admin');
-  
-  CREATE POLICY "Admins can update their organization"
-  ON organizations
-  FOR UPDATE
-  USING (auth.uid() IN (
-    SELECT id FROM users WHERE organization_id = organizations.id
-  ) AND auth.jwt() ->> 'role' = 'admin');
-  
-  -- Users can only view their organization
-  CREATE POLICY "Users can view their organization"
-  ON organizations
-  FOR SELECT
-  USING (auth.uid() IN (
-    SELECT id FROM users WHERE organization_id = organizations.id
-  ));
-  ```
-
-### 2. Users
-
-**Purpose:** Represents users, who are children of Organizations.
-
-**Fields:**
-- `id`: UUID, primary key.
-- `organization_id`: UUID, foreign key referencing Organizations.id.
-- `email`: string.
-- `password_hash`: string (if applicable; Supabase Auth may manage authentication).
-- `created_at`: timestamp.
-- `updated_at`: timestamp.
+### Table: organizations (public)
+- **id**: uuid, primary key, default: gen_random_uuid()
+- **name**: text, not null
+- **created_at**: timestamp with time zone, default: now()
+- **updated_at**: timestamp with time zone, default: now()
 
 **Relationships:**
-- Each user belongs to one Organization.
+- Referenced by: user_profile.organization_id, licenses.organization_id, customer_organization.organization_id
 
-**RLS Recommendations:**
-- Enable RLS with policies based on role hierarchy:
-  - Developer: Full access to all users (FULL CRUD)
-  - Admin: Can view users in their organization and make them active/inactive
-  - User: Can read their own information and update email
-- Example policy:
-  ```sql
-  -- Developer has full access to everything
-  CREATE POLICY "Developers have full access to users"
-  ON users
-  USING (auth.jwt() ->> 'role' = 'developer');
-  
-  -- Admin can view users in their organization
-  CREATE POLICY "Admins can view users in their organization"
-  ON users
-  FOR SELECT
-  USING (
-    auth.jwt() ->> 'role' = 'admin' AND
-    organization_id IN (
-      SELECT organization_id FROM users WHERE id = auth.uid()
-    )
-  );
-  
-  -- Admin can update active status of users in their organization
-  CREATE POLICY "Admins can update active status"
-  ON users
-  FOR UPDATE
-  USING (
-    auth.jwt() ->> 'role' = 'admin' AND
-    organization_id IN (
-      SELECT organization_id FROM users WHERE id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    organization_id IN (
-      SELECT organization_id FROM users WHERE id = auth.uid()
-    )
-  );
-  
-  -- Users can view their own profile
-  CREATE POLICY "Users can view their own profile"
-  ON users
-  FOR SELECT
-  USING (id = auth.uid());
-  
-  -- Users can update their own email
-  CREATE POLICY "Users can update their own email"
-  ON users
-  FOR UPDATE
-  USING (id = auth.uid())
-  WITH CHECK (id = auth.uid());
-  ```
+---
 
-### 3. Chat Messages
-
-**Purpose:** To support chat functionality (LLMChat component).
-
-**Fields:**
-- `id`: UUID, primary key.
-- `user_id`: UUID, foreign key referencing Users.id.
-- `conversation_id`: UUID, foreign key referencing Conversations.id.
-- `message_content`: text.
-- `created_at`: timestamp.
-- `updated_at`: timestamp.
+### Table: user_profile (public)
+- **id**: uuid, primary key, default: gen_random_uuid()
+- **organization_id**: uuid, not null, references organizations(id)
+- **role**: text, not null
+- **created_at**: timestamp with time zone, default: now()
+- **updated_at**: timestamp with time zone, default: now()
+- **user_id**: uuid, unique
 
 **Relationships:**
-- Each chat message is linked to one user (and indirectly to an Organization via the user).
-- Each chat message belongs to one Conversation.
+- organization_id → organizations(id)
+- user_id → users(id)
+- Referenced by: chat_messages.user_id, customer_user.user_id
 
-**RLS Recommendations:**
-- Enable RLS with policies that allow users to view only messages they created or messages in conversations they have access to.
-- Example policy:
-  ```sql
-  CREATE POLICY "Users can view their own messages"
-  ON chat_messages
-  FOR SELECT
-  USING (
-    user_id = auth.uid() OR
-    conversation_id IN (
-      SELECT id FROM conversations WHERE id IN (
-        SELECT conversation_id FROM chat_messages WHERE user_id = auth.uid()
-      )
-    )
-  );
-  
-  CREATE POLICY "Users can create their own messages"
-  ON chat_messages
-  FOR INSERT
-  WITH CHECK (user_id = auth.uid());
-  
-  CREATE POLICY "Users can update their own messages"
-  ON chat_messages
-  FOR UPDATE
-  USING (user_id = auth.uid());
-  ```
+---
 
-### 4. Functions
-
-**Purpose:** Stores function metadata.
-
-**Fields:**
-- `id`: UUID, primary key.
-- `user_id`: UUID, foreign key referencing Users.id.
-- `function_name`: string.
-- `description`: text.
-- `parameters`: JSONB field (metadata about parameters).
-- `created_at`: timestamp.
-- `updated_at`: timestamp.
-
-**Relationships:**
-- Each function is linked to a user (and indirectly through that to an Organization).
-
-**RLS Recommendations:**
-- Enable RLS with policies based on role hierarchy:
-  - Developer: Full access to all functions (FULL CRUD)
-  - User: Can CRUD their own functions
-  - Public: Can read all functions
-- Example policy:
-  ```sql
-  -- Developer has full access to everything
-  CREATE POLICY "Developers have full access to functions"
-  ON functions
-  USING (auth.jwt() ->> 'role' = 'developer');
-  
-  -- Users can CRUD their own functions
-  CREATE POLICY "Users can manage their own functions"
-  ON functions
-  USING (user_id = auth.uid());
-  
-  -- Public can read all functions
-  CREATE POLICY "Public can read all functions"
-  ON functions
-  FOR SELECT
-  USING (true);
-  ```
-
-### 5. Licenses
-
-**Purpose:** Manages license keys and expiration details.
-
-**Fields:**
-- `id`: UUID, primary key.
-- `organization_id`: UUID, foreign key referencing Organizations.id.
-- `license_key`: string.
-- `expiration_date`: date or timestamp.
-- `created_at`: timestamp.
-- `updated_at`: timestamp.
+### Table: users (auth)
+- **id**: uuid, primary key
+- **instance_id**: uuid
+- **aud**: character varying
+- **role**: character varying
+- **email**: character varying
+- **encrypted_password**: character varying
+- **email_confirmed_at**: timestamp with time zone
+- **invited_at**: timestamp with time zone
+- **confirmation_token**: character varying
+- **confirmation_sent_at**: timestamp with time zone
+- **recovery_token**: character varying
+- **recovery_sent_at**: timestamp with time zone
+- **email_change_token_new**: character varying
+- **email_change**: character varying
+- **email_change_sent_at**: timestamp with time zone
+- **last_sign_in_at**: timestamp with time zone
+- **raw_app_meta_data**: jsonb
+- **raw_user_meta_data**: jsonb
+- **is_super_admin**: boolean
+- **created_at**: timestamp with time zone
+- **updated_at**: timestamp with time zone
+- **phone**: text, unique, default: NULL
+- **phone_confirmed_at**: timestamp with time zone
+- **phone_change**: text, default: ''
+- **phone_change_token**: character varying, default: ''
+- **phone_change_sent_at**: timestamp with time zone
+- **confirmed_at**: timestamp with time zone, generated: LEAST(email_confirmed_at, phone_confirmed_at)
+- **email_change_token_current**: character varying, default: ''
+- **email_change_confirm_status**: smallint, default: 0, check: email_change_confirm_status >= 0 AND email_change_confirm_status <= 2
+- **banned_until**: timestamp with time zone
+- **reauthentication_token**: character varying, default: ''
+- **reauthentication_sent_at**: timestamp with time zone
+- **is_sso_user**: boolean, not null, default: false
+- **deleted_at**: timestamp with time zone
+- **is_anonymous**: boolean, not null, default: false
 
 **Relationships:**
-- Each license is associated with an Organization.
+- Referenced by: user_profile.user_id, conversations.user_id, user_preferences.user_id, functions.user_id
 
-**RLS Recommendations:**
-- Enable RLS with policies based on role hierarchy:
-  - Developer: Full access to all licenses (FULL CRUD)
-  - Admin: Can read licenses for their organization
-  - User: No access
-- Example policy:
-  ```sql
-  -- Developer has full access to everything
-  CREATE POLICY "Developers have full access to licenses"
-  ON licenses
-  USING (auth.jwt() ->> 'role' = 'developer');
-  
-  -- Admin can read licenses for their organization
-  CREATE POLICY "Admins can read licenses for their organization"
-  ON licenses
-  FOR SELECT
-  USING (
-    auth.jwt() ->> 'role' = 'admin' AND
-    organization_id IN (
-      SELECT organization_id FROM users WHERE id = auth.uid()
-    )
-  );
-  ```
+---
 
-### 6. Organization_Modules
-
-**Purpose:** Stores modules that belong to an organization.
-
-**Fields:**
-- `id`: UUID, primary key.
-- `organization_id`: UUID, foreign key referencing Organizations.id.
-- `module_name`: string.
-- `description`: text.
-- `created_at`: timestamp.
-- `updated_at`: timestamp.
+### Table: chat_messages (public)
+- **id**: uuid, primary key, default: gen_random_uuid()
+- **user_id**: uuid, not null, references user_profile(id)
+- **conversation_id**: uuid, not null, references conversations(id)
+- **message_content**: text, not null
+- **created_at**: timestamp with time zone, default: now()
+- **updated_at**: timestamp with time zone, default: now()
 
 **Relationships:**
-- Each module is directly a child of an Organization.
+- user_id → user_profile(id)
+- conversation_id → conversations(id)
 
-**RLS Recommendations:**
-- Enable RLS with policies based on role hierarchy:
-  - Developer: Full access to all modules (FULL CRUD)
-  - Admin: Can read modules for their organization
-  - User: No access
-- Example policy:
-  ```sql
-  -- Developer has full access to everything
-  CREATE POLICY "Developers have full access to organization modules"
-  ON organization_modules
-  USING (auth.jwt() ->> 'role' = 'developer');
-  
-  -- Admin can read modules for their organization
-  CREATE POLICY "Admins can read modules for their organization"
-  ON organization_modules
-  FOR SELECT
-  USING (
-    auth.jwt() ->> 'role' = 'admin' AND
-    organization_id IN (
-      SELECT organization_id FROM users WHERE id = auth.uid()
-    )
-  );
-  ```
+---
 
-### 7. License_Modules
-
-**Purpose:** Many-to-many association between Licenses and Organization_Modules. This table must strictly link licenses to modules that are assigned to their respective organizations.
-
-**Fields:**
-- `id`: UUID, primary key.
-- `license_id`: UUID, foreign key referencing Licenses.id.
-- `module_id`: UUID, foreign key referencing Organization_Modules.id.
-- `created_at`: timestamp.
-
-**Notes:**
-- Application logic (or database constraints/triggers) should ensure that the module in License_Modules is indeed a module from the associated Organization_Modules for that license.
-
-**RLS Recommendations:**
-- Enable RLS with policies based on role hierarchy:
-  - Developer: Full access to all license modules (FULL CRUD)
-  - Admin: Can read license modules for their organization
-  - User: No access
-- Example policy:
-  ```sql
-  -- Developer has full access to everything
-  CREATE POLICY "Developers have full access to license modules"
-  ON license_modules
-  USING (auth.jwt() ->> 'role' = 'developer');
-  
-  -- Admin can read license modules for their organization
-  CREATE POLICY "Admins can read license modules for their organization"
-  ON license_modules
-  FOR SELECT
-  USING (
-    auth.jwt() ->> 'role' = 'admin' AND
-    license_id IN (
-      SELECT id FROM licenses WHERE organization_id IN (
-        SELECT organization_id FROM users WHERE id = auth.uid()
-      )
-    )
-  );
-  ```
-
-### 8. Customers
-
-**Purpose:** Represents customers of the organization.
-
-**Fields:**
-- `id`: UUID, primary key.
-- `name`: string.
-- `created_at`: timestamp.
-- `updated_at`: timestamp.
+### Table: functions (public)
+- **id**: uuid, primary key, default: gen_random_uuid()
+- **created_by**: uuid, not null, references users(id)
+- **name**: text, not null
+- **description**: text
+- **created_at**: timestamp with time zone, not null, default: now()
+- **updated_at**: timestamp with time zone, default: now()
+- **code**: text, not null
+- **user_id**: uuid
 
 **Relationships:**
-- Customers can have multiple email addresses and phone numbers.
+- created_by → users(id)
+- user_id → users(id)
 
-**RLS Recommendations:**
-- Enable RLS with policies based on role hierarchy:
-  - Developer: Full access to all customers (FULL CRUD)
-  - Admin: Can CRUD all customers in their organization
-  - User: Can CRUD their own customers
-- Example policy:
-  ```sql
-  -- Developer has full access to everything
-  CREATE POLICY "Developers have full access to customers"
-  ON customers
-  USING (auth.jwt() ->> 'role' = 'developer');
-  
-  -- Admin can CRUD customers in their organization
-  CREATE POLICY "Admins can manage customers in their organization"
-  ON customers
-  USING (
-    auth.jwt() ->> 'role' = 'admin' AND
-    id IN (
-      SELECT customer_id FROM customer_organization WHERE organization_id IN (
-        SELECT organization_id FROM users WHERE id = auth.uid()
-      )
-    )
-  );
-  
-  -- Users can CRUD their own customers
-  CREATE POLICY "Users can manage their own customers"
-  ON customers
-  USING (
-    id IN (
-      SELECT customer_id FROM customer_user WHERE user_id = auth.uid()
-    )
-  );
-  ```
-  
-  Note: This assumes customer_organization and customer_user junction tables. If customers are directly linked to organizations or users, adjust the policy accordingly.
+---
 
-### 9. Customer_Email
-
-**Purpose:** Stores email addresses for customers.
-
-**Fields:**
-- `id`: UUID, primary key.
-- `customer_id`: UUID, foreign key referencing Customers.id.
-- `email`: string.
-- `is_primary`: boolean.
-- `created_at`: timestamp.
-- `updated_at`: timestamp.
+### Table: licenses (public)
+- **id**: uuid, primary key, default: gen_random_uuid()
+- **organization_id**: uuid, not null, references organizations(id)
+- **license_key**: uuid, unique, default: gen_random_uuid()
+- **expiration_date**: timestamp with time zone
+- **created_at**: timestamp with time zone, default: now()
+- **updated_at**: timestamp with time zone, default: now()
 
 **Relationships:**
-- Each email address belongs to one Customer.
+- organization_id → organizations(id)
+- Referenced by: license_modules.license_id
 
-**RLS Recommendations:**
-- Enable RLS with policies based on role hierarchy:
-  - Developer: Full access to all customer emails (FULL CRUD)
-  - Admin: Can CRUD all customer emails in their organization
-  - User: Can CRUD emails for their own customers
-- Example policy:
-  ```sql
-  -- Developer has full access to everything
-  CREATE POLICY "Developers have full access to customer emails"
-  ON customer_email
-  USING (auth.jwt() ->> 'role' = 'developer');
-  
-  -- Admin can CRUD customer emails in their organization
-  CREATE POLICY "Admins can manage customer emails in their organization"
-  ON customer_email
-  USING (
-    auth.jwt() ->> 'role' = 'admin' AND
-    customer_id IN (
-      SELECT id FROM customers WHERE id IN (
-        SELECT customer_id FROM customer_organization WHERE organization_id IN (
-          SELECT organization_id FROM users WHERE id = auth.uid()
-        )
-      )
-    )
-  );
-  
-  -- Users can CRUD emails for their own customers
-  CREATE POLICY "Users can manage emails for their own customers"
-  ON customer_email
-  USING (
-    customer_id IN (
-      SELECT id FROM customers WHERE id IN (
-        SELECT customer_id FROM customer_user WHERE user_id = auth.uid()
-      )
-    )
-  );
-  ```
+---
 
-### 10. Customer_Phone
-
-**Purpose:** Stores phone numbers for customers.
-
-**Fields:**
-- `id`: UUID, primary key.
-- `customer_id`: UUID, foreign key referencing Customers.id.
-- `phone`: string.
-- `type`: string (e.g., mobile, home, work).
-- `is_primary`: boolean.
-- `created_at`: timestamp.
-- `updated_at`: timestamp.
+### Table: license_modules (public)
+- **id**: uuid, primary key, default: gen_random_uuid()
+- **license_id**: uuid, not null, references licenses(id)
+- **module_id**: uuid, not null
+- **created_at**: timestamp with time zone, default: now()
 
 **Relationships:**
-- Each phone number belongs to one Customer.
+- license_id → licenses(id)
 
-**RLS Recommendations:**
-- Enable RLS with policies based on role hierarchy:
-  - Developer: Full access to all customer phones (FULL CRUD)
-  - Admin: Can CRUD all customer phones in their organization
-  - User: Can CRUD phones for their own customers
-- Example policy:
-  ```sql
-  -- Developer has full access to everything
-  CREATE POLICY "Developers have full access to customer phones"
-  ON customer_phone
-  USING (auth.jwt() ->> 'role' = 'developer');
-  
-  -- Admin can CRUD customer phones in their organization
-  CREATE POLICY "Admins can manage customer phones in their organization"
-  ON customer_phone
-  USING (
-    auth.jwt() ->> 'role' = 'admin' AND
-    customer_id IN (
-      SELECT id FROM customers WHERE id IN (
-        SELECT customer_id FROM customer_organization WHERE organization_id IN (
-          SELECT organization_id FROM users WHERE id = auth.uid()
-        )
-      )
-    )
-  );
-  
-  -- Users can CRUD phones for their own customers
-  CREATE POLICY "Users can manage phones for their own customers"
-  ON customer_phone
-  USING (
-    customer_id IN (
-      SELECT id FROM customers WHERE id IN (
-        SELECT customer_id FROM customer_user WHERE user_id = auth.uid()
-      )
-    )
-  );
-  ```
+---
 
-### 11. User_Preferences
-
-**Purpose:** Stores user preferences.
-
-**Fields:**
-- `id`: UUID, primary key.
-- `user_id`: UUID, foreign key referencing Users.id.
-- `preference_key`: string.
-- `preference_value`: string or JSONB.
-- `created_at`: timestamp.
-- `updated_at`: timestamp.
+### Table: customers (public)
+- **id**: uuid, primary key, default: gen_random_uuid()
+- **name**: text, not null
+- **first_name**: text, not null
+- **last_name**: text, not null
+- **created_at**: timestamp with time zone, default: now()
+- **updated_at**: timestamp with time zone, default: now()
 
 **Relationships:**
-- Each preference belongs to one User.
+- Referenced by: customer_email.customer_id, customer_phone.customer_id, customer_organization.customer_id, customer_user.customer_id
 
-**RLS Recommendations:**
-- Enable RLS with policies based on role hierarchy:
-  - Developer: Full access to all user preferences (FULL CRUD)
-  - Admin: Can CRUD all preferences in their organization
-  - User: Can CRUD their own preferences
-- Example policy:
-  ```sql
-  -- Developer has full access to everything
-  CREATE POLICY "Developers have full access to user preferences"
-  ON user_preferences
-  USING (auth.jwt() ->> 'role' = 'developer');
-  
-  -- Admin can CRUD preferences in their organization
-  CREATE POLICY "Admins can manage preferences in their organization"
-  ON user_preferences
-  USING (
-    auth.jwt() ->> 'role' = 'admin' AND
-    user_id IN (
-      SELECT id FROM users WHERE organization_id IN (
-        SELECT organization_id FROM users WHERE id = auth.uid()
-      )
-    )
-  );
-  
-  -- Users can CRUD their own preferences
-  CREATE POLICY "Users can manage their own preferences"
-  ON user_preferences
-  USING (user_id = auth.uid());
-  ```
+---
+
+### Table: customer_email (public)
+- **id**: uuid, primary key, default: gen_random_uuid()
+- **customer_id**: uuid, not null, references customers(id)
+- **email**: text, not null
+- **is_primary**: boolean, default: false
+- **created_at**: timestamp with time zone, default: now()
+- **updated_at**: timestamp with time zone, default: now()
+
+**Relationships:**
+- customer_id → customers(id)
+
+---
+
+### Table: customer_phone (public)
+- **id**: uuid, primary key, default: gen_random_uuid()
+- **customer_id**: uuid, not null, references customers(id)
+- **phone**: text, not null
+- **type**: text
+- **is_primary**: boolean, default: false
+- **created_at**: timestamp with time zone, default: now()
+- **updated_at**: timestamp with time zone, default: now()
+
+**Relationships:**
+- customer_id → customers(id)
+
+---
+
+### Table: customer_organization (public)
+- **id**: uuid, primary key, default: gen_random_uuid()
+- **customer_id**: uuid, not null, references customers(id)
+- **organization_id**: uuid, not null, references organizations(id)
+- **created_at**: timestamp with time zone, default: now()
+
+**Relationships:**
+- customer_id → customers(id)
+- organization_id → organizations(id)
+
+---
+
+### Table: customer_user (public)
+- **id**: uuid, primary key, default: gen_random_uuid()
+- **customer_id**: uuid, not null, references customers(id)
+- **user_id**: uuid, not null, references user_profile(id)
+- **created_at**: timestamp with time zone, default: now()
+
+**Relationships:**
+- customer_id → customers(id)
+- user_id → user_profile(id)
+
+---
+
+### Table: user_preferences (public)
+- **id**: uuid, primary key, default: gen_random_uuid()
+- **user_id**: uuid, not null, references users(id)
+- **preference_key**: text, not null
+- **preference_value**: jsonb
+- **created_at**: timestamp with time zone, default: now()
+- **updated_at**: timestamp with time zone, default: now()
+
+**Relationships:**
+- user_id → users(id)
+
+---
+
+### Table: conversations (public)
+- **id**: uuid, primary key, default: gen_random_uuid()
+- **title**: text
+- **subject**: text
+- **created_at**: timestamp with time zone, default: now()
+- **updated_at**: timestamp with time zone, default: now()
+- **user_id**: uuid, default: gen_random_uuid(), references users(id)
+
+**Relationships:**
+- user_id → users(id)
+- Referenced by: chat_messages.conversation_id
 
 ### 12. Conversations
 
@@ -539,40 +241,39 @@ Our application uses a hierarchical data model with Organizations as the top-lev
 
 **RLS Recommendations:**
 - Enable RLS with policies based on role hierarchy:
-  - Developer: Full access to all conversations (FULL CRUD)
-  - Admin: Can CRUD all conversations in their organization
-  - User: Can CRUD their own conversations
+   - Developer: Full access to all conversations (FULL CRUD)
+   - Admin: Can CRUD all conversations in their organization
+   - User: Can CRUD their own conversations
 - Example policy:
-  ```sql
-  -- Developer has full access to everything
-  CREATE POLICY "Developers have full access to conversations"
-  ON conversations
-  USING (auth.jwt() ->> 'role' = 'developer');
-  
-  -- Admin can CRUD conversations in their organization
-  CREATE POLICY "Admins can manage conversations in their organization"
-  ON conversations
-  USING (
-    auth.jwt() ->> 'role' = 'admin' AND
-    id IN (
-      SELECT conversation_id FROM chat_messages WHERE user_id IN (
-        SELECT id FROM users WHERE organization_id IN (
-          SELECT organization_id FROM users WHERE id = auth.uid()
-        )
-      )
-    )
-  );
-  
-  -- Users can CRUD their own conversations
-  CREATE POLICY "Users can manage their own conversations"
-  ON conversations
-  USING (
-    id IN (
-      SELECT conversation_id FROM chat_messages WHERE user_id = auth.uid()
-    )
-  );
-  ```
+   ```sql
+   -- Developer has full access to everything
+   CREATE POLICY "Developers have full access to conversations"
+   ON conversations
+   USING (auth.jwt() ->> 'role' = 'developer');
 
+   -- Admin can CRUD conversations in their organization
+   CREATE POLICY "Admins can manage conversations in their organization"
+   ON conversations
+   USING (
+     auth.jwt() ->> 'role' = 'admin' AND
+     id IN (
+       SELECT conversation_id FROM chat_messages WHERE user_id IN (
+         SELECT id FROM users WHERE organization_id IN (
+           SELECT organization_id FROM users WHERE id = auth.uid()
+         )
+       )
+     )
+   );
+
+   -- Users can CRUD their own conversations
+   CREATE POLICY "Users can manage their own conversations"
+   ON conversations
+   USING (
+     id IN (
+       SELECT conversation_id FROM chat_messages WHERE user_id = auth.uid()
+     )
+   );
+   ```
 ## Data Model Diagram
 
 ```mermaid

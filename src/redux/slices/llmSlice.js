@@ -1,4 +1,17 @@
 import { createSlice } from '@reduxjs/toolkit';
+import { createSelector } from 'reselect';
+
+// Memoized selector for llm preferences
+export const selectLlmPreferences = createSelector(
+  state => state.llm,
+  llm => ({
+    darkMode: llm.darkMode,
+    defaultProvider: llm.defaultProvider,
+    preferredStrongModel: llm.preferredStrongModel,
+    preferredWeakModel: llm.preferredWeakModel,
+    apiKeyStorage: llm.apiKeyStorage
+  })
+);
 
 const getInitialState = () => {
   const storedState = localStorage.getItem('llmSettings');
@@ -15,7 +28,8 @@ const getInitialState = () => {
     defaultProvider: 'openAI', // 'openAI', 'anthropic', 'gemini', 'lmStudio', 'ollama'
     preferredStrongModel: '',
     preferredWeakModel: '',
-    apiKeyStorage: 'local', // 'session', 'local', 'saved'
+    apiKeyStorage: 'local', // 'session', 'local', 'saved',
+    fetchAIModulesEnabled: true, // Flag to control AI module fetching
   };
 };
 
@@ -23,6 +37,16 @@ const llmSlice = createSlice({
   name: 'llm',
   initialState: getInitialState(),
   reducers: {
+    // DEBUG: Log every reducer call and state reference
+    // eslint-disable-next-line no-unused-vars
+    _debugLog: (state, action) => {
+      console.log('[llmSlice] Reducer called. State reference:', state);
+      return state;
+    },
+    setFetchAIModulesEnabled: (state, action) => {
+      state.fetchAIModulesEnabled = action.payload;
+      localStorage.setItem('llmSettings', JSON.stringify(state));
+    },
     setTemperature: (state, action) => {
       state.temperature = action.payload;
       localStorage.setItem('llmSettings', JSON.stringify(state));
@@ -57,6 +81,8 @@ const llmSlice = createSlice({
       localStorage.setItem('llmSettings', JSON.stringify(state));
     },
     setApiKeyStorage: (state, action) => {
+
+
       state.apiKeyStorage = action.payload;
       localStorage.setItem('llmSettings', JSON.stringify(state));
     },
@@ -79,7 +105,8 @@ export const {
   setPreferredStrongModel,
   setPreferredWeakModel,
   setApiKeyStorage,
-  deleteSavedApiKey
+  deleteSavedApiKey,
+  setFetchAIModulesEnabled
 } = llmSlice.actions;
 
 export default llmSlice.reducer;

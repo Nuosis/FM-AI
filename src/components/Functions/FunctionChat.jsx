@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Box, Typography } from '@mui/material';
-import ProgressText from './ProgressText';
+import ProgressText from '../Chat/ProgressText';
 import axiosInstance from '../../utils/axios';
 import { useSelector } from 'react-redux';
 

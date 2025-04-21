@@ -1,8 +1,23 @@
 import { Box, Typography, Paper, Container, Button, Grid } from '@mui/material';
-
+import { useSelector } from 'react-redux';
 import PropTypes from 'prop-types';
 
-function Welcome({ onSignInClick }) {
+function Welcome({ onSignInClick = undefined }) {
+  //console.log('Welcome component rendered');
+  // Access authentication state from Redux
+  const isAuthenticated = useSelector(state => state.auth.isAuthenticated);
+  //console.log('Authentication status in Welcome:', isAuthenticated);
+  
+  // Default handler if onSignInClick is not provided
+  const handleSignIn = () => {
+    console.log('Sign In button clicked');
+    if (onSignInClick) {
+      onSignInClick();
+    } else {
+      console.log('No onSignInClick handler provided');
+    }
+  };
+  
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Paper elevation={3} sx={{ p: 4, borderRadius: 2 }}>
@@ -75,30 +90,31 @@ function Welcome({ onSignInClick }) {
           </Grid>
         </Box>
 
-        <Box sx={{ textAlign: 'center', mt: 4 }}>
-          <Typography variant="h5" gutterBottom>
-            Ready to get started?
-          </Typography>
-          <Button
-            variant="contained"
-            color="primary"
-            size="large"
-            onClick={() => {
-              console.log('Sign In button clicked');
-              onSignInClick();
-            }}
-            sx={{ mt: 2 }}
-          >
-            Sign In to Access All Features
-          </Button>
-        </Box>
+        {!isAuthenticated && (
+          <Box sx={{ textAlign: 'center', mt: 4 }}>
+            <Typography variant="h5" gutterBottom>
+              Ready to get started?
+            </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              size="large"
+              onClick={() => {
+                handleSignIn();
+              }}
+              sx={{ mt: 2 }}
+            >
+              Sign In to Access All Features
+            </Button>
+          </Box>
+        )}
       </Paper>
     </Container>
   );
 };
 
 Welcome.propTypes = {
-  onSignInClick: PropTypes.func.isRequired,
+  onSignInClick: PropTypes.func,
 };
 
 export default Welcome;

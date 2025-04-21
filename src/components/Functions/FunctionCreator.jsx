@@ -25,7 +25,7 @@ import {
   Select,
   MenuItem
 } from '@mui/material';
-import ProgressText from './ProgressText';
+import ProgressText from '../Chat/ProgressText';
 
 const FUNCTION_PROMPT_TEMPLATE = `Generate a JSON object containing a proposed name, full description, input variables, example input and output for a new function that {{description}}. Ensure the response is a JSON object.
 

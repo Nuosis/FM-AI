@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Snackbar } from '@mui/material';
-import ProgressText from '../Functions/ProgressText';
+import ProgressText from './ProgressText';
 import axiosInstance from '../../utils/axios';
 import { createLog, LogType } from '../../redux/slices/appSlice';
-import { 
-  setTemperature, 
-  setSystemInstructions, 
-  setProvider, 
-  setModel 
+import {
+  setTemperature,
+  setSystemInstructions,
+  setProvider,
+  setModel,
+  setFetchAIModulesEnabled
 } from '../../redux/slices/llmSlice';
 import {
   Box,
@@ -58,15 +59,22 @@ const LLMChat = () => {
 
   // Fetch AI modules
   useEffect(() => {
+    // Check if fetching AI modules is enabled
+    if (!llmSettings.fetchAIModulesEnabled) {
+      dispatch(createLog('AI module fetching is disabled', LogType.INFO));
+      return;
+    }
+
     const fetchAIModules = async () => {
       setError(null);
       dispatch(createLog('Fetching AI modules...', LogType.INFO));
+      
       try {
         const response = await axiosInstance.get('/api/admin/modules/');
         const moduleArray = Array.isArray(response.data.response.data) ? response.data.response.data : [];
         
         // Filter modules that start with "AI:"
-        const aiModules = moduleArray.filter(module => 
+        const aiModules = moduleArray.filter(module =>
           module.fieldData.moduleName.startsWith('AI:')
         ).map(module => {
           const name = module.fieldData.moduleName.replace('AI:', '').trim();
@@ -90,14 +98,21 @@ const LLMChat = () => {
         }
       } catch (err) {
         const errorMessage = err.response?.data?.error || err.message;
-        console.error('Error fetching AI modules:', err);
+        const errorCode = err.code || 'UNKNOWN';
+        
+        // Disable fetching if we get a timeout error
+        if (errorCode === 'ECONNABORTED') {
+          dispatch(setFetchAIModulesEnabled(false));
+          dispatch(createLog('AI module fetching disabled due to timeout', LogType.WARNING));
+        }
+        
         dispatch(createLog(`Failed to fetch AI modules: ${errorMessage}`, LogType.ERROR));
         setError('Failed to load AI modules. Please try again.');
       }
     };
 
     fetchAIModules();
-  }, [dispatch, llmSettings.provider]);
+  }, [dispatch, llmSettings.provider, llmSettings.fetchAIModulesEnabled]);
 
   // Fetch available models when AI module is selected
   useEffect(() => {
@@ -199,8 +214,15 @@ const LLMChat = () => {
     }
   };
 
+  // Function to toggle AI module fetching
+  const toggleAIModuleFetching = () => {
+    const newValue = !llmSettings.fetchAIModulesEnabled;
+    dispatch(setFetchAIModulesEnabled(newValue));
+    dispatch(createLog(`AI module fetching ${newValue ? 'enabled' : 'disabled'}`, LogType.INFO));
+  };
+
   return (
-    <Box sx={{ 
+    <Box sx={{
       p: 4,
       height: '100vh',
       display: 'flex',
@@ -228,7 +250,14 @@ const LLMChat = () => {
         }}
       />
 
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3, gap: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3, gap: 2 }}>
+        <Button
+          variant="outlined"
+          color={llmSettings.fetchAIModulesEnabled ? "error" : "success"}
+          onClick={toggleAIModuleFetching}
+        >
+          {llmSettings.fetchAIModulesEnabled ? "Disable AI Module Fetching" : "Enable AI Module Fetching"}
+        </Button>
         <FormControl sx={{ minWidth: 200 }}>
           <InputLabel>AI Provider</InputLabel>
           <Select

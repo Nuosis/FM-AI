@@ -16,28 +16,12 @@ export const menuItems = [
     component: "LLMChat"
   },
   {
-    name: 'Functions',
-    path: 'functions',
-    view: 'functions',
-    iconType: 'Code',
+    name: 'Agents',
+    path: 'agents',
+    view: 'agents',
+    iconType: 'SmartToy',
     enabled: false,
-    component: "Functions"
-  },
-  {
-    name: 'Demo Files',
-    path: 'demofiles',
-    view: 'demofiles',
-    iconType: 'FileDownload',
-    enabled: true,
-    component: "DemoFiles"
-  },
-  {
-    name: 'RAG',
-    path: 'rag',
-    view: 'rag',
-    iconType: 'ManageSearch',
-    enabled: false,
-    component: "RAG"
+    component: "Agents"
   },
   {
     name: 'Tools',
@@ -48,11 +32,19 @@ export const menuItems = [
     component: "Tools"
   },
   {
-    name: 'Agents',
-    path: 'agents',
-    view: 'agents',
-    iconType: 'SmartToy',
+    name: 'RAG',
+    path: 'rag',
+    view: 'rag',
+    iconType: 'ManageSearch',
     enabled: false,
-    component: "Agents"
+    component: "RAG"
+  },
+  {
+    name: 'Demo Files',
+    path: 'demofiles',
+    view: 'demofiles',
+    iconType: 'FileDownload',
+    enabled: true,
+    component: "DemoFiles"
   }
 ];

@@ -66,7 +66,35 @@ const Layout = ({ children, onViewChange, currentView }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null);
   const [openItem, setOpenItem] = useState(null);
-  const [currentComponent, setCurrentComponent] = useState('Functions');
+  const [currentComponent, setCurrentComponent] = useState(() => {
+    // Initialize based on currentView
+    if (currentView === 'settings') return 'SettingsForm';
+    if (currentView === 'test') return 'TestSecureApiCall';
+    if (currentView === 'login' || currentView === 'register') return '';
+    
+    const menuItem = menuItems.find(item => item.view === currentView);
+    return menuItem?.component || '';
+  });
+  
+  // Update currentComponent when currentView changes
+  React.useEffect(() => {
+    if (currentView === 'settings') {
+      setCurrentComponent('SettingsForm');
+      return;
+    }
+    if (currentView === 'test') {
+      setCurrentComponent('TestSecureApiCall');
+      return;
+    }
+    if (currentView === 'login' || currentView === 'register') {
+      // These views are handled directly in App.jsx
+      return;
+    }
+    const menuItem = menuItems.find(item => item.view === currentView);
+    if (menuItem?.component) {
+      setCurrentComponent(menuItem.component);
+    }
+  }, [currentView]);
   const showLogViewer = useSelector(selectShowLogViewer);
   const { isAuthenticated } = useSelector((state) => state.auth);
 
@@ -144,8 +172,13 @@ const Layout = ({ children, onViewChange, currentView }) => {
         <Main id="main" isMobile={isMobile}>
           {currentView === 'login' || currentView === 'register' ? (
             children
-          ) : !isAuthenticated && currentView !== 'tools' ? (
-            <Welcome onSignInClick={() => handleViewChange('login')} />
+          ) : !isAuthenticated ? (
+            currentView === 'welcome' && !isAuthenticated ? (
+              <Welcome onSignInClick={() => handleViewChange('login')} />
+            ) : (
+              // Redirect unauthenticated users to welcome page if not on tools
+              currentView !== 'tools' && handleViewChange('welcome') && null
+            )
           ) : (
             currentComponent ? (
               componentMap[currentComponent] ? (

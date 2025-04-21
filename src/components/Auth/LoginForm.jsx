@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import supabase from '../../utils/supabase';
-import { useDispatch } from 'react-redux';
-import { loginSuccess } from '../../redux/slices/authSlice';
+import { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { signInWithEmail } from '../../redux/slices/authSlice';
+import supabaseService from '../../services/supabaseService';
 import {
   Box,
   TextField,
@@ -47,103 +47,55 @@ const LoginForm = ({ onViewChange }) => {
     setSuccess(false);
   };
 
+  // Get auth state from Redux
+  const { loading: authLoading, error: authError, isAuthenticated, user } = useSelector(state => state.auth);
+  
+  // Update local state based on Redux state
+  useEffect(() => {
+    if (authLoading !== loading) {
+      setLoading(authLoading);
+    }
+    
+    if (authError && authError !== error) {
+      setError(authError);
+      setSuccess(false);
+    }
+    
+    if (isAuthenticated && user) {
+      setSuccess(true);
+      setError('');
+      
+      // Redirect to LLMChat view after successful login
+      setTimeout(() => {
+        onViewChange && onViewChange('chat');
+      }, 1000);
+    }
+  }, [authLoading, authError, isAuthenticated, user, loading, error, onViewChange]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setSuccess(false);
-
+    
     if (!formData.email || !formData.password) {
       setError('Email and password are required.');
       return;
     }
-
-    setLoading(true);
-
-    // Check if we're in development environment
-    const isDevelopment = import.meta.env.VITE_ENVIRONMENT?.toLowerCase() === 'development' ||
-                          import.meta.env.MODE === 'development';
     
-    // Check if auth mocking is enabled via environment variable
-    const shouldMockAuth = isDevelopment &&
-                          (import.meta.env.VITE_AD_AUTH_MOCK === 'true' ||
-                           import.meta.env.VITE_AD_AUTH_MOCK === true);
-
-    if (isDevelopment && shouldMockAuth) {
-      // Simulate successful login in development mode when mocking is enabled
-      setLoading(false);
-      setSuccess(true);
-      
-      // Create mock session and user data
-      const mockSession = {
-        access_token: 'mock-access-token',
-        refresh_token: 'mock-refresh-token',
-        expires_at: Date.now() + 3600000, // 1 hour from now
-      };
-      
-      const mockUser = {
-        id: 'dev-user-id',
-        email: formData.email,
-        user_metadata: {
-          full_name: 'Development User',
-        },
-        organization_id: '9816c057-b5d3-43a2-848f-99365ee6255e', // Using the org ID from .env
-      };
-      
-      // Dispatch Redux action to update auth state
-      dispatch(loginSuccess({
-        session: mockSession,
-        user: {
-          ...mockUser,
-          org_id: mockUser.organization_id
-        }
-      }));
-      
-      // Redirect to Functions view after successful login
-      setTimeout(() => {
-        onViewChange && onViewChange('functions');
-      }, 1000); // Short delay to show success message
-      
-      return;
-    }
+    // Clear any previous errors
+    setError('');
+    setSuccess(false);
     
-    // Normal authentication flow for non-development environments
-    const { data, error } = await supabase.auth.signInWithPassword({
+    // Use the Redux thunk for authentication
+    dispatch(signInWithEmail({
       email: formData.email,
-      password: formData.password,
-    });
-    setLoading(false);
-
-    if (error) {
-      setError(error.message || 'Authentication failed.');
-    } else {
-      setSuccess(true);
-      
-      // Get user data from Supabase
-      const { data: userData, error: userError } = await supabase
-        .from('Users')
-        .select('*')
-        .eq('id', data.user.id)
-        .single();
-      
-      if (!userError) {
-        // Dispatch Redux action to update auth state
-        dispatch(loginSuccess({
-          session: data.session,
-          user: {
-            ...data.user,
-            ...userData,
-            org_id: userData.organization_id
-          }
-        }));
-      }
-      
-      // Redirect to Functions view after successful login
-      setTimeout(() => {
-        onViewChange && onViewChange('functions');
-      }, 1000); // Short delay to show success message
-    }
+      password: formData.password
+    }));
   };
 
+  /**
+   * Handles password reset form submission.
+   * @param {React.FormEvent} e - The form event.
+   * @returns {Promise<void>}
+   */
   const handleResetPassword = async (e) => {
     e.preventDefault();
     setResetError('');
@@ -155,13 +107,23 @@ const LoginForm = ({ onViewChange }) => {
     }
 
     setResetLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail);
-    setResetLoading(false);
-
-    if (error) {
-      setResetError(error.message || 'Failed to send reset email.');
-    } else {
+    
+    try {
+      // We'll keep this direct call since there's no Redux thunk for password reset
+      // In a complete refactoring, we would add a resetPassword thunk to authSlice
+      const { error } = await supabaseService.executeQuery(supabase =>
+        supabase.auth.resetPasswordForEmail(resetEmail)
+      );
+      
+      if (error) {
+        throw error;
+      }
+      
       setResetSuccess(true);
+    } catch (error) {
+      setResetError(error.message || 'Failed to send reset email.');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -304,6 +266,14 @@ const LoginForm = ({ onViewChange }) => {
     </Container>
   );
 };
+/**
+ * LoginForm component for user authentication.
+ *
+ * @component
+ * @param {Object} props
+ * @param {function} props.onViewChange - Callback to change the current view.
+ * @returns {JSX.Element}
+ */
 LoginForm.propTypes = {
   onViewChange: PropTypes.func
 };

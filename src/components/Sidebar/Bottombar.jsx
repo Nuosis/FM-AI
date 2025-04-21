@@ -14,7 +14,7 @@ import {
   Logout as LogoutIcon
 } from '@mui/icons-material';
 import { createLog, LogType } from '../../redux/slices/appSlice';
-import { logoutSuccess } from '../../redux/slices/authSlice';
+import { logoutSuccess, signOut } from '../../redux/slices/authSlice';
 import DropUpMenu from './DropUpMenu';
 
 const BottomBarContainer = styled('div')({
@@ -310,17 +310,14 @@ const BottomBar = ({
               data-path="logout"
               onClick={async () => {
                 try {
-                  await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/logout`, {
-                    method: 'POST',
-                    credentials: 'include'
-                  });
-                  dispatch(logoutSuccess());
+                  // Dispatch the signOut thunk to properly use Supabase's logout mechanism
+                  await dispatch(signOut());
                   dispatch(createLog('User logged out successfully', LogType.INFO));
                   handleViewChange('login');
                 } catch (error) {
                   console.error('Logout error:', error);
                   dispatch(createLog('Logout failed: ' + error.message, LogType.ERROR));
-                  // Still logout on error since server handles the token
+                  // Still update Redux state on error
                   dispatch(logoutSuccess());
                   handleViewChange('login');
                 }

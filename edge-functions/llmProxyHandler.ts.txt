@@ -4,6 +4,12 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { corsHeaders } from "./cors.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
+
+// Initialize Supabase client
+const supabaseUrl = Deno.env.get("SUPABASE_URL");
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // Provider endpoints and API key environment variables
 const PROVIDER_CONFIG = {
@@ -16,7 +22,7 @@ const PROVIDER_CONFIG = {
     key: Deno.env.get("ANTHROPIC_API_KEY"),
   },
   gemini: {
-    endpoint: "https://generativelanguage.googleapis.com/v1beta",
+    endpoint: "https://generativelanguage.googleapis.com/v1",
     key: Deno.env.get("GEMINI_API_KEY"),
   },
   lmstudio: {
@@ -66,7 +72,7 @@ async function proxyRequest(provider: string, type: string, body: any, headers: 
   switch (provider) {
     case "openai":
       if (type === "chat") {
-        url += "/v1/responses";
+        url += "/chat/completions";
         reqBody = {
           model: body.model,
           messages: body.messages,
@@ -116,8 +122,14 @@ async function proxyRequest(provider: string, type: string, body: any, headers: 
       if (type === "chat") {
         url += `/models/${body.model}:generateContent?key=${config.key}`;
         reqBody = {
-          contents: [{ parts: [{ text: body.prompt }] }],
-          ...body.options,
+          contents: body.messages.map(msg => ({
+            role: msg.role,
+            parts: [{ text: msg.content }]
+          })),
+          generationConfig: {
+            temperature: body.options?.temperature || 0.7,
+            ...body.options
+          }
         };
       } else if (type === "embeddings") {
         url += `/models/${body.model}:embedContent?key=${config.key}`;
@@ -194,6 +206,28 @@ async function proxyRequest(provider: string, type: string, body: any, headers: 
   return { status: resp.status, data };
 }
 
+// Function to get API key from llm_api_keys table
+async function getApiKeyFromDatabase(userId: string, provider: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('llm_api_keys')
+      .select('api_key')
+      .eq('user_id', userId)
+      .eq('provider', provider)
+      .single();
+    
+    if (error) {
+      console.error('Error fetching API key:', error);
+      return null;
+    }
+    
+    return data?.api_key || null;
+  } catch (err) {
+    console.error('Exception fetching API key:', err);
+    return null;
+  }
+}
+
 serve(async (req) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -208,7 +242,23 @@ serve(async (req) => {
       headers: corsHeaders,
     });
   }
-  // Optionally: validate JWT here
+  
+  // Extract JWT token and verify
+  const authToken = authHeader.replace('Bearer ', '');
+  
+  // Verify JWT and get user ID
+  let userId: string;
+  try {
+    // Decode JWT to get user ID
+    const { data: userData, error } = await supabase.auth.getUser(authToken);
+    if (error) throw error;
+    userId = userData.user.id;
+  } catch (err) {
+    return new Response(JSON.stringify({ error: "Invalid authentication token" }), {
+      status: 401,
+      headers: corsHeaders,
+    });
+  }
 
   // Rate limiting by IP
   const ip = req.headers.get("x-forwarded-for") || "unknown";
@@ -239,8 +289,52 @@ serve(async (req) => {
   }
 
   try {
+    // Try to get API key from database first
+    const dbApiKey = await getApiKeyFromDatabase(userId, provider);
+    
+    // Use API key from database if available, otherwise fall back to environment variable
+    if (dbApiKey) {
+      PROVIDER_CONFIG[provider].key = dbApiKey;
+    }
+    // If no key in database or environment, check if provided in Authorization
+    else if (!PROVIDER_CONFIG[provider].key) {
+      PROVIDER_CONFIG[provider].key = authToken;
+    }
+    
+    // If still no API key and provider requires one, return error
+    if (!PROVIDER_CONFIG[provider].key && provider !== "lmstudio" && provider !== "ollama") {
+      return new Response(JSON.stringify({ error: `No API key available for ${provider}` }), {
+        status: 400,
+        headers: corsHeaders,
+      });
+    }
+    
     const { status, data } = await proxyRequest(provider, rest.type, rest, req.headers);
-    return new Response(JSON.stringify(data), {
+    
+    // Format response to match what the frontend expects
+    let formattedResponse = data;
+    if (rest.type === "chat") {
+      // Format based on provider
+      if (provider === "openai") {
+        formattedResponse = {
+          content: data.choices?.[0]?.message?.content || "No response"
+        };
+      } else if (provider === "anthropic") {
+        formattedResponse = {
+          content: data.content?.[0]?.text || "No response"
+        };
+      } else if (provider === "gemini") {
+        formattedResponse = {
+          content: data.candidates?.[0]?.content?.parts?.[0]?.text || "No response"
+        };
+      } else if (provider === "lmstudio" || provider === "ollama") {
+        formattedResponse = {
+          content: data.choices?.[0]?.message?.content || data.message?.content || "No response"
+        };
+      }
+    }
+    
+    return new Response(JSON.stringify(formattedResponse), {
       status,
       headers: corsHeaders,
     });
