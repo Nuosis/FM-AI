@@ -167,17 +167,22 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
     };
     setFormData(newFormData);
     
-    // Reset API key verification
-    setIsApiKeyVerified(!!apiKey);
+    // Check if the provider is Ollama (which doesn't require an API key)
+    const isOllama = config.provider?.toLowerCase() === 'ollama';
     
-    // If we have a valid API key, fetch all available models from the provider
-    if (apiKey) {
-      // Set loading state
-      setIsVerifyingApiKey(true);
-      
+    // For Ollama, set API key verification to true regardless of whether there's an API key
+    // For other providers, only set to true if there's an API key
+    setIsApiKeyVerified(isOllama || !!apiKey);
+    
+    // Set loading state
+    setIsVerifyingApiKey(true);
+    
+    // For Ollama, fetch models even if there's no API key
+    // For other providers, only fetch if there's an API key
+    if (isOllama || apiKey) {
       // Fetch available models
       llmProviderService.verifyApiKey(
-        apiKey,
+        apiKey, // This will be empty for Ollama, which is fine
         config.provider,
         config.baseUrl || '',
         userId,
@@ -212,11 +217,23 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
   
   // Memoize handleDeleteConfig to prevent unnecessary re-renders
   const handleDeleteConfig = useCallback(async (configId) => {
-    if (!userId) return;
+    console.log('[LLMProviderSettings] handleDeleteConfig called with configId:', configId);
+    
+    if (!userId) {
+      console.error('[LLMProviderSettings] Cannot delete config: No userId available');
+      return;
+    }
     
     setIsLoading(true);
     
     try {
+      console.log('[LLMProviderSettings] Calling deleteProviderConfig with:', {
+        configId,
+        providerConfigsCount: providerConfigs.length,
+        userId,
+        isAuthMock
+      });
+      
       const result = await llmProviderService.deleteProviderConfig(
         configId,
         providerConfigs,
@@ -224,6 +241,8 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
         userPreferences,
         isAuthMock
       );
+      
+      console.log('[LLMProviderSettings] deleteProviderConfig result:', result);
       
       setProviderConfigs(result.updatedConfigs);
       
@@ -304,10 +323,8 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
   
   // Memoize verification function to prevent unnecessary re-renders
   const verifyApiKey = useCallback(async (apiKey) => {
-    if (!apiKey || apiKey.trim() === '') {
-      setApiKeyError('API key is required');
-      return;
-    }
+    // Check if the provider is Ollama (which doesn't require an API key)
+    const isOllama = formData.provider?.toLowerCase() === 'ollama';
     
     if (!formData.provider) {
       setApiKeyError('Please select a provider first');
@@ -319,12 +336,18 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
       return;
     }
     
+    // For non-Ollama providers, API key is required
+    if (!isOllama && (!apiKey || apiKey.trim() === '')) {
+      setApiKeyError('API key is required');
+      return;
+    }
+    
     setIsVerifyingApiKey(true);
     setApiKeyError('');
     
     try {
       const models = await llmProviderService.verifyApiKey(
-        apiKey,
+        apiKey, // This will be empty for Ollama, which is fine
         formData.provider,
         formData.baseUrl,
         userId,
@@ -337,7 +360,11 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
       setIsApiKeyVerified(true);
       
       if (onSuccess) {
-        onSuccess('API key verified successfully');
+        if (isOllama) {
+          onSuccess('Successfully connected to Ollama');
+        } else {
+          onSuccess('API key verified successfully');
+        }
       }
     } catch (err) {
       setIsApiKeyVerified(false);
@@ -350,6 +377,56 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
       setIsVerifyingApiKey(false);
     }
   }, [formData.provider, formData.baseUrl, isAuthMock, userId, onSuccess, onError]);
+  
+  // Memoize deleteApiKey function to avoid recreating on every render
+  const deleteApiKey = useCallback(async () => {
+    console.log('[LLMProviderSettings] deleteApiKey called for provider:', formData.provider);
+    
+    if (!userId || !formData.provider) {
+      console.error('[LLMProviderSettings] Cannot delete API key: No userId or provider available');
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      // Delete the API key from the database
+      const { error } = await supabase
+        .from('llm_api_keys')
+        .delete()
+        .eq('user_id', userId)
+        .eq('provider', formData.provider.toLowerCase());
+      
+      if (error) {
+        console.error('[LLMProviderSettings] Error deleting API key:', error);
+        if (onError) {
+          onError(`Failed to delete API key: ${error.message}`);
+        }
+        return;
+      }
+      
+      // Reset the API key verification state
+      setIsApiKeyVerified(false);
+      setApiKeyError('');
+      
+      // Clear the API key in the form
+      setFormData(prev => ({
+        ...prev,
+        apiKey: ''
+      }));
+      
+      if (onSuccess) {
+        onSuccess('API key deleted successfully');
+      }
+    } catch (error) {
+      console.error('[LLMProviderSettings] Error deleting API key:', error);
+      if (onError) {
+        onError(`Failed to delete API key: ${error.message}`);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId, formData.provider, onSuccess, onError]);
   
   // Memoize save function to avoid recreating on every render
   const saveProviderConfig = useCallback(async () => {
@@ -686,6 +763,7 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
           isVerifyingApiKey={isVerifyingApiKey}
           apiKeyError={apiKeyError}
           onVerifyApiKey={verifyApiKey}
+          onDeleteApiKey={deleteApiKey}
           availableModels={availableModels}
           apiKeyStorage={apiKeyStorage}
         />

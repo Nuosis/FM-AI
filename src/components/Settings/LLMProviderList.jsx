@@ -31,6 +31,7 @@ const LLMProviderList = ({
 
   // Memoize handleDelete to prevent unnecessary re-renders
   const handleDelete = useCallback((configId) => {
+    console.log('[LLMProviderList] Delete button clicked for configId:', configId);
     onDelete(configId);
   }, [onDelete]);
 
@@ -93,7 +94,10 @@ const LLMProviderList = ({
                   </IconButton>
                   <IconButton
                     edge="end"
-                    onClick={() => handleDelete(config.id)}
+                    onClick={() => {
+                      console.log('[LLMProviderList] Delete IconButton clicked for config:', config);
+                      handleDelete(config.id);
+                    }}
                     disabled={isLoading}
                   >
                     <DeleteIcon fontSize="small" />

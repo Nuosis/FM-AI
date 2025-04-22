@@ -105,19 +105,32 @@ const llmProviderService = {
    * @returns {Promise<Object>} - Updated configurations and preferences
    */
   deleteProviderConfig: async (configId, providerConfigs, userId, userPreferences, isAuthMock) => {
+    console.log('[llmProviderService] deleteProviderConfig called with:', {
+      configId,
+      providerConfigsCount: providerConfigs?.length || 0,
+      userId,
+      isAuthMock
+    });
+    
     if (!userId) {
+      console.error('[llmProviderService] Error: User ID is required');
       throw new Error('User ID is required');
     }
     
     try {
       // Filter out the config to delete
+      const configToDelete = providerConfigs.find(config => config.id === configId);
+      console.log('[llmProviderService] Config to delete:', configToDelete);
+      
       const updatedConfigs = providerConfigs.filter(config => config.id !== configId);
+      console.log('[llmProviderService] Updated configs count:', updatedConfigs.length);
       
       if (isAuthMock) {
         console.log('[MOCK] Deleting provider config from user_preferences', configId);
         return { updatedConfigs };
       } else {
         // Update in Supabase
+        console.log('[llmProviderService] Updating Supabase with new configs');
         const { error } = await supabaseService.executeQuery(supabase =>
           supabase
             .from('user_preferences')
@@ -131,14 +144,21 @@ const llmProviderService = {
             .select()
         );
           
-        if (error) throw error;
+        if (error) {
+          console.error('[llmProviderService] Error updating configs in Supabase:', error);
+          throw error;
+        }
         
         // Check if we're deleting the current default provider
         const currentLlmPreferences = userPreferences.llm_preferences || {};
         const deletedConfig = providerConfigs.find(config => config.id === configId);
+        console.log('[llmProviderService] Deleted config:', deletedConfig);
+        console.log('[llmProviderService] Current default provider:', currentLlmPreferences.defaultProvider);
+        
         let updatedLlmPreferences = currentLlmPreferences;
         
         if (deletedConfig && deletedConfig.provider === currentLlmPreferences.defaultProvider) {
+          console.log('[llmProviderService] Deleted config was the default provider, updating default provider');
           // Find a new default provider or set to empty
           const newDefaultProvider = updatedConfigs.length > 0 ? updatedConfigs[0].provider : '';
           
@@ -162,13 +182,15 @@ const llmProviderService = {
           );
         }
         
-        return { 
+        console.log('[llmProviderService] Successfully deleted provider config');
+        return {
           updatedConfigs,
           updatedLlmPreferences
         };
       }
     } catch (error) {
       console.error('[llmProviderService] Error deleting provider config:', error);
+      console.error('[llmProviderService] Error details:', error.message, error.stack);
       throw error;
     }
   },
@@ -190,8 +212,11 @@ const llmProviderService = {
     }
     
     try {
-      // Store API key if provided
-      if (formData.apiKey) {
+      // Check if the provider is Ollama (which doesn't require an API key)
+      const isOllama = formData.provider?.toLowerCase() === 'ollama';
+      
+      // Store API key if provided and not Ollama
+      if (formData.apiKey && !isOllama) {
         storeApiKey(formData.provider, formData.apiKey, apiKeyStorage, isAuthMock);
       }
       
@@ -227,6 +252,7 @@ const llmProviderService = {
             small: formData.models.embedding.small || ''
           }
         },
+        baseUrl: formData.baseUrl || '',
         description: autoDescription
       };
       
@@ -307,16 +333,28 @@ const llmProviderService = {
    * @returns {Promise<Array>} - Array of available models
    */
   verifyApiKey: async (apiKey, provider, baseUrl, userId, isAuthMock) => {
-    if (!apiKey || apiKey.trim() === '') {
-      throw new Error('API key is required');
-    }
-    
+    // Check if provider is specified
     if (!provider) {
       throw new Error('Please select a provider first');
     }
     
+    // Check if userId is specified
     if (!userId) {
       throw new Error('User ID is required');
+    }
+    
+    // Convert provider to lowercase for consistent comparison
+    const providerLower = provider.toLowerCase();
+    
+    // Special handling for Ollama - no API key required
+    const isOllama = providerLower === 'ollama';
+    
+    // Special handling for LM Studio - API key required but direct call
+    const isLMStudio = providerLower === 'lmstudio';
+    
+    // For non-Ollama providers, API key is required
+    if (!isOllama && (!apiKey || apiKey.trim() === '')) {
+      throw new Error('API key is required');
     }
     
     try {
@@ -325,19 +363,147 @@ const llmProviderService = {
         await new Promise((resolve) => setTimeout(resolve, 800));
         
         // Mock logic: accept any non-empty key, but you can add real checks here
-        if (apiKey.length < 8) {
+        if (!isOllama && apiKey.length < 8) {
           throw new Error('API key is invalid or too short.');
         }
         
         // Mock models list
         return ['gpt-3.5-turbo', 'gpt-4', 'claude-3-opus', 'claude-3-sonnet'];
+      } else if (isOllama || isLMStudio) {
+        // For Ollama and LM Studio, make direct calls to localhost
+        
+        // Save API key for LM Studio (not needed for Ollama)
+        if (isLMStudio && apiKey) {
+          const { error: saveError } = await supabase
+            .from('llm_api_keys')
+            .upsert({
+              user_id: userId,
+              provider: providerLower,
+              api_key: apiKey,
+              verified: true
+            }, {
+              onConflict: 'user_id,provider'
+            });
+            
+          if (saveError) {
+            throw new Error(`Failed to save API key: ${saveError.message}`);
+          }
+        }
+        
+        // Get provider config from providerEndpoints.js
+        const { getProviderConfig } = await import('../utils/providerEndpoints');
+        const providerConfig = getProviderConfig(provider);
+        
+        if (!providerConfig) {
+          throw new Error(`Provider configuration not found for ${provider}`);
+        }
+        
+        // We don't need to use the endpoint variable directly since we're using specific endpoints for each provider
+        
+        // For Ollama, fetch models directly from localhost
+        if (isOllama) {
+          try {
+            console.log('[llmProviderService] Attempting to verify Ollama connection');
+            
+            // Ollama uses a different endpoint for listing models
+            // Always use the proxy server to avoid CORS issues
+            let modelsEndpoint = 'http://localhost:3500/ollama/api/tags';
+            
+            // If a custom base URL is provided, pass it as a query parameter
+            if (baseUrl && baseUrl.trim() !== '') {
+              console.log(`[llmProviderService] Using custom base URL for Ollama: ${baseUrl}`);
+              modelsEndpoint = `http://localhost:3500/ollama/api/tags?baseUrl=${encodeURIComponent(baseUrl.trim())}`;
+            }
+            
+            console.log('[llmProviderService] Fetching Ollama models from:', modelsEndpoint);
+            
+            const response = await fetch(modelsEndpoint);
+            console.log('[llmProviderService] Ollama response status:', response.status, response.statusText);
+            
+            if (!response.ok) {
+              console.error('[llmProviderService] Failed response from Ollama:', response.status, response.statusText);
+              throw new Error(`Failed to fetch models from Ollama: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            console.log('[llmProviderService] Ollama response data:', data);
+            
+            const models = data.models || [];
+            console.log('[llmProviderService] Extracted models array:', models);
+            
+            // Extract model names from Ollama response
+            const modelNames = models.map(model => model.name || model);
+            console.log('[llmProviderService] Extracted model names:', modelNames);
+            
+            if (!modelNames || modelNames.length === 0) {
+              console.error('[llmProviderService] No models found in Ollama response');
+              throw new Error('No models found for Ollama. Make sure Ollama is running.');
+            }
+            
+            console.log('[llmProviderService] Successfully verified Ollama connection with', modelNames.length, 'models');
+            return modelNames;
+          } catch (error) {
+            console.error('[llmProviderService] Error fetching Ollama models:', error);
+            console.error('[llmProviderService] Error details:', error.message);
+            throw new Error(`Failed to connect to Ollama: ${error.message}. Make sure Ollama is running and the local LLM proxy server is active.`);
+          }
+        }
+        
+        // For LM Studio, fetch models directly from localhost
+        if (isLMStudio) {
+          try {
+            // LM Studio is OpenAI-compatible, so we use the models endpoint
+            // Always use the proxy server to avoid CORS issues
+            let modelsEndpoint = 'http://localhost:3500/lmstudio/v1/models';
+            
+            // If a custom base URL is provided, pass it as a query parameter
+            if (baseUrl && baseUrl.trim() !== '') {
+              console.log(`[llmProviderService] Using custom base URL for LM Studio: ${baseUrl}`);
+              modelsEndpoint = `http://localhost:3500/lmstudio/v1/models?baseUrl=${encodeURIComponent(baseUrl.trim())}`;
+            }
+            
+            console.log(`[llmProviderService] Connecting to LM Studio at: ${modelsEndpoint}`);
+            
+            const headers = {
+              'Content-Type': 'application/json'
+            };
+            
+            // Add authorization header if API key is provided
+            if (apiKey) {
+              headers['Authorization'] = `Bearer ${apiKey}`;
+            }
+            
+            const response = await fetch(modelsEndpoint, { headers });
+            
+            if (!response.ok) {
+              throw new Error(`Failed to fetch models from LM Studio: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            const models = data.data || [];
+            
+            // Extract model IDs from LM Studio response (OpenAI format)
+            const modelIds = models.map(model => model.id);
+            
+            if (!modelIds || modelIds.length === 0) {
+              throw new Error('No models found for LM Studio. Make sure LM Studio is running.');
+            }
+            
+            return modelIds;
+          } catch (error) {
+            console.error('[llmProviderService] Error fetching LM Studio models:', error);
+            throw new Error(`Failed to connect to LM Studio: ${error.message}. Make sure LM Studio is running and the local LLM proxy server is active.`);
+          }
+        }
       } else {
+        // For other providers, use the existing edge function approach
+        
         // Step 1: Save the API key to the llm_api_keys table
         const { error: saveError } = await supabase
           .from('llm_api_keys')
           .upsert({
             user_id: userId,
-            provider: provider.toLowerCase(),
+            provider: providerLower,
             api_key: apiKey,
             verified: true // Set verified to true on successful verification
           }, {
@@ -359,7 +525,7 @@ const llmProviderService = {
         // Step 3: Call the llmProxyHandler edge function to verify the key and get models
         const { data: stringResponseData, error } = await supabase.functions.invoke('llmProxyHandler', {
           body: {
-            provider: provider.toLowerCase(),
+            provider: providerLower,
             type: 'models',
             baseUrl: baseUrl || null
           }
@@ -377,12 +543,12 @@ const llmProviderService = {
         // Extract models from the response based on provider
         let models = [];
         
-        if (provider.toLowerCase() === 'openai') {
+        if (providerLower === 'openai') {
           // For OpenAI, handle both chat and embedding models
           models = responseData.data?.map(model => model.id) || [];
-        } else if (provider.toLowerCase() === 'anthropic') {
+        } else if (providerLower === 'anthropic') {
           models = responseData.data?.map(model => model.id) || [];
-        } else if (provider.toLowerCase() === 'gemini') {
+        } else if (providerLower === 'gemini') {
           // For Gemini, extract model names from the response
           if (responseData.models) {
             models = responseData.models.map(model => model.name) || [];

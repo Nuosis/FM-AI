@@ -61,6 +61,15 @@ const LLMProviderForm = ({
       apiKey
     });
   }, [formData, onFormDataChange]);
+  
+  // Handle base URL change
+  const handleBaseUrlChange = useCallback((baseUrl) => {
+    onFormDataChange({
+      ...formData,
+      baseUrl
+    });
+  }, [formData, onFormDataChange]);
+  
 
   // Handle model type change
   const handleModelTypeChange = useCallback((event, newModelType) => {
@@ -106,11 +115,14 @@ const LLMProviderForm = ({
     });
   }, [formData, onFormDataChange]);
 
+  // Check if the provider is Ollama (which doesn't require an API key)
+  const isOllama = formData.provider?.toLowerCase() === 'ollama';
+
   // Determine if save button should be disabled
-  const isSaveDisabled = 
+  const isSaveDisabled =
     isLoading ||
     !formData.provider ||
-    !isApiKeyVerified ||
+    (!isOllama && !isApiKeyVerified) || // Skip API key verification for Ollama
     (isApiKeyVerified && formData.modelType === 'chat' && !formData.models.chat.strong) ||
     (isApiKeyVerified && formData.modelType === 'embedding' && !formData.models.embedding.large);
 
@@ -139,6 +151,9 @@ const LLMProviderForm = ({
           error={apiKeyError}
           disabled={isLoading}
           storageType={apiKeyStorage}
+          provider={formData.provider}
+          baseUrl={formData.baseUrl}
+          onBaseUrlChange={handleBaseUrlChange}
         />
         
         {/* Reveal model selection and baseUrl only if API key is verified */}
@@ -184,6 +199,7 @@ const LLMProviderForm = ({
                 disabled={isLoading}
               />
             )}
+            
           </>
         )}
         

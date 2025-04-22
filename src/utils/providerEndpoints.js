@@ -29,7 +29,7 @@ export const PROVIDERS = {
   },
   LMSTUDIO: {
     name: 'LM Studio',
-    endpoint: 'http://localhost:1234/v1/chat/completions', // Default LM Studio local endpoint
+    endpoint: 'http://localhost:3500/lmstudio/v1/chat/completions', // LM Studio through proxy server
     headers: {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer {apiKey}' // apiKey will be replaced at runtime
@@ -37,7 +37,7 @@ export const PROVIDERS = {
   },
   OLLAMA: {
     name: 'Ollama',
-    endpoint: 'http://localhost:11434/api/chat', // Default Ollama local endpoint
+    endpoint: 'http://localhost:3500/ollama/api/chat', // Ollama through proxy server
     headers: {
       'Content-Type': 'application/json'
       // Ollama typically doesn't require an API key for local usage
