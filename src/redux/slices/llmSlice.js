@@ -28,8 +28,7 @@ const getInitialState = () => {
     defaultProvider: 'openAI', // 'openAI', 'anthropic', 'gemini', 'lmStudio', 'ollama'
     preferredStrongModel: '',
     preferredWeakModel: '',
-    apiKeyStorage: 'local', // 'session', 'local', 'saved',
-    fetchAIModulesEnabled: true, // Flag to control AI module fetching
+    apiKeyStorage: 'local', // 'session', 'local', 'saved'
   };
 };
 
@@ -42,10 +41,6 @@ const llmSlice = createSlice({
     _debugLog: (state, action) => {
       console.log('[llmSlice] Reducer called. State reference:', state);
       return state;
-    },
-    setFetchAIModulesEnabled: (state, action) => {
-      state.fetchAIModulesEnabled = action.payload;
-      localStorage.setItem('llmSettings', JSON.stringify(state));
     },
     setTemperature: (state, action) => {
       state.temperature = action.payload;
@@ -105,8 +100,7 @@ export const {
   setPreferredStrongModel,
   setPreferredWeakModel,
   setApiKeyStorage,
-  deleteSavedApiKey,
-  setFetchAIModulesEnabled
+  deleteSavedApiKey
 } = llmSlice.actions;
 
 export default llmSlice.reducer;

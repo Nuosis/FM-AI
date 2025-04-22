@@ -13,7 +13,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // Provider endpoints and API key environment variables
 const PROVIDER_CONFIG = {
-  openai: {https://supabase.com/dashboard/project/koxofrstjtsywvgflhyu/functions/llmProxyHandler/logs?log=153c47eb-ea31-439f-9c03-82f8f36e8f20
+  openai: {
     endpoint: "https://api.openai.com/v1",
     key: Deno.env.get("OPENAI_API_KEY"),
   },
@@ -92,6 +92,8 @@ async function proxyRequest(provider: string, type: string, body: any, headers: 
       reqHeaders = {
         "Authorization": `Bearer ${config.key}`,
         "Content-Type": "application/json",
+        "OpenAI-Beta": "assistants=v1",  // For newer features
+        "OpenAI-Organization": Deno.env.get("OPENAI_ORG_ID") || "", // Optional organization ID
       };
       break;
     case "anthropic":
@@ -204,6 +206,12 @@ async function proxyRequest(provider: string, type: string, body: any, headers: 
 
   const resp = await fetch(url, fetchOptions);
   const data = await resp.json();
+  
+  // Log detailed error information for debugging
+  if (resp.status >= 400) {
+    console.error(`API Error (${provider}): Status ${resp.status}`, data);
+  }
+  
   return { status: resp.status, data };
 }
 
@@ -280,7 +288,9 @@ serve(async (req) => {
     });
   }
 
-  const { provider, ...rest } = body;
+  const { provider: rawProvider, ...rest } = body;
+  // Normalize provider to lowercase for case-insensitive comparison
+  const provider = rawProvider?.toLowerCase();
   const validationError = validateInput(provider, rest);
   if (validationError) {
     return new Response(JSON.stringify({ error: validationError }), {
@@ -292,6 +302,9 @@ serve(async (req) => {
   try {
     // Try to get API key from database first
     const dbApiKey = await getApiKeyFromDatabase(userId, provider);
+    
+    // Log provider for debugging
+    console.log(`Processing request for provider: ${provider} (original: ${rawProvider})`);
     
     // Use API key from database if available, otherwise fall back to environment variable
     if (dbApiKey) {
@@ -310,7 +323,8 @@ serve(async (req) => {
       });
     }
     
-    const { status, data } = await proxyRequest(provider, rest.type, rest, req.headers);
+    try {
+      const { status, data } = await proxyRequest(provider, rest.type, rest, req.headers);
     
     // Format response to match what the frontend expects
     let formattedResponse = data;
@@ -335,12 +349,32 @@ serve(async (req) => {
       }
     }
     
+    // If there was an error from the provider API, include the error details in the response
+    if (status >= 400) {
+      console.error(`Provider API Error (${provider}):`, data);
+      return new Response(JSON.stringify({
+        error: data.error?.message || "Provider API error",
+        details: data.error || data,
+        provider: provider,
+        model: rest.model
+      }), {
+        status,
+        headers: corsHeaders,
+      });
+    }
+    
     return new Response(JSON.stringify(formattedResponse), {
       status,
       headers: corsHeaders,
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
+    console.error(`Edge function error:`, err);
+    return new Response(JSON.stringify({
+      error: err.message,
+      stack: err.stack,
+      provider: provider,
+      model: rest?.model
+    }), {
       status: 500,
       headers: corsHeaders,
     });

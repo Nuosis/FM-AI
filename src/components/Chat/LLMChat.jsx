@@ -2,14 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Snackbar } from '@mui/material';
 import ProgressText from './ProgressText';
-import axiosInstance from '../../utils/axios';
+import supabase from '../../utils/supabase';
 import { createLog, LogType } from '../../redux/slices/appSlice';
 import {
   setTemperature,
   setSystemInstructions,
   setProvider,
   setModel,
-  setFetchAIModulesEnabled
 } from '../../redux/slices/llmSlice';
 import {
   Box,
@@ -21,32 +20,32 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
   Slider,
   Stack
 } from '@mui/material';
 import {
   Send as SendIcon,
-  Settings as SettingsIcon
+  Menu as MenuIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 
 const LLMChat = () => {
   const dispatch = useDispatch();
-  const organizationId = useSelector(state => state.auth.user?.org_id);
   // const isAuthenticated = useSelector(state => state.auth.isAuthenticated);
   const llmSettings = useSelector(state => state.llm);
+  // Get user preferences for LLM
+  const userLlmPreferences = useSelector(state => state.auth.user?.preferences?.llm_preferences || {});
+  const userLlmProviders = useSelector(state => state.auth.user?.preferences?.llm_providers || []);
+  const [providers, setProviders] = useState([]);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [error, setError] = useState(null);
-  const [aiModules, setAiModules] = useState([]);
-  const [selectedModule, setSelectedModule] = useState('');
-  const [models, setModels] = useState([]);
+  // Removed legacy AI module fetching state
+  const [selectedProvider, setSelectedProvider] = useState(userLlmPreferences.defaultProvider?.toLowerCase() || '');
   const [selectedModel, setSelectedModel] = useState('');
+  const [providerModels, setProviderModels] = useState([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsPanelWidth, setSettingsPanelWidth] = useState(0);
   const messagesEndRef = useRef(null);
   
   const scrollToBottom = () => {
@@ -57,107 +56,112 @@ const LLMChat = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Fetch AI modules
+  // Update local providers state when userLlmProviders changes
   useEffect(() => {
-    // Check if fetching AI modules is enabled
-    if (!llmSettings.fetchAIModulesEnabled) {
-      dispatch(createLog('AI module fetching is disabled', LogType.INFO));
-      return;
-    }
+    setProviders(userLlmProviders);
+  }, [userLlmProviders]);
 
-    const fetchAIModules = async () => {
-      setError(null);
-      dispatch(createLog('Fetching AI modules...', LogType.INFO));
+  // Set initial provider from user preferences only if it exists in providers
+  useEffect(() => {
+    if (userLlmPreferences?.defaultProvider && providers.length > 0) {
+      // Check if the default provider exists in the available providers
+      const providerExists = providers.some(
+        p => p.provider.toLowerCase() === userLlmPreferences.defaultProvider.toLowerCase()
+      );
       
-      try {
-        const response = await axiosInstance.get('/api/admin/modules/');
-        const moduleArray = Array.isArray(response.data.response.data) ? response.data.response.data : [];
-        
-        // Filter modules that start with "AI:"
-        const aiModules = moduleArray.filter(module =>
-          module.fieldData.moduleName.startsWith('AI:')
-        ).map(module => {
-          const name = module.fieldData.moduleName.replace('AI:', '').trim();
-          // Extract provider name from module name (e.g., "OpenAI GPT-4" -> "openai")
-          const provider = name.split(' ')[0].toLowerCase();
-          return {
-            id: module.fieldData.__ID,
-            name,
-            provider
-          };
-        });
-        
-        setAiModules(aiModules);
-        
-        // Set selected module if provider is stored
-        if (llmSettings.provider) {
-          const storedModule = aiModules.find(m => m.provider === llmSettings.provider);
-          if (storedModule) {
-            setSelectedModule(storedModule.id);
-          }
-        }
-      } catch (err) {
-        const errorMessage = err.response?.data?.error || err.message;
-        const errorCode = err.code || 'UNKNOWN';
-        
-        // Disable fetching if we get a timeout error
-        if (errorCode === 'ECONNABORTED') {
-          dispatch(setFetchAIModulesEnabled(false));
-          dispatch(createLog('AI module fetching disabled due to timeout', LogType.WARNING));
-        }
-        
-        dispatch(createLog(`Failed to fetch AI modules: ${errorMessage}`, LogType.ERROR));
-        setError('Failed to load AI modules. Please try again.');
+      if (providerExists) {
+        setSelectedProvider(userLlmPreferences.defaultProvider);
+        dispatch(setProvider(userLlmPreferences.defaultProvider));
+      } else {
+        // If default provider doesn't exist, set to the first available provider
+        setSelectedProvider(providers[0].provider);
+        dispatch(setProvider(providers[0].provider));
       }
-    };
+    }
+  }, [dispatch, userLlmPreferences, providers]);
 
-    fetchAIModules();
-  }, [dispatch, llmSettings.provider, llmSettings.fetchAIModulesEnabled]);
-
-  // Fetch available models when AI module is selected
+  // Update models when provider is selected
   useEffect(() => {
-    if (!selectedModule) return;
+    if (!selectedProvider) return;
     
-    const fetchModels = async () => {
-      setError(null);
-      dispatch(createLog('Fetching available models...', LogType.INFO));
-      try {
-        const selectedModuleData = aiModules.find(m => m.id === selectedModule);
-        if (!selectedModuleData) {
-          throw new Error('Selected module not found');
+    setError(null);
+    
+    // Find the provider object in providers array that matches the selected provider
+    const providerConfig = providers.find(p => p.provider.toLowerCase() === selectedProvider.toLowerCase());
+    
+    // If provider config exists, use its models
+    if (providerConfig && providerConfig.models && providerConfig.models.chat) {
+      // Get all models from the provider (both strong and weak)
+      const providerChatModels = [
+        providerConfig.models.chat.strong,
+        providerConfig.models.chat.weak
+      ].filter(Boolean); // Filter out empty values
+      
+      // Set the provider models directly from user preferences
+      setProviderModels(providerChatModels);
+      
+      // Automatically select the appropriate model
+      if (providerChatModels.length > 0) {
+        // First try to use the weak chat model
+        if (providerConfig.models.chat.weak) {
+          setSelectedModel(providerConfig.models.chat.weak);
+          dispatch(setModel(providerConfig.models.chat.weak));
         }
-
-        const response = await axiosInstance.get(`/api/llm/${selectedModule}/models`);
-        const availableModels = response.data?.models || [];
-        setModels(availableModels);
-        
-        // Set selected model if stored
-        if (llmSettings.model && availableModels.includes(llmSettings.model)) {
-          setSelectedModel(llmSettings.model);
-        } else if (availableModels.length > 0) {
-          setSelectedModel(availableModels[0]);
+        // If weak model is not available, try the strong chat model
+        else if (providerConfig.models.chat.strong) {
+          setSelectedModel(providerConfig.models.chat.strong);
+          dispatch(setModel(providerConfig.models.chat.strong));
         }
-      } catch (err) {
-        const errorMessage = err.response?.data?.error || err.message;
-        console.error('Error fetching models:', err);
-        dispatch(createLog(`Failed to fetch models: ${errorMessage}`, LogType.ERROR));
-        setError(`Failed to load models: ${errorMessage}`);
+      } else {
+        setSelectedModel('');
+        setError('No chat models are available for this provider.');
       }
-    };
+    } else {
+      // If no provider config found or no chat models defined
+      setProviderModels([]);
+      setSelectedModel('');
+      setError('No chat models are configured for this provider.');
+    }
+  }, [selectedProvider, dispatch, providers]);
 
-    fetchModels();
-  }, [selectedModule, dispatch, organizationId, llmSettings.model]);
-
-  const handleModuleChange = (event) => {
-    const moduleId = event.target.value;
-    setSelectedModule(moduleId);
-    setSelectedModel('');
-    setModels([]);
+  const handleProviderChange = (event) => {
+    const provider = event.target.value;
+    setSelectedProvider(provider);
+    dispatch(setProvider(provider));
     
-    // Store provider
-    const selectedModuleData = aiModules.find(m => m.id === moduleId);
-    if (selectedModuleData) {
-      dispatch(setProvider(selectedModuleData.provider));
+    // Find the provider configuration
+    const providerConfig = providers.find(p => p.provider.toLowerCase() === provider.toLowerCase());
+    
+    // Check if the provider has chat models
+    if (providerConfig && providerConfig.models && providerConfig.models.chat) {
+      // Get all models from the provider (both strong and weak)
+      const providerChatModels = [
+        providerConfig.models.chat.strong,
+        providerConfig.models.chat.weak
+      ].filter(Boolean); // Filter out empty values
+      
+      // Set the provider models directly from user preferences
+      setProviderModels(providerChatModels);
+      
+      // Check for weak chat model first
+      if (providerConfig.models.chat.weak) {
+        setSelectedModel(providerConfig.models.chat.weak);
+        dispatch(setModel(providerConfig.models.chat.weak));
+      }
+      // If no weak model, check for strong chat model
+      else if (providerConfig.models.chat.strong) {
+        setSelectedModel(providerConfig.models.chat.strong);
+        dispatch(setModel(providerConfig.models.chat.strong));
+      }
+      // If neither weak nor strong model is available
+      else {
+        setSelectedModel('');
+        setError('No chat models are available for this provider.');
+      }
+    } else {
+      setSelectedModel('');
+      setProviderModels([]);
+      setError('No chat models are available for this provider.');
     }
   };
 
@@ -168,43 +172,96 @@ const LLMChat = () => {
   };
 
   const handleSubmit = async () => {
-    if (!input.trim() || !selectedModule || !selectedModel) return;
+    if (!input.trim() || !selectedProvider || !selectedModel) return;
+  
+    // Validate that the selected model is in the list of available models from user preferences
+    const providerConfig = providers.find(p => p.provider.toLowerCase() === selectedProvider.toLowerCase());
+    const providerChatModels = providerConfig?.models?.chat ?
+      [providerConfig.models.chat.strong, providerConfig.models.chat.weak].filter(Boolean) : [];
+    
+    if (providerChatModels.length > 0 && !providerChatModels.includes(selectedModel)) {
+      setError('Selected model is not available in your preferences. Please select a different model.');
+      return;
+    }
 
     const newMessage = { role: 'user', content: input };
     setMessages(prev => [...prev, newMessage]);
     setInput('');
 
     try {
-      const selectedModuleData = aiModules.find(m => m.id === selectedModule);
-      if (!selectedModuleData) {
-        throw new Error('Selected module not found');
-      }
-
       let assistantMessage = { role: 'assistant', content: <ProgressText text="Thinking..." /> };
       setMessages(prev => [...prev, assistantMessage]);
 
-      const response = await axiosInstance.post(
-        `/api/llm/${selectedModule}/completion`,
-        {
-          messages: [
-            { role: 'system', content: llmSettings.systemInstructions },
-            ...messages,
-            newMessage
-          ],
-          moduleId: selectedModule,
+      // Get auth token for the edge function
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error('Authentication required');
+      }
+
+      // Create a clean messages array without React components and avoiding duplicates
+      // Only include messages up to the point before adding the new message and assistant placeholder
+      const previousMessages = messages.slice(0, messages.length - 1);
+      
+      // Log the payload for debugging
+      console.log('Chat payload:', {
+        provider: selectedProvider,
+        type: 'chat',
+        model: selectedModel,
+        messagesCount: previousMessages.length + 2, // system + user message
+        newMessage
+      });
+
+      // Call the Supabase Edge Function
+      const { data, error: functionError } = await supabase.functions.invoke('llmProxyHandler', {
+        body: {
+          provider: selectedProvider,
+          type: 'chat',
           model: selectedModel,
-          temperature: llmSettings.temperature,
-          stream: false
+          messages: [
+            { role: 'system', content: userLlmPreferences?.systemInstructions || llmSettings.systemInstructions },
+            ...previousMessages.map(msg => ({
+              role: msg.role,
+              content: typeof msg.content === 'string' ? msg.content : 'Thinking...'
+            })),
+            { role: newMessage.role, content: newMessage.content }
+          ],
+          options: {
+            temperature: userLlmPreferences?.temperature || llmSettings.temperature,
+            stream: false
+          }
         }
-      );
+      });
+
+      if (functionError) {
+        console.error('Edge function error:', functionError);
+        
+        // Extract detailed error information if available
+        const errorDetails = functionError.details ?
+          JSON.stringify(functionError.details, null, 2) : '';
+        
+        // Log more detailed error information
+        console.error('Error details:', {
+          message: functionError.message,
+          details: functionError.details,
+          provider: selectedProvider,
+          model: selectedModel
+        });
+        
+        throw new Error(
+          `${functionError.message || 'Failed to get response from edge function'}\n` +
+          `Provider: ${selectedProvider}, Model: ${selectedModel}\n` +
+          (errorDetails ? `Details: ${errorDetails}` : '')
+        );
+      }
 
       setMessages(prev => [...prev.slice(0, -1), {
         role: 'assistant',
-        content: response.data.content || 'No response received'
+        content: data.content || 'No response received'
       }]);
 
     } catch (err) {
-      const errorMessage = err.response?.data?.error || err.message;
+      const errorMessage = err.message || 'An error occurred';
       console.error('Error in chat completion:', err);
       dispatch(createLog(`Chat completion error: ${errorMessage}`, LogType.ERROR));
       setMessages(prev => [...prev.slice(0, -1), {
@@ -214,11 +271,11 @@ const LLMChat = () => {
     }
   };
 
-  // Function to toggle AI module fetching
-  const toggleAIModuleFetching = () => {
-    const newValue = !llmSettings.fetchAIModulesEnabled;
-    dispatch(setFetchAIModulesEnabled(newValue));
-    dispatch(createLog(`AI module fetching ${newValue ? 'enabled' : 'disabled'}`, LogType.INFO));
+
+  // Toggle settings panel
+  const toggleSettings = () => {
+    setSettingsOpen(!settingsOpen);
+    setSettingsPanelWidth(settingsOpen ? 0 : 350); // Set width when opening/closing
   };
 
   return (
@@ -227,7 +284,8 @@ const LLMChat = () => {
       height: '100vh',
       display: 'flex',
       flexDirection: 'column',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      position: 'relative' // For absolute positioning of hamburger menu
     }}>
       <Snackbar
         open={Boolean(error)}
@@ -250,48 +308,117 @@ const LLMChat = () => {
         }}
       />
 
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3, gap: 2 }}>
-        <Button
-          variant="outlined"
-          color={llmSettings.fetchAIModulesEnabled ? "error" : "success"}
-          onClick={toggleAIModuleFetching}
-        >
-          {llmSettings.fetchAIModulesEnabled ? "Disable AI Module Fetching" : "Enable AI Module Fetching"}
-        </Button>
-        <FormControl sx={{ minWidth: 200 }}>
-          <InputLabel>AI Provider</InputLabel>
-          <Select
-            value={selectedModule}
-            label="AI Provider"
-            onChange={handleModuleChange}
-          >
-            {aiModules.map(module => (
-              <MenuItem key={module.id} value={module.id}>
-                {module.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+      {/* Hamburger menu button - floating in top right corner */}
+      <IconButton
+        onClick={toggleSettings}
+        sx={{
+          position: 'absolute',
+          top: 16,
+          right: 16,
+          zIndex: 1100,
+          backgroundColor: 'background.paper',
+          boxShadow: 2,
+          '&:hover': {
+            backgroundColor: 'action.hover'
+          }
+        }}
+      >
+        {settingsOpen ? <CloseIcon /> : <MenuIcon />}
+      </IconButton>
 
-        <FormControl sx={{ minWidth: 200 }}>
-          <InputLabel>Model</InputLabel>
-          <Select
-            value={selectedModel}
-            label="Model"
-            onChange={handleModelChange}
-            disabled={!selectedModule}
-          >
-            {models.map(model => (
-              <MenuItem key={model} value={model}>
-                {model}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+      {/* Slide-out settings panel */}
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          height: '100%',
+          width: settingsPanelWidth,
+          backgroundColor: 'background.paper',
+          boxShadow: 3,
+          zIndex: 1000,
+          transition: 'width 0.3s ease-in-out',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
+        <Box sx={{ p: 3, pt: 8 }}>
+          <Typography variant="h6" sx={{ mb: 3 }}>Chat Settings</Typography>
+          
+          <Stack spacing={3}>
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel>AI Provider</InputLabel>
+              <Select
+                value={selectedProvider}
+                label="AI Provider"
+                onChange={handleProviderChange}
+              >
+                {providers.length > 0 ? (
+                  providers.map(provider => (
+                    <MenuItem
+                      key={provider.id || `provider-${provider.provider}`}
+                      value={provider.provider}
+                    >
+                      {provider.provider}
+                    </MenuItem>
+                  ))
+                ) : (
+                  <MenuItem value="" disabled>
+                    No providers available
+                  </MenuItem>
+                )}
+              </Select>
+            </FormControl>
 
-        <IconButton onClick={() => setSettingsOpen(true)}>
-          <SettingsIcon />
-        </IconButton>
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel>Model</InputLabel>
+              <Select
+                value={selectedModel}
+                label="Model"
+                onChange={handleModelChange}
+                disabled={!selectedProvider}
+              >
+                {providerModels.length > 0 ? (
+                  providerModels.map(model => (
+                    <MenuItem key={model} value={model}>
+                      {model}
+                    </MenuItem>
+                  ))
+                ) : (
+                  <MenuItem value="" disabled>
+                    No models available
+                  </MenuItem>
+                )}
+              </Select>
+            </FormControl>
+            
+            <TextField
+              fullWidth
+              multiline
+              rows={4}
+              label="System Instructions"
+              value={userLlmPreferences?.systemInstructions || llmSettings.systemInstructions}
+              onChange={(e) => dispatch(setSystemInstructions(e.target.value))}
+            />
+            
+            <Box>
+              <Typography gutterBottom>Temperature: {userLlmPreferences?.temperature || llmSettings.temperature}</Typography>
+              <Slider
+                value={userLlmPreferences?.temperature || llmSettings.temperature}
+                onChange={(e, value) => dispatch(setTemperature(value))}
+                min={0}
+                max={2}
+                step={0.1}
+                marks={[
+                  { value: 0, label: '0' },
+                  { value: 1, label: '1' },
+                  { value: 2, label: '2' }
+                ]}
+              />
+            </Box>
+          </Stack>
+        </Box>
       </Box>
 
       <Paper 
@@ -321,7 +448,7 @@ const LLMChat = () => {
                 color: message.role === 'user' ? 'primary.contrastText' : 'text.primary'
               }}
             >
-              <Typography>{message.content}</Typography>
+              <Box>{message.content}</Box>
             </Paper>
           </Box>
         ))}
@@ -345,47 +472,13 @@ const LLMChat = () => {
         />
         <IconButton 
           onClick={handleSubmit}
-          disabled={!input.trim() || !selectedModule || !selectedModel}
+          disabled={!input.trim() || !selectedProvider || !selectedModel}
           color="primary"
         >
           <SendIcon />
         </IconButton>
       </Box>
 
-      <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)}>
-        <DialogTitle>Chat Settings</DialogTitle>
-        <DialogContent>
-          <Stack spacing={3} sx={{ mt: 2, minWidth: 300 }}>
-            <TextField
-              fullWidth
-              multiline
-              rows={4}
-              label="System Instructions"
-              value={llmSettings.systemInstructions}
-              onChange={(e) => dispatch(setSystemInstructions(e.target.value))}
-            />
-            
-            <Box>
-              <Typography gutterBottom>Temperature: {llmSettings.temperature}</Typography>
-              <Slider
-                value={llmSettings.temperature}
-                onChange={(e, value) => dispatch(setTemperature(value))}
-                min={0}
-                max={2}
-                step={0.1}
-                marks={[
-                  { value: 0, label: '0' },
-                  { value: 1, label: '1' },
-                  { value: 2, label: '2' }
-                ]}
-              />
-            </Box>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setSettingsOpen(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };

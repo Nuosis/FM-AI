@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { saveTool } from '../../redux/slices/toolsSlice';
 import { createLog, LogType } from '../../redux/slices/appSlice';
+import supabase from '../../utils/supabase';
 import {
   Box,
   Paper,
@@ -10,10 +11,17 @@ import {
   IconButton,
   CircularProgress,
   Alert,
-  Snackbar
+  Snackbar,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Collapse
 } from '@mui/material';
 import {
-  Send as SendIcon
+  Send as SendIcon,
+  Menu as MenuIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { materialDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -23,9 +31,18 @@ const ToolChat = () => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState('');
+  const [selectedModel, setSelectedModel] = useState('');
+  const [availableProviders, setAvailableProviders] = useState([]);
+  const [availableModels, setAvailableModels] = useState([]);
   const messagesEndRef = useRef(null);
   const dispatch = useDispatch();
   const user = useSelector(state => state.auth.user);
+  
+  // Get user preferences
+  const llmPreferences = useSelector(state => state.auth.user?.preferences?.llm_preferences || {});
+  const llmProviders = useSelector(state => state.auth.user?.preferences?.llm_providers || []);
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -34,6 +51,35 @@ const ToolChat = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Initialize provider and model from user preferences
+  useEffect(() => {
+    if (llmPreferences && llmProviders.length > 0) {
+      const defaultProvider = llmPreferences.defaultProvider || '';
+      
+      // Find the provider config that matches the default provider
+      const providerConfig = llmProviders.find(p => p.provider === defaultProvider);
+      
+      if (providerConfig) {
+        // Set available providers
+        setAvailableProviders(llmProviders);
+        
+        // Set selected provider
+        setSelectedProvider(defaultProvider);
+        
+        // Set available models for this provider
+        if (providerConfig.models && providerConfig.models.chat) {
+          const models = [];
+          if (providerConfig.models.chat.strong) models.push(providerConfig.models.chat.strong);
+          if (providerConfig.models.chat.weak) models.push(providerConfig.models.chat.weak);
+          setAvailableModels(models);
+          
+          // Set selected model (default to weak model)
+          setSelectedModel(providerConfig.models.chat.weak || providerConfig.models.chat.strong || '');
+        }
+      }
+    }
+  }, [llmPreferences, llmProviders]);
 
   const handleSubmit = async () => {
     if (!input.trim()) return;
@@ -49,28 +95,35 @@ const ToolChat = () => {
       const thinkingMessage = { role: 'assistant', content: 'Thinking...', isLoading: true };
       setMessages(prev => [...prev, thinkingMessage]);
 
-      // Make API call to OpenAI or other LLM service
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      // Get auth token for the edge function
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error('Authentication required');
+      }
+
+      // Call the Supabase Edge Function
+      const { data, error: functionError } = await supabase.functions.invoke('llmProxyHandler', {
+        body: {
+          provider: selectedProvider,
+          type: 'chat',
+          model: selectedModel,
           messages: [
             { role: 'system', content: 'You are a helpful assistant that generates Python code with @tool() decorators. When asked to create a tool, respond with valid Python code that includes a function with a @tool() decorator, proper docstrings, and implementation.' },
             ...messages.filter(m => !m.isLoading),
             userMessage
-          ]
-        })
+          ],
+          options: {
+            temperature: 0.7,
+            max_tokens: 2000
+          }
+        }
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to get response');
+      if (functionError) {
+        throw new Error(functionError.message || 'Failed to get response from edge function');
       }
 
-      const data = await response.json();
-      
       // Remove the thinking message
       setMessages(prev => prev.filter(m => !m.isLoading));
 
@@ -83,8 +136,8 @@ const ToolChat = () => {
       }
 
       // Add the assistant's response
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
+      setMessages(prev => [...prev, {
+        role: 'assistant',
         content: data.content,
         code: extractedCode
       }]);
@@ -96,8 +149,8 @@ const ToolChat = () => {
       setMessages(prev => prev.filter(m => !m.isLoading));
       
       // Add error message
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
+      setMessages(prev => [...prev, {
+        role: 'assistant',
         content: `Error: ${error.message}. Please try again.`
       }]);
       
@@ -105,6 +158,34 @@ const ToolChat = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleProviderChange = (event) => {
+    const provider = event.target.value;
+    setSelectedProvider(provider);
+    
+    // Update available models for this provider
+    const providerConfig = llmProviders.find(p => p.provider === provider);
+    if (providerConfig && providerConfig.models && providerConfig.models.chat) {
+      const models = [];
+      if (providerConfig.models.chat.strong) models.push(providerConfig.models.chat.strong);
+      if (providerConfig.models.chat.weak) models.push(providerConfig.models.chat.weak);
+      setAvailableModels(models);
+      
+      // Set selected model (default to weak model)
+      setSelectedModel(providerConfig.models.chat.weak || providerConfig.models.chat.strong || '');
+    } else {
+      setAvailableModels([]);
+      setSelectedModel('');
+    }
+  };
+
+  const handleModelChange = (event) => {
+    setSelectedModel(event.target.value);
+  };
+
+  const toggleSettings = () => {
+    setSettingsOpen(!settingsOpen);
   };
 
   const handleSaveCode = async (code) => {
@@ -143,12 +224,82 @@ const ToolChat = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Paper 
-        sx={{ 
-          flex: 1, 
-          mb: 2, 
-          p: 2, 
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+      {/* Settings toggle button */}
+      <IconButton
+        onClick={toggleSettings}
+        sx={{
+          position: 'absolute',
+          top: 10,
+          right: 10,
+          zIndex: 1100,
+          backgroundColor: 'background.paper',
+          boxShadow: 1,
+          '&:hover': {
+            backgroundColor: 'action.hover'
+          }
+        }}
+      >
+        {settingsOpen ? <CloseIcon /> : <MenuIcon />}
+      </IconButton>
+      
+      {/* Settings panel */}
+      <Collapse in={settingsOpen}>
+        <Paper
+          sx={{
+            p: 2,
+            mb: 2,
+            display: 'flex',
+            flexDirection: 'row',
+            gap: 2,
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            borderRadius: 0,
+            boxShadow: 2
+          }}
+        >
+          <FormControl sx={{ minWidth: 200 }}>
+            <InputLabel id="provider-select-label">AI Provider</InputLabel>
+            <Select
+              labelId="provider-select-label"
+              value={selectedProvider}
+              onChange={handleProviderChange}
+              label="AI Provider"
+              size="small"
+            >
+              {availableProviders.map((provider) => (
+                <MenuItem key={provider.provider} value={provider.provider}>
+                  {provider.provider}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          
+          <FormControl sx={{ minWidth: 200 }}>
+            <InputLabel id="model-select-label">Model</InputLabel>
+            <Select
+              labelId="model-select-label"
+              value={selectedModel}
+              onChange={handleModelChange}
+              label="Model"
+              size="small"
+              disabled={availableModels.length === 0}
+            >
+              {availableModels.map((model) => (
+                <MenuItem key={model} value={model}>
+                  {model}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Paper>
+      </Collapse>
+      
+      <Paper
+        sx={{
+          flex: 1,
+          mb: 2,
+          p: 2,
           overflow: 'auto',
           display: 'flex',
           flexDirection: 'column'
