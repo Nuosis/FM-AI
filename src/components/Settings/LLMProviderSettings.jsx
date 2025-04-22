@@ -9,7 +9,8 @@ import supabase from '../../utils/supabase';
 import {
   Box,
   Divider,
-  CircularProgress
+  CircularProgress,
+  Button
 } from '@mui/material';
 
 // Import subcomponents
@@ -58,6 +59,7 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
   const [isApiKeyVerified, setIsApiKeyVerified] = useState(false);
   const [isVerifyingApiKey, setIsVerifyingApiKey] = useState(false);
   const [apiKeyError, setApiKeyError] = useState('');
+  const [showProviderForm, setShowProviderForm] = useState(false);
   
   // State for available models
   const [availableModels, setAvailableModels] = useState([]);
@@ -135,6 +137,7 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
   // Memoize handleEditConfig to prevent unnecessary re-renders
   const handleEditConfig = useCallback((config) => {
     setSelectedConfig(config);
+    setShowProviderForm(true);
     
     // Try to get the API key from storage
     const apiKey = getApiKey(config.provider, apiKeyStorage, isAuthMock) || '';
@@ -271,6 +274,7 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
   // Memoize resetForm to prevent unnecessary re-renders
   const resetForm = useCallback(() => {
     setSelectedConfig(null);
+    setShowProviderForm(false);
     // Note: description field is still included in formData even though we removed the input field
     // It will be auto-generated when saving based on provider and model type
     const newFormData = {
@@ -655,21 +659,37 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
       
       <Divider sx={{ my: 2 }} />
       
+      {/* Add Provider Configuration button */}
+      {!showProviderForm && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 2 }}>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => setShowProviderForm(true)}
+            disabled={isLoading}
+          >
+            Add Provider Configuration
+          </Button>
+        </Box>
+      )}
+      
       {/* Form for adding/editing provider config */}
-      <LLMProviderForm
-        formData={formData}
-        onFormDataChange={handleFormDataChange}
-        selectedConfig={selectedConfig}
-        onReset={resetForm}
-        onSave={saveProviderConfig}
-        isLoading={isLoading}
-        isApiKeyVerified={isApiKeyVerified}
-        isVerifyingApiKey={isVerifyingApiKey}
-        apiKeyError={apiKeyError}
-        onVerifyApiKey={verifyApiKey}
-        availableModels={availableModels}
-        apiKeyStorage={apiKeyStorage}
-      />
+      {showProviderForm && (
+        <LLMProviderForm
+          formData={formData}
+          onFormDataChange={handleFormDataChange}
+          selectedConfig={selectedConfig}
+          onReset={resetForm}
+          onSave={saveProviderConfig}
+          isLoading={isLoading}
+          isApiKeyVerified={isApiKeyVerified}
+          isVerifyingApiKey={isVerifyingApiKey}
+          apiKeyError={apiKeyError}
+          onVerifyApiKey={verifyApiKey}
+          availableModels={availableModels}
+          apiKeyStorage={apiKeyStorage}
+        />
+      )}
     </Box>
   );
 };
