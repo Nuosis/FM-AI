@@ -28,51 +28,18 @@ const DemoFiles = () => {
   ];
 
   useEffect(() => {
-    const fetchFiles = async () => {
-      try {
-        // Try to fetch the directory listing
-        const response = await fetch(baseUrl);
-        
-        if (response.ok) {
-          const html = await response.text();
-          // Parse HTML to extract file links
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(html, 'text/html');
-          const links = Array.from(doc.querySelectorAll('a'));
-          
-          // Filter out parent directory links and extract filenames
-          const fileLinks = links
-            .filter(link => !link.href.endsWith('/') && !link.href.includes('?'))
-            .map(link => {
-              const filename = link.textContent.trim();
-              return filename;
-            })
-            .filter(filename => filename !== '');
-          
-          if (fileLinks.length > 0) {
-            setFiles(fileLinks);
-            dispatch(createLog(`Found ${fileLinks.length} demo files`, LogType.INFO));
-          } else {
-            // Fall back to known files if no files were found
-            setFiles(knownFiles);
-            dispatch(createLog('No files found in directory listing, using known files', LogType.WARNING));
-          }
-        } else {
-          // Fall back to known files if the fetch fails
-          setFiles(knownFiles);
-          dispatch(createLog(`Failed to fetch directory listing: ${response.status}`, LogType.WARNING));
-        }
-      } catch (err) {
-        // Fall back to known files if there's an error
-        setFiles(knownFiles);
-        console.log('Failed to fetch file list. Using known files instead.');
-        dispatch(createLog(`Error fetching demo files: ${err.message}`, LogType.WARNING));
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchFiles();
+    // Skip fetch and directly use known files
+    // console.log('Using predefined known files list instead of fetching');
+    setFiles(knownFiles);
+    dispatch(createLog('Using predefined known files list', LogType.INFO));
+    
+    // Simulate a brief loading state for UI consistency
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 300);
+    
+    // Clean up timer on component unmount
+    return () => clearTimeout(timer);
   }, [dispatch]);
 
   const handleDownload = (filename) => {
