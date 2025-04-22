@@ -175,6 +175,13 @@ const fetchUserData = async (result) => {
       
       // Sync LLM preferences with localStorage
       syncLlmPreferencesWithLocalStorage(userData.preferences);
+      
+      // Check if llm_storage preference exists with apiKeyStorage set to 'local'
+      const llmStorage = userData.preferences.llm_storage;
+      if (llmStorage && llmStorage.apiKeyStorage === 'local') {
+        // Get API keys from local storage and store them in llm_api_keys table
+        await syncLocalApiKeysToDatabase(result.user.id);
+      }
     }
   } catch {
     // Continue with empty preferences
@@ -450,6 +457,66 @@ const updateUserMetadataIfNeeded = async (result, profile) => {
   }
   
   return null;
+};
+
+/**
+ * Sync API keys from local storage to the llm_api_keys table
+ * @param {string} userId - The user ID
+ * @returns {Promise<void>}
+ */
+const syncLocalApiKeysToDatabase = async (userId) => {
+  try {
+    // Get all provider configs from localStorage
+    const llmSettings = localStorage.getItem('llmSettings');
+    if (!llmSettings) return;
+    
+    // Get all API keys from localStorage
+    const providers = ['openAI', 'anthropic', 'google', 'mistral', 'cohere'];
+    for (const provider of providers) {
+      const keyId = `apiKey_${provider.toLowerCase()}`;
+      const apiKey = localStorage.getItem(keyId);
+      
+      if (apiKey) {
+        // Check if this API key already exists in the database
+        const existingKey = await supabaseService.executeQuery(supabase =>
+          supabase
+            .from('llm_api_keys')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('provider', provider)
+            .maybeSingle()
+        );
+        
+        if (existingKey) {
+          // Update existing key
+          await supabaseService.executeQuery(supabase =>
+            supabase
+              .from('llm_api_keys')
+              .update({ api_key: apiKey, updated_at: new Date() })
+              .eq('id', existingKey.id)
+          );
+        } else {
+          // Insert new key
+          await supabaseService.executeQuery(supabase =>
+            supabase
+              .from('llm_api_keys')
+              .insert({
+                user_id: userId,
+                provider: provider,
+                api_key: apiKey,
+                created_at: new Date(),
+                updated_at: new Date()
+              })
+          );
+        }
+      }
+    }
+    
+    console.log('[Auth] Successfully synced API keys from local storage to database');
+  } catch (error) {
+    console.error('[Auth] Error syncing API keys to database:', error.message);
+    // Continue with login flow even if sync fails
+  }
 };
 
 const authSlice = createSlice({
@@ -742,6 +809,11 @@ export const signUpWithEmail = createAsyncThunk(
               preference_value: llmPreferences
             })
         );
+        
+        // Check if apiKeyStorage is set to 'local' and sync API keys to database
+        if (llmPreferences.apiKeyStorage === 'local') {
+          await syncLocalApiKeysToDatabase(data.user.id);
+        }
       }
 
       // Initialize empty preferences, conversations, and functions for new user
@@ -782,10 +854,35 @@ export const signOut = createAsyncThunk(
   async (_, thunkAPI) => {
     console.log('[Auth] Sign out attempt');
     try {
-      const { error } = await supabaseService.executeQuery(supabase =>
+      // Get current user ID and preferences
+      const state = thunkAPI.getState();
+      const userId = state.auth.user?.id;
+      const preferences = state.auth.user?.preferences || {};
+      
+      // Check if we need to delete API keys based on preferences
+      const llmStorage = preferences.llm_storage;
+      if (userId && llmStorage && llmStorage.apiKeyStorage !== 'saved') {
+        console.log('[Auth] Deleting API keys from database as per user preferences');
+        try {
+          // Delete all API keys for this user
+          await supabaseService.executeQuery(supabase =>
+            supabase
+              .from('llm_api_keys')
+              .delete()
+              .eq('user_id', userId)
+          );
+          console.log('[Auth] Successfully deleted API keys from database');
+        } catch (deleteError) {
+          console.error('[Auth] Error deleting API keys:', deleteError.message);
+          // Continue with logout even if deletion fails
+        }
+      }
+      
+      // Proceed with sign out
+      const result = await supabaseService.executeQuery(supabase =>
         supabase.auth.signOut()
       );
-      if (error) throw error;
+      if (result && result.error) throw result.error;
       console.log('[Auth] Sign out successful');
       return null;
     } catch (error) {
@@ -902,6 +999,13 @@ export const getSession = createAsyncThunk(
         };
         
         localStorage.setItem('llmSettings', JSON.stringify(updatedSettings));
+      }
+      
+      // Check if llm_storage preference exists with apiKeyStorage set to 'local'
+      const llmStorage = preferences.llm_storage;
+      if (llmStorage && llmStorage.apiKeyStorage === 'local') {
+        // Get API keys from local storage and store them in llm_api_keys table
+        await syncLocalApiKeysToDatabase(data.session.user.id);
       }
 
       // Fetch customer information if available

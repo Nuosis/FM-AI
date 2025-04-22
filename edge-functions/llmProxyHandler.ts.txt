@@ -13,7 +13,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // Provider endpoints and API key environment variables
 const PROVIDER_CONFIG = {
-  openai: {
+  openai: {https://supabase.com/dashboard/project/koxofrstjtsywvgflhyu/functions/llmProxyHandler/logs?log=153c47eb-ea31-439f-9c03-82f8f36e8f20
     endpoint: "https://api.openai.com/v1",
     key: Deno.env.get("OPENAI_API_KEY"),
   },
@@ -116,6 +116,7 @@ async function proxyRequest(provider: string, type: string, body: any, headers: 
       reqHeaders = {
         "x-api-key": config.key,
         "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01"
       };
       break;
     case "gemini":

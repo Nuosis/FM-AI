@@ -225,6 +225,20 @@ Our application uses a hierarchical data model with Organizations as the top-lev
 - user_id → users(id)
 - Referenced by: chat_messages.conversation_id
 
+---
+
+### Table: llm_api_keys (public)
+- **id**: uuid, primary key, default: gen_random_uuid()
+- **user_id**: uuid, not null, references users(id)
+- **provider**: text, not null
+- **api_key**: text, not null
+- **verified**: bool, default: false
+- **created_at**: timestamp with time zone, default: now()
+- **updated_at**: timestamp with time zone, default: now()
+
+**Relationships:**
+- user_id → users(id)
+
 ### 12. Conversations
 
 **Purpose:** Groups related chat messages together.

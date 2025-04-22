@@ -36,8 +36,8 @@ const PreferencesForm = ({ onSuccess, onError }) => {
       dispatch(setDarkMode(newDarkMode));
       
       // Update database if user is logged in
-      if (currentUser?.id) {
-        console.log('Current user ID being used for preferences:', currentUser.id);
+      if (currentUser?.user_id) {
+        console.log('Current user ID being used for preferences:', currentUser.user_id);
         // Update mode_preference in Supabase
         const modePreference = {
           darkMode: newDarkMode

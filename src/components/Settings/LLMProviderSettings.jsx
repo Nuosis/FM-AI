@@ -3,28 +3,19 @@ import PropTypes from 'prop-types';
 import { useSelector, useDispatch, shallowEqual } from 'react-redux';
 import { updateUserPreferences } from '../../redux/slices/authSlice';
 import { setDefaultProvider } from '../../redux/slices/llmSlice';
-import { storeApiKey, getApiKey, API_STORAGE_TYPES } from '../../utils/apiKeyStorage';
-import supabaseService from '../../services/supabaseService';
+import { getApiKey, API_STORAGE_TYPES } from '../../utils/apiKeyStorage';
+import llmProviderService from '../../services/llmProviderService';
+import supabase from '../../utils/supabase';
 import {
   Box,
-  Button,
-  Typography,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  IconButton,
-  Paper,
   Divider,
   CircularProgress
 } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
+
+// Import subcomponents
+import ApiKeyStorageSelector from './ApiKeyStorageSelector';
+import LLMProviderList from './LLMProviderList';
+import LLMProviderForm from './LLMProviderForm';
 
 /**
  * LLMProviderSettings component for managing LLM provider configurations
@@ -38,7 +29,7 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
   
   // Get user data from Redux
   const currentUser = useSelector(state => state.auth.user, shallowEqual);
-  const userId = currentUser?.id;
+  const userId = currentUser?.user_id;
   
   // Get preferences from Redux store using shallowEqual to prevent unnecessary rerenders
   const userPreferences = useSelector(
@@ -68,28 +59,29 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
   const [isVerifyingApiKey, setIsVerifyingApiKey] = useState(false);
   const [apiKeyError, setApiKeyError] = useState('');
   
-  // Local state for API Key and Description input fields (for onBlur commit)
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [descriptionInput, setDescriptionInput] = useState('');
+  // State for available models
+  const [availableModels, setAvailableModels] = useState([]);
   
-  // Form state
+  // Form state with nested models structure
   const [formData, setFormData] = useState({
     provider: llmPreferences.defaultProvider || '',
-    model: '',
+    models: {
+      chat: {
+        strong: '', // Strong chat model (e.g., "gpt-4")
+        weak: ''    // Weak chat model (e.g., "gpt-3.5-turbo")
+      },
+      embedding: {
+        large: '', // Large embedding model (e.g., "text-embedding-3-large")
+        small: ''  // Small embedding model (e.g., "text-embedding-3-small")
+      }
+    },
     apiKey: '',
     baseUrl: '',
-    description: ''
+    description: '',
+    modelType: 'chat', // 'chat' or 'embedding'
+    chatModelStrength: 'strong', // 'strong' or 'weak'
+    embeddingModelSize: 'large' // 'large' or 'small'
   });
-  
-  // Sync local input state with formData only when selectedConfig changes or form reset
-  useEffect(() => {
-    // Only sync when selectedConfig changes or during reset
-    setApiKeyInput(formData.apiKey);
-    // For description, we need to be careful to avoid triggering API calls
-    if (selectedConfig) {
-      setDescriptionInput(formData.description);
-    }
-  }, [selectedConfig, formData.apiKey]); // Only depend on selectedConfig and apiKey
   
   // Load provider configs on mount or user change only
   useEffect(() => {
@@ -125,60 +117,13 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
       return;
     }
     
-    //console.log('[LLMProviderSettings] Loading provider configs for user:', userId);
     setIsLoading(true);
     
     try {
-      if (isAuthMock) {
-        // Mock data for development
-        setProviderConfigs([
-          { id: '1', provider: 'openAI', model: 'gpt-4-turbo', baseUrl: '', description: 'OpenAI GPT-4' },
-          { id: '2', provider: 'anthropic', model: 'claude-3-opus', baseUrl: '', description: 'Anthropic Claude' }
-        ]);
-      } else {
-        // Fetch from Supabase if not already in user preferences
-        //console.log('[LLMProviderSettings] Executing Supabase query for llm_providers');
-        const data = await supabaseService.executeQuery(supabase =>
-          supabase
-            .from('user_preferences')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('preference_key', 'llm_providers')
-            .maybeSingle()
-        );
-        
-        if (data && data.preference_value) {
-          console.log('[LLMProviderSettings] Found preference_value:', {
-            type: typeof data.preference_value,
-            isString: typeof data.preference_value === 'string',
-            value: data.preference_value
-          });
-          
-          // Parse the JSON value
-          let configs;
-          try {
-            configs = typeof data.preference_value === 'string'
-              ? JSON.parse(data.preference_value)
-              : data.preference_value;
-              
-            console.log('[LLMProviderSettings] Parsed configs:', {
-              isArray: Array.isArray(configs),
-              length: Array.isArray(configs) ? configs.length : 'not an array',
-              value: configs
-            });
-            
-            setProviderConfigs(Array.isArray(configs) ? configs : []);
-          } catch (parseError) {
-            console.error('[LLMProviderSettings] Error parsing preference_value:', parseError);
-            setProviderConfigs([]);
-          }
-        } else {
-          //console.log('[LLMProviderSettings] No preference_value found, using empty array');
-          setProviderConfigs([]);
-        }
-      }
+      const configs = await llmProviderService.loadProviderConfigs(userId, isAuthMock);
+      setProviderConfigs(configs);
     } catch (error) {
-      //console.error('Error loading provider configs:', error);
+      console.error('Error loading provider configs:', error);
       if (onError) {
         onError(`Failed to load provider configurations: ${error.message}`);
       }
@@ -193,24 +138,73 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
     
     // Try to get the API key from storage
     const apiKey = getApiKey(config.provider, apiKeyStorage, isAuthMock) || '';
-    const description = config.description || '';
     
-    // Update both formData and local input states
+    // Always default to chat models tab when editing
+    const modelType = 'chat';
+    
+    // Update formData with nested models structure
     const newFormData = {
       provider: config.provider,
-      model: config.model,
+      models: {
+        chat: {
+          strong: config.models?.chat?.strong || config.strongChatModel || config.model || '',
+          weak: config.models?.chat?.weak || config.weakChatModel || ''
+        },
+        embedding: {
+          large: config.models?.embedding?.large || config.largeEmbeddingModel || '',
+          small: config.models?.embedding?.small || config.smallEmbeddingModel || ''
+        }
+      },
       apiKey: apiKey,
       baseUrl: config.baseUrl || '',
-      description: description
+      description: config.description || '',
+      modelType: modelType,
+      chatModelStrength: config.chatModelStrength || 'strong',
+      embeddingModelSize: config.embeddingModelSize || 'large'
     };
     setFormData(newFormData);
     
-    // Directly set local input states to avoid dependency on useEffect
-    setApiKeyInput(apiKey);
-    setDescriptionInput(description);
-    
     // Reset API key verification
     setIsApiKeyVerified(!!apiKey);
+    
+    // If we have a valid API key, fetch all available models from the provider
+    if (apiKey) {
+      // Set loading state
+      setIsVerifyingApiKey(true);
+      
+      // Fetch available models
+      llmProviderService.verifyApiKey(
+        apiKey,
+        config.provider,
+        config.baseUrl || '',
+        userId,
+        isAuthMock
+      )
+        .then(models => {
+          // Sort models alphabetically
+          const sortedModels = [...models].sort();
+          // Set available models
+          setAvailableModels(sortedModels);
+          setIsVerifyingApiKey(false);
+        })
+        .catch(err => {
+          console.error('[LLMProviderSettings] Error fetching models during edit:', err);
+          setIsVerifyingApiKey(false);
+          
+          // Fallback: use models from the config to ensure they're at least available
+          const allModels = new Set();
+          if (config.models?.chat?.strong) allModels.add(config.models.chat.strong);
+          if (config.models?.chat?.weak) allModels.add(config.models.chat.weak);
+          if (config.models?.embedding?.large) allModels.add(config.models.embedding.large);
+          if (config.models?.embedding?.small) allModels.add(config.models.embedding.small);
+          
+          if (allModels.size > 0) {
+            // Sort models alphabetically
+            const sortedModels = [...allModels].sort();
+            setAvailableModels(sortedModels);
+          }
+        });
+    }
   }, [apiKeyStorage, isAuthMock]);
   
   // Memoize handleDeleteConfig to prevent unnecessary re-renders
@@ -220,70 +214,31 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
     setIsLoading(true);
     
     try {
-      // Filter out the config to delete
-      const updatedConfigs = providerConfigs.filter(config => config.id !== configId);
-      setProviderConfigs(updatedConfigs);
+      const result = await llmProviderService.deleteProviderConfig(
+        configId,
+        providerConfigs,
+        userId,
+        userPreferences,
+        isAuthMock
+      );
       
-      if (isAuthMock) {
-        console.log('[MOCK] Deleting provider config from user_preferences', configId);
-      } else {
-        // Update in Supabase
-        const { error } = await supabaseService.executeQuery(supabase =>
-          supabase
-            .from('user_preferences')
-            .upsert({
-              user_id: userId,
-              preference_key: 'llm_providers',
-              preference_value: updatedConfigs
-            }, {
-              onConflict: 'user_id,preference_key'
-            })
-            .select()
-        );
-          
-        if (error) throw error;
-        
+      setProviderConfigs(result.updatedConfigs);
+      
+      if (!isAuthMock && result.updatedLlmPreferences) {
         // Update both llm_providers and llm_preferences in Redux
         dispatch(updateUserPreferences({
           key: 'llm_providers',
-          value: updatedConfigs
+          value: result.updatedConfigs
         }));
         
-        // If we're deleting the current default provider, update llm_preferences
-        const currentLlmPreferences = userPreferences.llm_preferences || {};
-        const deletedConfig = providerConfigs.find(config => config.id === configId);
+        // Update llm_preferences in Redux
+        dispatch(updateUserPreferences({
+          key: 'llm_preferences',
+          value: result.updatedLlmPreferences
+        }));
         
-        if (deletedConfig && deletedConfig.provider === currentLlmPreferences.defaultProvider) {
-          // Find a new default provider or set to empty
-          const newDefaultProvider = updatedConfigs.length > 0 ? updatedConfigs[0].provider : '';
-          
-          const updatedLlmPreferences = {
-            ...currentLlmPreferences,
-            defaultProvider: newDefaultProvider
-          };
-          
-          // Save to Supabase
-          await supabaseService.executeQuery(supabase =>
-            supabase
-              .from('user_preferences')
-              .upsert({
-                user_id: userId,
-                preference_key: 'llm_preferences',
-                preference_value: updatedLlmPreferences
-              }, {
-                onConflict: 'user_id,preference_key'
-              })
-          );
-            
-          // Update Redux store
-          dispatch(updateUserPreferences({
-            key: 'llm_preferences',
-            value: updatedLlmPreferences
-          }));
-          
-          // Update llmSlice
-          dispatch(setDefaultProvider(newDefaultProvider));
-        }
+        // Update llmSlice
+        dispatch(setDefaultProvider(result.updatedLlmPreferences.defaultProvider));
       }
       
       // If the deleted config was selected, reset the form
@@ -316,89 +271,81 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
   // Memoize resetForm to prevent unnecessary re-renders
   const resetForm = useCallback(() => {
     setSelectedConfig(null);
+    // Note: description field is still included in formData even though we removed the input field
+    // It will be auto-generated when saving based on provider and model type
     const newFormData = {
       provider: '',
-      model: '',
+      models: {
+        chat: {
+          strong: '',
+          weak: ''
+        },
+        embedding: {
+          large: '',
+          small: ''
+        }
+      },
       apiKey: '',
       baseUrl: '',
-      description: ''
+      description: '', // Will be auto-generated when saving
+      modelType: 'chat',
+      chatModelStrength: 'strong',
+      embeddingModelSize: 'large'
     };
     setFormData(newFormData);
-    setApiKeyInput('');
-    setDescriptionInput('');
     setIsApiKeyVerified(false);
     setApiKeyError('');
+    setAvailableModels([]);
   }, []); // No dependencies needed for resetForm
   
-  // Memoize field handlers to prevent unnecessary re-renders
-  const handleProviderChange = useCallback((event) => {
-    const newProvider = event.target.value;
-    setFormData(prev => ({
-      ...prev,
-      provider: newProvider
-    }));
-    
-    // Reset API key verification when provider changes
-    setIsApiKeyVerified(false);
-    setApiKeyError('');
-  }, []);
-  
-  // Handlers for model and baseUrl fields
-  const handleModelChange = useCallback((event) => {
-    setFormData(prev => ({
-      ...prev,
-      model: event.target.value
-    }));
-  }, []);
-  
-  const handleBaseUrlChange = useCallback((event) => {
-    setFormData(prev => ({
-      ...prev,
-      baseUrl: event.target.value
-    }));
-  }, []);
-  
   // Memoize verification function to prevent unnecessary re-renders
-  const verifyApiKey = useCallback(async () => {
-    if (!apiKeyInput || apiKeyInput.trim() === '') {
+  const verifyApiKey = useCallback(async (apiKey) => {
+    if (!apiKey || apiKey.trim() === '') {
       setApiKeyError('API key is required');
+      return;
+    }
+    
+    if (!formData.provider) {
+      setApiKeyError('Please select a provider first');
+      return;
+    }
+    
+    if (!userId) {
+      setApiKeyError('User ID is required');
       return;
     }
     
     setIsVerifyingApiKey(true);
     setApiKeyError('');
+    
     try {
-      // Simulate network delay
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      const models = await llmProviderService.verifyApiKey(
+        apiKey,
+        formData.provider,
+        formData.baseUrl,
+        userId,
+        isAuthMock
+      );
       
-      // Mock logic: accept any non-empty key, but you can add real checks here
-      if (apiKeyInput.length < 8) {
-        throw new Error('API key is invalid or too short.');
-      }
-      
-      // Update formData only after successful verification
-      setFormData(prev => ({
-        ...prev,
-        apiKey: apiKeyInput
-      }));
-      
-      // Optionally, add provider-specific checks here
-      // For real implementation, call the provider's endpoint to verify
-      
+      // Sort models alphabetically
+      const sortedModels = [...models].sort();
+      setAvailableModels(sortedModels);
       setIsApiKeyVerified(true);
+      
       if (onSuccess) {
         onSuccess('API key verified successfully');
       }
     } catch (err) {
       setIsApiKeyVerified(false);
       setApiKeyError(err.message || 'Failed to verify API key');
+      
       if (onError) {
         onError(`API key verification failed: ${err.message}`);
       }
     } finally {
       setIsVerifyingApiKey(false);
     }
-  }, [apiKeyInput, onSuccess, onError]);
+  }, [formData.provider, formData.baseUrl, isAuthMock, userId, onSuccess, onError]);
   
   // Memoize save function to avoid recreating on every render
   const saveProviderConfig = useCallback(async () => {
@@ -409,9 +356,26 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
       return;
     }
     
-    if (!formData.provider || !formData.model) {
+    // Validate required fields based on model type
+    if (!formData.provider) {
       if (onError) {
-        onError('Provider and model are required');
+        onError('Provider is required');
+      }
+      return;
+    }
+    
+    // For chat models, we need a strong chat model
+    if (formData.modelType === 'chat' && !formData.models.chat.strong) {
+      if (onError) {
+        onError('Strong Chat Model is required');
+      }
+      return;
+    }
+    
+    // For embedding models, we need a large embedding model
+    if (formData.modelType === 'embedding' && !formData.models.embedding.large) {
+      if (onError) {
+        onError('Large Embedding Model is required');
       }
       return;
     }
@@ -419,95 +383,40 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
     setIsLoading(true);
     
     try {
-      // Store API key if provided
-      if (formData.apiKey) {
-        storeApiKey(formData.provider, formData.apiKey, apiKeyStorage, isAuthMock);
-      }
+      const result = await llmProviderService.saveProviderConfig(
+        formData,
+        selectedConfig,
+        providerConfigs,
+        userId,
+        userPreferences,
+        apiKeyStorage,
+        isAuthMock
+      );
       
-      // Create config object (without API key)
-      // Use descriptionInput directly instead of formData.description
-      const configToSave = {
-        id: selectedConfig?.id || Date.now().toString(),
-        provider: formData.provider,
-        model: formData.model,
-        baseUrl: formData.baseUrl || '',
-        description: descriptionInput || `${formData.provider} ${formData.model}`
-      };
+      setProviderConfigs(result.updatedConfigs);
       
-      // Update or add to the configs array
-      let updatedConfigs;
-      if (selectedConfig) {
-        // Update existing config
-        updatedConfigs = providerConfigs.map(config =>
-          config.id === selectedConfig.id ? configToSave : config
-        );
-      } else {
-        // Add new config
-        updatedConfigs = [...providerConfigs, configToSave];
-      }
-      
-      setProviderConfigs(updatedConfigs);
-      
-      if (isAuthMock) {
-        console.log('[MOCK] Saving provider configs to user_preferences', updatedConfigs);
-      } else {
-        // Save to Supabase
-        const { error } = await supabaseService.executeQuery(supabase =>
-          supabase
-            .from('user_preferences')
-            .upsert({
-              user_id: userId,
-              preference_key: 'llm_providers',
-              preference_value: updatedConfigs
-            }, {
-              onConflict: 'user_id,preference_key'
-            })
-            .select()
-        );
-          
-        if (error) throw error;
-        
+      if (!isAuthMock) {
         // Update the Redux store with the new preferences
         dispatch(updateUserPreferences({
           key: 'llm_providers',
-          value: updatedConfigs
+          value: result.updatedConfigs
         }));
         
-        // Also update the llm_preferences with the default provider
-        const defaultProvider = formData.provider;
-        const currentLlmPreferences = userPreferences.llm_preferences || {};
-        
-        const updatedLlmPreferences = {
-          ...currentLlmPreferences,
-          defaultProvider: defaultProvider
-        };
-        
-        // Save to Supabase
-        await supabaseService.executeQuery(supabase =>
-          supabase
-            .from('user_preferences')
-            .upsert({
-              user_id: userId,
-              preference_key: 'llm_preferences',
-              preference_value: updatedLlmPreferences
-            }, {
-              onConflict: 'user_id,preference_key'
-            })
-            .select()
-        );
+        if (result.updatedLlmPreferences) {
+          // Update Redux store
+          dispatch(updateUserPreferences({
+            key: 'llm_preferences',
+            value: result.updatedLlmPreferences
+          }));
           
-        // Update Redux store
-        dispatch(updateUserPreferences({
-          key: 'llm_preferences',
-          value: updatedLlmPreferences
-        }));
-        
-        // Update llmSlice
-        dispatch(setDefaultProvider(defaultProvider));
+          // Update llmSlice
+          dispatch(setDefaultProvider(result.updatedLlmPreferences.defaultProvider));
+        }
       }
       
       // Reset form and selection
       resetForm();
+      
       if (onSuccess) {
         onSuccess('Provider configuration saved successfully');
       }
@@ -523,7 +432,6 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
     userId,
     formData,
     selectedConfig,
-    descriptionInput,
     providerConfigs,
     isAuthMock,
     apiKeyStorage,
@@ -535,40 +443,22 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
   ]);
   
   // Handle API key storage preference change
-  const handleApiKeyStorageChange = useCallback(async (event) => {
-    const newStorageType = event.target.value;
+  const handleApiKeyStorageChange = useCallback(async (newStorageType) => {
     setIsLoading(true);
     
     try {
-      // Update llm_preferences in Redux and Supabase
-      const currentLlmPreferences = userPreferences.llm_preferences || {};
+      const result = await llmProviderService.updateApiKeyStoragePreference(
+        newStorageType,
+        userId,
+        userPreferences,
+        isAuthMock
+      );
       
-      const updatedLlmPreferences = {
-        ...currentLlmPreferences,
-        apiKeyStorage: newStorageType
-      };
-      
-      if (isAuthMock) {
-        console.log('[MOCK] Updating API key storage preference to', newStorageType);
-      } else {
-        // Save to Supabase
-        await supabaseService.executeQuery(supabase =>
-          supabase
-            .from('user_preferences')
-            .upsert({
-              user_id: userId,
-              preference_key: 'llm_preferences',
-              preference_value: updatedLlmPreferences
-            }, {
-              onConflict: 'user_id,preference_key'
-            })
-            .select()
-        );
-          
+      if (!isAuthMock && result.updatedLlmPreferences) {
         // Update Redux store
         dispatch(updateUserPreferences({
           key: 'llm_preferences',
-          value: updatedLlmPreferences
+          value: result.updatedLlmPreferences
         }));
       }
       
@@ -585,200 +475,201 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
     }
   }, [userId, userPreferences, isAuthMock, dispatch, onSuccess, onError]);
   
+  // Handle setting a provider as the default
+  const handleSetDefaultProvider = useCallback(async (providerName) => {
+    if (!userId) return;
+    
+    setIsLoading(true);
+    
+    try {
+      // Update the llm_preferences with the new default provider
+      const currentLlmPreferences = userPreferences.llm_preferences || {};
+      
+      const updatedLlmPreferences = {
+        ...currentLlmPreferences,
+        defaultProvider: providerName,
+        default: providerName // Adding 'default' key for backward compatibility
+      };
+      
+      if (isAuthMock) {
+        console.log('[MOCK] Setting default provider to', providerName);
+      } else {
+        // Save to Supabase
+        const { error } = await supabase
+          .from('user_preferences')
+          .upsert({
+            user_id: userId,
+            preference_key: 'llm_preferences',
+            preference_value: updatedLlmPreferences
+          }, {
+            onConflict: 'user_id,preference_key'
+          })
+          .select();
+        
+        if (error) throw error;
+        
+        // Update Redux store
+        dispatch(updateUserPreferences({
+          key: 'llm_preferences',
+          value: updatedLlmPreferences
+        }));
+        
+        // Update llmSlice
+        dispatch(setDefaultProvider(providerName));
+      }
+      
+      if (onSuccess) {
+        onSuccess(`${providerName} set as default provider`);
+      }
+    } catch (error) {
+      console.error('Error setting default provider:', error);
+      if (onError) {
+        onError(`Failed to set default provider: ${error.message}`);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId, userPreferences, isAuthMock, dispatch, onSuccess, onError]);
+  
+  // Handle form data changes
+  const handleFormDataChange = useCallback((newFormData) => {
+    const providerChanged = newFormData.provider !== formData.provider;
+    
+    setFormData(newFormData);
+    
+    // If the provider changed, check for existing verified API key
+    if (providerChanged && newFormData.provider) {
+      checkExistingApiKey(newFormData.provider);
+    }
+  }, [formData.provider]);
+  
+  // Check if there's already a verified API key for this provider
+  const checkExistingApiKey = useCallback(async (provider) => {
+    if (!userId || !provider) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('llm_api_keys')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('provider', provider.toLowerCase())
+        .maybeSingle();
+        
+      if (error) {
+        console.error('[LLMProviderSettings] Error checking API key:', error);
+        return;
+      }
+      
+      if (data) {
+        // If we have a key, update the form data
+        setFormData(prev => ({
+          ...prev,
+          apiKey: data.api_key || ''
+        }));
+        
+        // Track if the key is verified
+        let keyIsVerified = false;
+        
+        // If the key is verified, update the UI accordingly
+        if (data.verified) {
+          setIsApiKeyVerified(true);
+          setApiKeyError('');
+          keyIsVerified = true;
+        } else {
+          // If we have a key but it's not verified, update it to verified if it's valid
+          try {
+            // Update the key's verified status in the database
+            const { error: updateError } = await supabase
+              .from('llm_api_keys')
+              .upsert({
+                user_id: userId,
+                provider: provider.toLowerCase(),
+                api_key: data.api_key,
+                verified: true
+              }, {
+                onConflict: 'user_id,provider'
+              });
+              
+            if (!updateError) {
+              setIsApiKeyVerified(true);
+              keyIsVerified = true;
+            }
+          } catch (err) {
+            console.error('[LLMProviderSettings] Error updating API key verified status:', err);
+          }
+        }
+        
+        // If the key is verified, fetch models
+        if (keyIsVerified) {
+          try {
+            const models = await llmProviderService.verifyApiKey(
+              data.api_key,
+              provider,
+              formData.baseUrl,
+              userId,
+              isAuthMock
+            );
+            setAvailableModels(models);
+          } catch (err) {
+            console.error('[LLMProviderSettings] Error fetching models:', err);
+          }
+        }
+      } else {
+        // If no API key is set for this provider, reset verification state
+        setIsApiKeyVerified(false);
+        setApiKeyError('');
+        setAvailableModels([]);
+      }
+    } catch (err) {
+      console.error('[LLMProviderSettings] Error in provider change:', err);
+    }
+  }, [userId, formData.baseUrl, isAuthMock]);
+  
+  // If loading, show loading indicator
+  if (isLoading && !providerConfigs.length) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+  
   return (
     <Box>
-      
       {/* API Key Storage Preference */}
-      <FormControl fullWidth sx={{ mb: 3 }}>
-        <InputLabel>API Key Storage</InputLabel>
-        <Select
-          value={apiKeyStorage}
-          onChange={handleApiKeyStorageChange}
-          label="API Key Storage"
-          disabled={isLoading}
-        >
-          <MenuItem value={API_STORAGE_TYPES.LOCAL}>Local Storage (persists across sessions)</MenuItem>
-          <MenuItem value={API_STORAGE_TYPES.SESSION}>Session Storage (cleared when browser is closed)</MenuItem>
-          <MenuItem value={API_STORAGE_TYPES.SAVED}>Secure Server Storage (recommended)</MenuItem>
-        </Select>
-      </FormControl>
+      <ApiKeyStorageSelector
+        value={apiKeyStorage}
+        onChange={handleApiKeyStorageChange}
+        isLoading={isLoading}
+      />
       
       {/* List of saved provider configs */}
-      {providerConfigs.length > 0 && (
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>
-            Saved Provider Configurations
-          </Typography>
-          <Paper variant="outlined" sx={{ maxHeight: 200, overflow: 'auto' }}>
-            <List dense>
-              {providerConfigs.map((config) => (
-                <ListItem key={config.id}>
-                  <ListItemText
-                    primary={config.description || `${config.provider} ${config.model}`}
-                    secondary={`Provider: ${config.provider}, Model: ${config.model}`}
-                  />
-                  <ListItemSecondaryAction>
-                    <IconButton edge="end" onClick={() => handleEditConfig(config)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton edge="end" onClick={() => handleDeleteConfig(config.id)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </ListItemSecondaryAction>
-                </ListItem>
-              ))}
-            </List>
-          </Paper>
-        </Box>
-      )}
+      <LLMProviderList
+        providerConfigs={providerConfigs}
+        onEdit={handleEditConfig}
+        onDelete={handleDeleteConfig}
+        isLoading={isLoading}
+        defaultProvider={llmPreferences.defaultProvider}
+        onSetDefault={handleSetDefaultProvider}
+      />
       
       <Divider sx={{ my: 2 }} />
       
       {/* Form for adding/editing provider config */}
-      <Typography variant="subtitle2" sx={{ mb: 2 }}>
-        {selectedConfig ? 'Edit Provider Configuration' : 'Add Provider Configuration'}
-      </Typography>
-      
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {/* Provider selection */}
-        <FormControl fullWidth>
-          <InputLabel>Provider</InputLabel>
-          <Select
-            value={formData.provider}
-            onChange={handleProviderChange}
-            label="Provider"
-            disabled={isLoading}
-          >
-            <MenuItem value="openAI">OpenAI</MenuItem>
-            <MenuItem value="anthropic">Anthropic</MenuItem>
-            <MenuItem value="gemini">Gemini</MenuItem>
-            <MenuItem value="lmStudio">LM Studio</MenuItem>
-            <MenuItem value="ollama">Ollama</MenuItem>
-          </Select>
-        </FormControl>
-        
-        {/* Description field (always visible, directly under Provider) */}
-        <TextField
-          label='Description (eg "Strong Model") [recommended] ...'
-          value={descriptionInput}
-          onChange={(e) => {
-            // Only update local state, not formData
-            setDescriptionInput(e.target.value);
-          }}
-          // No onBlur handler - don't update formData until save
-          fullWidth
-          placeholder='Description (eg "Strong Model") [recommended] ...'
-          disabled={isLoading}
-        />
-        
-        {/* API Key input and verification */}
-        <TextField
-          label="API Key"
-          value={apiKeyInput}
-          onChange={(e) => {
-            const newValue = e.target.value;
-            setApiKeyInput(newValue);
-          }}
-          onBlur={() => {
-            // Only update formData on blur
-            if (apiKeyInput !== formData.apiKey) {
-              setFormData(prev => ({
-                ...prev,
-                apiKey: apiKeyInput
-              }));
-              setIsApiKeyVerified(false);
-              setApiKeyError('');
-            }
-          }}
-          fullWidth
-          type="password"
-          placeholder="Enter API key"
-          disabled={isLoading || isVerifyingApiKey}
-          helperText={
-            apiKeyError
-              ? apiKeyError
-              : `API key will be stored using ${apiKeyStorage} storage`
-          }
-          error={!!apiKeyError}
-        />
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Button
-            variant="outlined"
-            color={isApiKeyVerified ? 'success' : 'primary'}
-            onClick={verifyApiKey}
-            disabled={
-              isLoading ||
-              isVerifyingApiKey ||
-              !apiKeyInput ||
-              !formData.provider ||
-              isApiKeyVerified
-            }
-            startIcon={isVerifyingApiKey ? <CircularProgress size={20} /> : null}
-          >
-            {isVerifyingApiKey
-              ? 'Verifying...'
-              : isApiKeyVerified
-                ? 'Verified'
-                : 'Verify API Key'}
-          </Button>
-          {isApiKeyVerified && (
-            <Typography variant="body2" color="success.main">
-              API key verified
-            </Typography>
-          )}
-        </Box>
-        
-        {/* Reveal model and baseUrl only if API key is verified */}
-        {isApiKeyVerified && (
-          <>
-            <TextField
-              label="Model"
-              value={formData.model}
-              onChange={handleModelChange}
-              fullWidth
-              placeholder="e.g., gpt-4-turbo, claude-3-opus"
-              disabled={isLoading}
-            />
-            <TextField
-              label="Base URL (Optional)"
-              value={formData.baseUrl}
-              onChange={handleBaseUrlChange}
-              fullWidth
-              placeholder="e.g., https://api.openai.com"
-              disabled={isLoading}
-              helperText="Leave empty for default provider endpoint"
-            />
-          </>
-        )}
-        
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
-          {selectedConfig && (
-            <Button
-              variant="outlined"
-              onClick={resetForm}
-              disabled={isLoading}
-            >
-              Cancel
-            </Button>
-          )}
-          
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={saveProviderConfig}
-            disabled={
-              isLoading ||
-              !formData.provider ||
-              !isApiKeyVerified ||
-              (isApiKeyVerified && !formData.model)
-            }
-            startIcon={isLoading ? <CircularProgress size={20} /> : null}
-            sx={{ ml: 'auto' }}
-          >
-            Save Provider Config
-          </Button>
-        </Box>
-      </Box>
+      <LLMProviderForm
+        formData={formData}
+        onFormDataChange={handleFormDataChange}
+        selectedConfig={selectedConfig}
+        onReset={resetForm}
+        onSave={saveProviderConfig}
+        isLoading={isLoading}
+        isApiKeyVerified={isApiKeyVerified}
+        isVerifyingApiKey={isVerifyingApiKey}
+        apiKeyError={apiKeyError}
+        onVerifyApiKey={verifyApiKey}
+        availableModels={availableModels}
+        apiKeyStorage={apiKeyStorage}
+      />
     </Box>
   );
 };

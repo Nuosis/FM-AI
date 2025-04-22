@@ -14,7 +14,7 @@ import {
   Logout as LogoutIcon
 } from '@mui/icons-material';
 import { createLog, LogType } from '../../redux/slices/appSlice';
-import { logoutSuccess, signOut } from '../../redux/slices/authSlice';
+import { signOut } from '../../redux/slices/authSlice';
 import DropUpMenu from './DropUpMenu';
 
 const BottomBarContainer = styled('div')({
@@ -308,19 +308,19 @@ const BottomBar = ({
             <IconButton
               className="icon-button"
               data-path="logout"
-              onClick={async () => {
-                try {
-                  // Dispatch the signOut thunk to properly use Supabase's logout mechanism
-                  await dispatch(signOut());
-                  dispatch(createLog('User logged out successfully', LogType.INFO));
-                  handleViewChange('login');
-                } catch (error) {
-                  console.error('Logout error:', error);
-                  dispatch(createLog('Logout failed: ' + error.message, LogType.ERROR));
-                  // Still update Redux state on error
-                  dispatch(logoutSuccess());
-                  handleViewChange('login');
-                }
+              onClick={() => {
+                // Dispatch the signOut thunk to properly use Supabase's logout mechanism
+                dispatch(signOut())
+                  .then(() => {
+                    dispatch(createLog('User logged out successfully', LogType.INFO));
+                    handleViewChange('login');
+                  })
+                  .catch((error) => {
+                    console.error('Logout error:', error);
+                    dispatch(createLog('Logout failed: ' + error.message, LogType.ERROR));
+                    // The signOut thunk will handle state updates even on error
+                    handleViewChange('login');
+                  });
               }}
               sx={{
                 color: theme.palette.primary.main,
