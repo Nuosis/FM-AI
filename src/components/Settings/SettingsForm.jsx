@@ -20,6 +20,7 @@ import ProfileForm from './ProfileForm';
 import PasswordForm from './PasswordForm';
 import PreferencesForm from './PreferencesForm';
 import LLMProviderSettings from './LLMProviderSettings';
+import LLMProxyTester from './LLMProxyTester';
 
 /**
  * SettingsForm component that orchestrates all settings subcomponents
@@ -198,6 +199,24 @@ const SettingsForm = () => {
               onSuccess={handleSuccess}
               onError={handleError}
             />
+          </AccordionDetails>
+        </Accordion>
+
+        {/* LLM Proxy Tester */}
+        <Accordion
+          expanded={expandedPanel === 'llm-proxy-tester'}
+          onChange={handleAccordionChange('llm-proxy-tester')}
+          sx={{ mt: 2 }}
+        >
+          <AccordionSummary
+            expandIcon={<ExpandMoreIcon />}
+            aria-controls="llm-proxy-tester-content"
+            id="llm-proxy-tester-header"
+          >
+            <Typography variant="h6">LLM Proxy Tester</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <LLMProxyTester />
           </AccordionDetails>
         </Accordion>
 

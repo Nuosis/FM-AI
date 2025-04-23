@@ -30,7 +30,8 @@ const LLMProviderForm = ({
   onVerifyApiKey,
   onDeleteApiKey,
   availableModels,
-  apiKeyStorage
+  apiKeyStorage,
+  onFetchModels
 }) => {
   // Handle provider change
   const handleProviderChange = useCallback((provider) => {
@@ -185,6 +186,8 @@ const LLMProviderForm = ({
                 availableModels={availableModels}
                 onModelChange={handleChatModelChange}
                 disabled={isLoading}
+                provider={formData.provider}
+                onFetchModels={onFetchModels}
               />
             )}
             
@@ -197,6 +200,8 @@ const LLMProviderForm = ({
                 onModelChange={handleEmbeddingModelChange}
                 onSizeChange={handleEmbeddingModelSizeChange}
                 disabled={isLoading}
+                provider={formData.provider}
+                onFetchModels={onFetchModels}
               />
             )}
             
@@ -260,7 +265,8 @@ LLMProviderForm.propTypes = {
   onVerifyApiKey: PropTypes.func.isRequired,
   onDeleteApiKey: PropTypes.func,
   availableModels: PropTypes.array.isRequired,
-  apiKeyStorage: PropTypes.string.isRequired
+  apiKeyStorage: PropTypes.string.isRequired,
+  onFetchModels: PropTypes.func
 };
 
 export default LLMProviderForm;

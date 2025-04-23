@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
@@ -16,8 +16,18 @@ const EmbeddingModelSelector = ({
   models,
   availableModels,
   onModelChange,
-  disabled
+  disabled,
+  provider,
+  onFetchModels
+  // embeddingModelSize and onSizeChange are received as props but not used in this component
 }) => {
+  // Fetch models when component mounts if API key is verified
+  useEffect(() => {
+    if (onFetchModels && provider) {
+      onFetchModels();
+    }
+  }, [onFetchModels, provider]);
+
   // Memoize handlers to prevent unnecessary re-renders
 
   const handleLargeModelChange = useCallback((event) => {
@@ -89,10 +99,12 @@ EmbeddingModelSelector.propTypes = {
     small: PropTypes.string.isRequired
   }).isRequired,
   availableModels: PropTypes.array.isRequired,
-  embeddingModelSize: PropTypes.string.isRequired,
+  embeddingModelSize: PropTypes.string,
   onModelChange: PropTypes.func.isRequired,
-  onSizeChange: PropTypes.func.isRequired,
-  disabled: PropTypes.bool
+  onSizeChange: PropTypes.func,
+  disabled: PropTypes.bool,
+  provider: PropTypes.string,
+  onFetchModels: PropTypes.func
 };
 
 export default EmbeddingModelSelector;

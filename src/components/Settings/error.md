@@ -4,9 +4,6 @@ This document lists possible causes for a 400 error in the `handleSubmit` functi
 
 ---
 
-## 1. Invalid or Unsupported Model Name
-- The payload uses `model: "gpt-4.1-nano"`. If the edge function or provider does not recognize this model name, it may reject the request.
-
 ## 2. Invalid Provider Name
 - The payload uses `provider: "openAI"`. If the edge function expects a different casing (e.g., "openai" or "OpenAI") or a different value, it may return a 400.
 

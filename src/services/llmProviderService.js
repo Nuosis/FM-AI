@@ -352,10 +352,10 @@ const llmProviderService = {
     // Special handling for LM Studio - API key required but direct call
     const isLMStudio = providerLower === 'lmstudio';
     
-    // For non-Ollama providers, API key is required
-    if (!isOllama && (!apiKey || apiKey.trim() === '')) {
-      throw new Error('API key is required');
-    }
+    // For non-Ollama providers with direct API key verification, API key is required
+    // But for edge function calls, the API key will be looked up based on user_id
+    // So we don't need to check for API key presence here
+    // The edge function will handle the API key lookup
     
     try {
       if (isAuthMock) {

@@ -401,6 +401,34 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
     setAvailableModels([]);
   }, []); // No dependencies needed for resetForm
   
+  // Function to fetch models for the current provider if API key is verified
+  const fetchModels = useCallback(async () => {
+    // Only fetch models if API key is verified
+    if (!isApiKeyVerified || !formData.provider) {
+      return;
+    }
+    
+    console.log('[LLMProviderSettings] Fetching models for', formData.provider);
+    
+    try {
+      // The edge function will handle API key lookup based on user_id
+      // We don't need to check for API key presence here
+      const models = await llmProviderService.verifyApiKey(
+        '', // Empty API key - edge function will handle lookup
+        formData.provider,
+        formData.baseUrl,
+        userId,
+        isAuthMock
+      );
+      
+      // Sort models alphabetically
+      const sortedModels = [...models].sort();
+      setAvailableModels(sortedModels);
+    } catch (err) {
+      console.error('[LLMProviderSettings] Error fetching models:', err);
+    }
+  }, [isApiKeyVerified, formData.provider, formData.baseUrl, userId, isAuthMock]);
+  
   // Memoize verification function to prevent unnecessary re-renders
   const verifyApiKey = useCallback(async (apiKey) => {
     // Check if the provider is Ollama (which doesn't require an API key)
@@ -744,6 +772,7 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
           onDeleteApiKey={deleteApiKey}
           availableModels={availableModels}
           apiKeyStorage={apiKeyStorage}
+          onFetchModels={fetchModels}
         />
       )}
     </Box>

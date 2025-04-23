@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
@@ -16,10 +16,18 @@ const ChatModelSelector = ({
   models,
   availableModels,
   onModelChange,
-  disabled
+  disabled,
+  provider,
+  onFetchModels
 }) => {
-  // Memoize handlers to prevent unnecessary re-renders
+  // Fetch models when component mounts if API key is verified
+  useEffect(() => {
+    if (onFetchModels && provider) {
+      onFetchModels();
+    }
+  }, [onFetchModels, provider]);
 
+  // Memoize handlers to prevent unnecessary re-renders
 
   const handleStrongModelChange = useCallback((event) => {
     onModelChange('strong', event.target.value);
@@ -93,7 +101,9 @@ ChatModelSelector.propTypes = {
   }).isRequired,
   availableModels: PropTypes.array.isRequired,
   onModelChange: PropTypes.func.isRequired,
-  disabled: PropTypes.bool
+  disabled: PropTypes.bool,
+  provider: PropTypes.string,
+  onFetchModels: PropTypes.func
 };
 
 export default ChatModelSelector;
