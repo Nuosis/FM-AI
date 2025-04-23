@@ -38,7 +38,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { materialDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 const ToolList = () => {
-  const tools = useSelector(selectTools);
+  const rawTools = useSelector(selectTools);
   const isLoading = useSelector(selectToolsLoading);
   const error = useSelector(selectToolsError);
   const user = useSelector(state => state.auth.user);
@@ -49,15 +49,22 @@ const ToolList = () => {
   const [sortBy, setSortBy] = useState('name');
   const [showMyToolsOnly, setShowMyToolsOnly] = useState(false);
   const [selectedTool, setSelectedTool] = useState(null);
-  const [activeTab, setActiveTab] = useState(0); // 0: Details, 1: Playground
+  const [activeTab, setActiveTab] = useState(1); // 0: Details, 1: Playground (default to Playground)
+
+  // Extract tools from the response
+  const tools = useMemo(() => {
+    // If rawTools is an array, use it directly
+    console.log ('Raw tools:', rawTools);
+    if (rawTools && Array.isArray(rawTools)) {
+      return rawTools;
+    }
+    
+    // Default to empty array
+    return [];
+  }, [rawTools]);
 
   // Filter and sort tools
   const filteredAndSortedTools = useMemo(() => {
-    // Handle case where tools is undefined or not an array
-    if (!tools || !Array.isArray(tools)) {
-      return [];
-    }
-    
     // First filter by search term and optionally by user's id
     let filtered = tools.filter(tool => {
       const matchesSearch = tool.name?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -94,7 +101,7 @@ const ToolList = () => {
 
   const handleToolSelect = (tool) => {
     setSelectedTool(tool);
-    setActiveTab(1); // Switch to playground tab
+    setActiveTab(1); // Always switch to Playground tab (default)
   };
 
   const handleTabChange = (event, newValue) => {
@@ -153,14 +160,6 @@ def ${name?.toLowerCase().replace(/\s+/g, '_')}(*args, **kwargs):
     );
   }
 
-  if (!tools || !Array.isArray(tools)) {
-    return (
-      <Paper elevation={1} sx={{ p: 3 }}>
-        <Alert severity="error">Failed to load tools. Please try refreshing the page.</Alert>
-      </Paper>
-    );
-  }
-
   if (tools.length === 0) {
     return (
       <Paper elevation={1} sx={{ p: 3, textAlign: 'center' }}>
@@ -188,8 +187,22 @@ def ${name?.toLowerCase().replace(/\s+/g, '_')}(*args, **kwargs):
 
         <Paper elevation={1} sx={{ p: 2 }}>
           <Tabs value={activeTab} onChange={handleTabChange} sx={{ mb: 2 }}>
-            <Tab label="Details" />
-            <Tab label="Playground" />
+            <Tab
+              label="Details"
+              sx={{
+                '&.Mui-selected': { outline: 'none', boxShadow: 'none' },
+                '&:focus': { outline: 'none', boxShadow: 'none' },
+                '&:active': { outline: 'none', boxShadow: 'none' }
+              }}
+            />
+            <Tab
+              label="Playground"
+              sx={{
+                '&.Mui-selected': { outline: 'none', boxShadow: 'none' },
+                '&:focus': { outline: 'none', boxShadow: 'none' },
+                '&:active': { outline: 'none', boxShadow: 'none' }
+              }}
+            />
           </Tabs>
 
           {activeTab === 0 && (
@@ -207,7 +220,7 @@ def ${name?.toLowerCase().replace(/\s+/g, '_')}(*args, **kwargs):
                 </Tooltip>
                 {selectedTool.user_id === user?.id && (
                   <Tooltip title="Delete Tool">
-                    <IconButton 
+                    <IconButton
                       color="error"
                       onClick={() => handleDelete(selectedTool)}
                     >

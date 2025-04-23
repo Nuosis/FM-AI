@@ -36,9 +36,9 @@ const ToolCreator = ({ onCancel }) => {
         name,
         description,
         code,
-        user_id: user.id,
-        user_name: user.email || user.username || 'Unknown',
-        created_at: new Date().toISOString()
+        created_by: user.id, // Required field according to data model
+        // user_id is optional and user_name doesn't exist in the schema
+        // created_at and updated_at have default values in the database
       };
 
       await dispatch(saveTool(toolData)).unwrap();

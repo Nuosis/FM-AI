@@ -50,7 +50,6 @@ state.auth.user: {
   // User functions
   functions: Array,
   
-  // User ID
   id: String,
   
   // User identities

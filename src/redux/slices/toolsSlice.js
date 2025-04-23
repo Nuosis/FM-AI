@@ -39,17 +39,20 @@ export const deleteTool = createAsyncThunk(
   'tools/deleteTool',
   async (id, { rejectWithValue, dispatch }) => {
     try {
-      const { error } = await supabaseService.executeQuery(supabase =>
+      const response = await supabaseService.executeQuery(supabase =>
         supabase
           .from('functions')
           .delete()
           .eq('id', id)
       );
-
-      if (error) throw error;
-
+      
+      console.log('Delete tool response:', response);
+      
+      // Still need to dispatch the action to update the state
       dispatch(removeToolById(id));
-      return id;
+      
+      // Just return the entire response
+      return response;
     } catch (error) {
       console.error('Delete tool error:', {
         status: error.response?.status,
@@ -66,18 +69,16 @@ export const fetchTools = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       console.log('Fetching tools...');
-      const { data, error } = await supabaseService.executeQuery(supabase =>
+      const response = await supabaseService.executeQuery(supabase =>
         supabase
           .from('functions')
           .select('*')
       );
 
-      if (error) throw error;
-
-      // Ensure data is always an array
-      const safeData = Array.isArray(data) ? data : [];
-      console.log('Tools API response:', safeData);
-      return safeData;
+      console.log('Full Supabase response:', response);
+      
+      // Just return the entire response
+      return response;
     } catch (error) {
       console.error('Tools API error:', {
         status: error.response?.status,
@@ -93,16 +94,18 @@ export const saveTool = createAsyncThunk(
   'tools/saveTool',
   async (toolData, { rejectWithValue }) => {
     try {
-      const { data, error } = await supabaseService.executeQuery(supabase =>
+      console.log('Saving tool with data:', toolData);
+      const response = await supabaseService.executeQuery(supabase =>
         supabase
           .from('functions')
           .insert([toolData])
           .select()
       );
-
-      if (error) throw error;
-
-      return data[0];
+      
+      console.log('Full Supabase response:', response);
+      
+      // Just return the entire response
+      return response;
     } catch (error) {
       console.error('Save tool error:', {
         status: error.response?.status,
@@ -118,6 +121,7 @@ export const executeToolCode = createAsyncThunk(
   'tools/executeToolCode',
   async ({ id, input }, { rejectWithValue }) => {
     try {
+      console.log('Executing tool with ID:', id, 'and input:', input);
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/functions/execute/${id}`, {
         method: 'POST',
         headers: {
@@ -127,12 +131,18 @@ export const executeToolCode = createAsyncThunk(
         body: JSON.stringify(input)
       });
 
+      console.log('Execute tool response status:', response.status);
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to execute tool');
+        const errorMessage = `Failed to execute tool: ${response.status} ${response.statusText}`;
+        console.error(errorMessage);
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
+      console.log('Raw execution result:', result);
+      
+      // Just return the result directly
       return result;
     } catch (error) {
       console.error('Execute tool error:', error);
@@ -183,7 +193,7 @@ const toolsSlice = createSlice({
       })
       .addCase(fetchTools.fulfilled, (state, action) => {
         state.isLoading = false;
-        // Ensure items is always an array
+        // The response is already an array of tools, not an object with .data
         state.items = Array.isArray(action.payload) ? action.payload : [];
       })
       .addCase(fetchTools.rejected, (state, action) => {
@@ -198,7 +208,14 @@ const toolsSlice = createSlice({
       })
       .addCase(saveTool.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.items.push(action.payload);
+        // Extract data from the response
+        const data = action.payload.data;
+        if (data && Array.isArray(data) && data.length > 0) {
+          state.items.push(data[0]);
+        } else if (action.meta && action.meta.arg) {
+          // If no data returned but we have the original tool data, use that
+          state.items.push(action.meta.arg);
+        }
       })
       .addCase(saveTool.rejected, (state, action) => {
         state.isLoading = false;

@@ -113,7 +113,7 @@ const ToolChat = () => {
       // Call the Supabase Edge Function
       const { data, error: functionError } = await supabase.functions.invoke('llmProxyHandler', {
         body: {
-          provider: selectedProvider,
+          provider: selectedProvider.toLowerCase(),
           type: 'chat',
           model: selectedModel,
           baseUrl: null,
@@ -139,8 +139,11 @@ const ToolChat = () => {
       // Remove the thinking message
       setMessages(prev => prev.filter(m => !m.isLoading));
 
+      // Parse the response if it's a string
+      const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+
       // Extract Python code if it exists
-      const pythonCodeMatch = data.content.match(/```python([\s\S]*?)```/);
+      const pythonCodeMatch = parsedData.content ? parsedData.content.match(/```python([\s\S]*?)```/) : null;
       let extractedCode = null;
       
       if (pythonCodeMatch && pythonCodeMatch[1]) {
@@ -150,7 +153,7 @@ const ToolChat = () => {
       // Add the assistant's response
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: data.content,
+        content: parsedData.content || 'No response received',
         code: extractedCode
       }]);
 

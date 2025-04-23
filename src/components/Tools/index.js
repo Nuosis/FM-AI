@@ -3,3 +3,4 @@ export { default as ToolList } from './ToolList';
 export { default as ToolPlayground } from './ToolPlayground';
 export { default as ToolChat } from './ToolChat';
 export { default as ToolCreator } from './ToolCreator';
+export { default as ToolDataDebug } from './ToolDataDebug';

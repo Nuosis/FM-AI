@@ -27,6 +27,9 @@ import ErrorIcon from '@mui/icons-material/Error';
  * Allows testing getting models and chat completions
  */
 const LLMProxyTester = () => {
+  // Check if LLM testing is enabled in environment variables
+  const isLLMTestEnabled = import.meta.env.VITE_LLM_TEST === 'true';
+  
   // Get user data and preferences from Redux
   const currentUser = useSelector(state => state.auth.user);
   const userId = currentUser?.user_id;
@@ -245,33 +248,39 @@ const LLMProxyTester = () => {
   
   return (
     <Paper sx={{ p: 3, mb: 3 }}>
-      <Typography variant="body2" color="text.secondary" paragraph>
-        Test the LLM Proxy Handler with real API calls to get models and chat completions.
-      </Typography>
-      
-      <Divider sx={{ my: 2 }} />
-      
-      {/* Provider Selection */}
-      <Box sx={{ mb: 3 }}>
-        <FormControl fullWidth>
-          <InputLabel id="provider-select-label">Provider</InputLabel>
-          <Select
-            labelId="provider-select-label"
-            value={selectedProvider}
-            onChange={handleProviderChange}
-            label="Provider"
-          >
-            <MenuItem value="">
-              <em>Select a provider</em>
-            </MenuItem>
-            {llmProviders.map((provider) => (
-              <MenuItem key={provider.id} value={provider.provider}>
-                {provider.provider}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Box>
+      {!isLLMTestEnabled ? (
+        <Alert severity="info">
+          LLM Proxy Tester is disabled. Set VITE_LLM_TEST=true in your .env file to enable it.
+        </Alert>
+      ) : (
+        <>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            Test the LLM Proxy Handler with real API calls to get models and chat completions.
+          </Typography>
+          
+          <Divider sx={{ my: 2 }} />
+          
+          {/* Provider Selection */}
+          <Box sx={{ mb: 3 }}>
+            <FormControl fullWidth>
+              <InputLabel id="provider-select-label">Provider</InputLabel>
+              <Select
+                labelId="provider-select-label"
+                value={selectedProvider}
+                onChange={handleProviderChange}
+                label="Provider"
+              >
+                <MenuItem value="">
+                  <em>Select a provider</em>
+                </MenuItem>
+                {llmProviders.map((provider) => (
+                  <MenuItem key={provider.id} value={provider.provider}>
+                    {provider.provider}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
       
       {/* API Key Verification Status */}
       {selectedProvider && (
@@ -385,6 +394,8 @@ const LLMProxyTester = () => {
             </Paper>
           )}
         </Box>
+      )}
+        </>
       )}
     </Paper>
   );

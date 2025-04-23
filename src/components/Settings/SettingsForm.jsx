@@ -21,6 +21,7 @@ import PasswordForm from './PasswordForm';
 import PreferencesForm from './PreferencesForm';
 import LLMProviderSettings from './LLMProviderSettings';
 import LLMProxyTester from './LLMProxyTester';
+import ToolTesting from './ToolTesting';
 
 /**
  * SettingsForm component that orchestrates all settings subcomponents
@@ -202,23 +203,48 @@ const SettingsForm = () => {
           </AccordionDetails>
         </Accordion>
 
-        {/* LLM Proxy Tester */}
-        <Accordion
-          expanded={expandedPanel === 'llm-proxy-tester'}
-          onChange={handleAccordionChange('llm-proxy-tester')}
-          sx={{ mt: 2 }}
-        >
-          <AccordionSummary
-            expandIcon={<ExpandMoreIcon />}
-            aria-controls="llm-proxy-tester-content"
-            id="llm-proxy-tester-header"
+        {/* LLM Proxy Tester - Only render if VITE_LLM_TEST is true */}
+        {import.meta.env.VITE_LLM_TEST === 'true' && (
+          <Accordion
+            expanded={expandedPanel === 'llm-proxy-tester'}
+            onChange={handleAccordionChange('llm-proxy-tester')}
+            sx={{ mt: 2 }}
           >
-            <Typography variant="h6">LLM Proxy Tester</Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <LLMProxyTester />
-          </AccordionDetails>
-        </Accordion>
+            <AccordionSummary
+              expandIcon={<ExpandMoreIcon />}
+              aria-controls="llm-proxy-tester-content"
+              id="llm-proxy-tester-header"
+            >
+              <Typography variant="h6">LLM Proxy Tester</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <LLMProxyTester />
+            </AccordionDetails>
+          </Accordion>
+        )}
+
+        {/* Tool Testing - Only render if VITE_TOOL_TESTING is true */}
+        {import.meta.env.VITE_TOOL_TEST === 'true' && (
+          <Accordion
+            expanded={expandedPanel === 'tool-testing'}
+            onChange={handleAccordionChange('tool-testing')}
+            sx={{ mt: 2 }}
+          >
+            <AccordionSummary
+              expandIcon={<ExpandMoreIcon />}
+              aria-controls="tool-testing-content"
+              id="tool-testing-header"
+            >
+              <Typography variant="h6">Tool Testing</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <ToolTesting
+                onSuccess={handleSuccess}
+                onError={handleError}
+              />
+            </AccordionDetails>
+          </Accordion>
+        )}
 
       </Box>
       <Snackbar

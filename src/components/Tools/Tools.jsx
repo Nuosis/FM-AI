@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Box, Typography, IconButton, Tooltip, Tabs, Tab } from '@mui/material';
-import { Add as AddIcon } from '@mui/icons-material';
+import { Add as AddIcon, BugReport as BugReportIcon } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import ToolList from './ToolList';
 import ToolCreator from './ToolCreator';
@@ -30,7 +30,7 @@ const Tools = () => {
         mb: 2
       }}>
         <Typography variant="h4">
-          AI Tool System
+          Tool Playground
         </Typography>
         {!creating && activeTab === 0 && (
           isAuthenticated ? (
@@ -81,6 +81,13 @@ const Tools = () => {
       >
         <Tab label="Tools" />
         {isAuthenticated && <Tab label="Tool Chat" />}
+        {import.meta.env.VITE_TOOL_TEST === 'true' && (
+          <Tab
+            icon={<BugReportIcon fontSize="small" />}
+            iconPosition="start"
+            label="Debug"
+          />
+        )}
       </Tabs>
       
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, overflow: 'auto' }}>
