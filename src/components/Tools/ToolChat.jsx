@@ -16,12 +16,19 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Collapse
+  Collapse,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle
 } from '@mui/material';
 import {
   Send as SendIcon,
   Menu as MenuIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  DeleteOutline as DeleteIcon
 } from '@mui/icons-material';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { materialDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -36,6 +43,7 @@ const ToolChat = () => {
   const [selectedModel, setSelectedModel] = useState('');
   const [availableProviders, setAvailableProviders] = useState([]);
   const [availableModels, setAvailableModels] = useState([]);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const messagesEndRef = useRef(null);
   const dispatch = useDispatch();
   const user = useSelector(state => state.auth.user);
@@ -75,7 +83,7 @@ const ToolChat = () => {
           setAvailableModels(models);
           
           // Set selected model (default to weak model)
-          setSelectedModel(providerConfig.models.chat.weak || providerConfig.models.chat.strong || '');
+          setSelectedModel(providerConfig.models.chat.strong || providerConfig.models.chat.weak || '');
         }
       }
     }
@@ -108,6 +116,7 @@ const ToolChat = () => {
           provider: selectedProvider,
           type: 'chat',
           model: selectedModel,
+          baseUrl: null,
           messages: [
             { role: 'system', content: 'You are a helpful assistant that generates Python code with @tool() decorators. When asked to create a tool, respond with valid Python code that includes a function with a @tool() decorator, proper docstrings, and implementation.' },
             ...messages.filter(m => !m.isLoading),
@@ -117,6 +126,9 @@ const ToolChat = () => {
             temperature: 0.7,
             max_tokens: 2000
           }
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
         }
       });
 
@@ -188,6 +200,27 @@ const ToolChat = () => {
     setSettingsOpen(!settingsOpen);
   };
 
+  // Handle clear chat confirmation
+  const handleClearConfirm = () => {
+    if (messages.length > 0) {
+      setClearConfirmOpen(true);
+    } else {
+      // If no messages, just clear without confirmation
+      setMessages([]);
+    }
+  };
+
+  // Clear chat messages
+  const clearChat = () => {
+    setMessages([]);
+    setClearConfirmOpen(false);
+  };
+
+  // Cancel clear chat
+  const cancelClearChat = () => {
+    setClearConfirmOpen(false);
+  };
+
   const handleSaveCode = async (code) => {
     if (!code || !user) return;
     
@@ -250,48 +283,48 @@ const ToolChat = () => {
             p: 2,
             mb: 2,
             display: 'flex',
-            flexDirection: 'row',
+            flexDirection: 'column',
             gap: 2,
-            alignItems: 'center',
-            justifyContent: 'flex-start',
             borderRadius: 0,
             boxShadow: 2
           }}
         >
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel id="provider-select-label">AI Provider</InputLabel>
-            <Select
-              labelId="provider-select-label"
-              value={selectedProvider}
-              onChange={handleProviderChange}
-              label="AI Provider"
-              size="small"
-            >
-              {availableProviders.map((provider) => (
-                <MenuItem key={provider.provider} value={provider.provider}>
-                  {provider.provider}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel id="model-select-label">Model</InputLabel>
-            <Select
-              labelId="model-select-label"
-              value={selectedModel}
-              onChange={handleModelChange}
-              label="Model"
-              size="small"
-              disabled={availableModels.length === 0}
-            >
-              {availableModels.map((model) => (
-                <MenuItem key={model} value={model}>
-                  {model}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Box sx={{ display: 'flex', flexDirection: 'row', gap: 2, alignItems: 'center' }}>
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel id="provider-select-label">AI Provider</InputLabel>
+              <Select
+                labelId="provider-select-label"
+                value={selectedProvider}
+                onChange={handleProviderChange}
+                label="AI Provider"
+                size="small"
+              >
+                {availableProviders.map((provider) => (
+                  <MenuItem key={provider.provider} value={provider.provider}>
+                    {provider.provider}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel id="model-select-label">Model</InputLabel>
+              <Select
+                labelId="model-select-label"
+                value={selectedModel}
+                onChange={handleModelChange}
+                label="Model"
+                size="small"
+                disabled={availableModels.length === 0}
+              >
+                {availableModels.map((model) => (
+                  <MenuItem key={model} value={model}>
+                    {model}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
         </Paper>
       </Collapse>
       
@@ -401,25 +434,72 @@ const ToolChat = () => {
           placeholder="Describe the tool you want to create..."
           disabled={isLoading}
         />
-        <IconButton 
+        <IconButton
           onClick={handleSubmit}
           disabled={!input.trim() || isLoading}
           color="primary"
         >
           <SendIcon />
         </IconButton>
+        <IconButton
+          onClick={handleClearConfirm}
+          color="error"
+          size="small"
+          disabled={messages.length === 0 || isLoading}
+          sx={{ alignSelf: 'center' }}
+          title="Clear chat"
+        >
+          <DeleteIcon fontSize="small" />
+        </IconButton>
       </Box>
 
       <Snackbar
         open={Boolean(error)}
-        autoHideDuration={6000}
+        autoHideDuration={3000}
         onClose={() => setError(null)}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        TransitionProps={{
+          direction: 'right',
+          timeout: {
+            enter: 500,
+            exit: 500
+          }
+        }}
+        sx={{
+          '& .MuiSnackbarContent-root': {
+            backgroundColor: 'error.main',
+            color: 'error.contrastText'
+          }
+        }}
       >
         <Alert severity="error" onClose={() => setError(null)}>
           {error}
         </Alert>
       </Snackbar>
+
+      {/* Confirmation Dialog for clearing chat */}
+      <Dialog
+        open={clearConfirmOpen}
+        onClose={cancelClearChat}
+        aria-labelledby="clear-chat-dialog-title"
+      >
+        <DialogTitle id="clear-chat-dialog-title">
+          Clear Chat History
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to clear all chat messages? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelClearChat} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={clearChat} color="error" autoFocus>
+            Clear
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
