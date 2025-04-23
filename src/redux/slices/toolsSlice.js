@@ -74,8 +74,10 @@ export const fetchTools = createAsyncThunk(
 
       if (error) throw error;
 
-      console.log('Tools API response:', data);
-      return data;
+      // Ensure data is always an array
+      const safeData = Array.isArray(data) ? data : [];
+      console.log('Tools API response:', safeData);
+      return safeData;
     } catch (error) {
       console.error('Tools API error:', {
         status: error.response?.status,
@@ -181,7 +183,8 @@ const toolsSlice = createSlice({
       })
       .addCase(fetchTools.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.items = action.payload;
+        // Ensure items is always an array
+        state.items = Array.isArray(action.payload) ? action.payload : [];
       })
       .addCase(fetchTools.rejected, (state, action) => {
         state.isLoading = false;

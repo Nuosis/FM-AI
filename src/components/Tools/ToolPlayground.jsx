@@ -28,6 +28,9 @@ const ToolPlayground = ({ tool }) => {
   const executionResult = useSelector(selectExecutionResult);
   const executionError = useSelector(selectExecutionError);
 
+  // Check if tool is valid
+  const isToolValid = tool && typeof tool === 'object' && tool.id;
+
   const validateJson = (jsonString) => {
     try {
       JSON.parse(jsonString);
@@ -46,12 +49,28 @@ const ToolPlayground = ({ tool }) => {
   };
 
   const handleExecute = async () => {
-    if (!validateJson(inputJson)) return;
+    if (!validateJson(inputJson) || !isToolValid) return;
     
     const input = JSON.parse(inputJson);
     dispatch(clearExecutionResult());
     await dispatch(executeToolCode({ id: tool.id, input }));
   };
+
+  // If tool is not valid, show a message
+  if (!isToolValid) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+          <Typography variant="subtitle1" color="error">
+            Tool data is not available or invalid
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            Please select a valid tool to use the playground
+          </Typography>
+        </Paper>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -59,8 +78,8 @@ const ToolPlayground = ({ tool }) => {
         <Typography variant="subtitle1" gutterBottom>
           Tool Code
         </Typography>
-        <SyntaxHighlighter 
-          language="python" 
+        <SyntaxHighlighter
+          language="python"
           style={materialDark}
           customStyle={{ maxHeight: '200px', overflow: 'auto' }}
         >
@@ -144,9 +163,13 @@ const ToolPlayground = ({ tool }) => {
 
 ToolPlayground.propTypes = {
   tool: PropTypes.shape({
-    id: PropTypes.string.isRequired,
+    id: PropTypes.string,
     code: PropTypes.string
-  }).isRequired
+  })
+};
+
+ToolPlayground.defaultProps = {
+  tool: null
 };
 
 export default ToolPlayground;

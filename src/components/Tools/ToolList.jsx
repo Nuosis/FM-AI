@@ -53,6 +53,11 @@ const ToolList = () => {
 
   // Filter and sort tools
   const filteredAndSortedTools = useMemo(() => {
+    // Handle case where tools is undefined or not an array
+    if (!tools || !Array.isArray(tools)) {
+      return [];
+    }
+    
     // First filter by search term and optionally by user's id
     let filtered = tools.filter(tool => {
       const matchesSearch = tool.name?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -144,6 +149,14 @@ def ${name?.toLowerCase().replace(/\s+/g, '_')}(*args, **kwargs):
     return (
       <Paper elevation={1} sx={{ p: 3 }}>
         <Alert severity="error">{error}</Alert>
+      </Paper>
+    );
+  }
+
+  if (!tools || !Array.isArray(tools)) {
+    return (
+      <Paper elevation={1} sx={{ p: 3 }}>
+        <Alert severity="error">Failed to load tools. Please try refreshing the page.</Alert>
       </Paper>
     );
   }
