@@ -21,7 +21,13 @@ import {
   FormControl,
   InputLabel,
   Slider,
-  Stack
+  Stack,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -46,6 +52,7 @@ const LLMChat = () => {
   const [providerModels, setProviderModels] = useState([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsPanelWidth, setSettingsPanelWidth] = useState(0);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const messagesEndRef = useRef(null);
   
   const scrollToBottom = () => {
@@ -215,9 +222,10 @@ const LLMChat = () => {
       // Call the Supabase Edge Function
       const { data, error: functionError } = await supabase.functions.invoke('llmProxyHandler', {
         body: {
-          provider: selectedProvider,
+          provider: selectedProvider.toLowerCase(),
           type: 'chat',
           model: selectedModel,
+          baseUrl: null,
           messages: [
             { role: 'system', content: userLlmPreferences?.systemInstructions || llmSettings.systemInstructions },
             ...previousMessages.map(msg => ({
@@ -228,8 +236,12 @@ const LLMChat = () => {
           ],
           options: {
             temperature: userLlmPreferences?.temperature || llmSettings.temperature,
+            max_tokens: 500,
             stream: false
           }
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
         }
       });
 
@@ -255,9 +267,12 @@ const LLMChat = () => {
         );
       }
 
+      // Parse the response if it's a string
+      const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+      
       setMessages(prev => [...prev.slice(0, -1), {
         role: 'assistant',
-        content: data.content || 'No response received'
+        content: parsedData.content || 'No response received'
       }]);
 
     } catch (err) {
@@ -271,6 +286,27 @@ const LLMChat = () => {
     }
   };
 
+
+  // Handle clear chat confirmation
+  const handleClearConfirm = () => {
+    if (messages.length > 0) {
+      setClearConfirmOpen(true);
+    } else {
+      // If no messages, just clear without confirmation
+      setMessages([]);
+    }
+  };
+
+  // Clear chat messages
+  const clearChat = () => {
+    setMessages([]);
+    setClearConfirmOpen(false);
+  };
+
+  // Cancel clear chat
+  const cancelClearChat = () => {
+    setClearConfirmOpen(false);
+  };
 
   // Toggle settings panel
   const toggleSettings = () => {
@@ -417,18 +453,29 @@ const LLMChat = () => {
                 ]}
               />
             </Box>
+            
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={clearChat}
+              fullWidth
+              sx={{ mt: 2 }}
+            >
+              Clear Chat
+            </Button>
           </Stack>
         </Box>
       </Box>
 
-      <Paper 
-        sx={{ 
-          flex: 1, 
-          mb: 2, 
-          p: 2, 
+      <Paper
+        sx={{
+          flex: 1,
+          mb: 2,
+          p: 2,
           overflow: 'auto',
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          justifyContent: 'flex-end' // Align content to the bottom
         }}
       >
         {messages.map((message, index) => (
@@ -450,6 +497,29 @@ const LLMChat = () => {
             >
               <Box>{message.content}</Box>
             </Paper>
+            {/* Confirmation Dialog for clearing chat */}
+            <Dialog
+              open={clearConfirmOpen}
+              onClose={cancelClearChat}
+              aria-labelledby="clear-chat-dialog-title"
+            >
+              <DialogTitle id="clear-chat-dialog-title">
+                Clear Chat History
+              </DialogTitle>
+              <DialogContent>
+                <DialogContentText>
+                  Are you sure you want to clear all chat messages? This action cannot be undone.
+                </DialogContentText>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={cancelClearChat} color="primary">
+                  Cancel
+                </Button>
+                <Button onClick={clearChat} color="error" autoFocus>
+                  Clear
+                </Button>
+              </DialogActions>
+            </Dialog>
           </Box>
         ))}
         <div ref={messagesEndRef} />
@@ -470,10 +540,20 @@ const LLMChat = () => {
           }}
           placeholder="Type your message..."
         />
-        <IconButton 
+        <IconButton
+          onClick={handleClearConfirm}
+          color="error"
+          title="Clear chat"
+          sx={{ alignSelf: 'center' }}
+        >
+          <CloseIcon />
+        </IconButton>
+        <IconButton
           onClick={handleSubmit}
           disabled={!input.trim() || !selectedProvider || !selectedModel}
           color="primary"
+          title="Send message"
+          sx={{ alignSelf: 'center' }}
         >
           <SendIcon />
         </IconButton>
