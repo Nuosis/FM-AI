@@ -3,8 +3,9 @@ import PropTypes from 'prop-types';
 import { useSelector, useDispatch, shallowEqual } from 'react-redux';
 import { updateUserPreferences } from '../../redux/slices/authSlice';
 import { setDefaultProvider } from '../../redux/slices/llmSlice';
-import { getApiKey, API_STORAGE_TYPES } from '../../utils/apiKeyStorage';
+import { API_STORAGE_TYPES } from '../../utils/apiKeyStorage';
 import llmProviderService from '../../services/llmProviderService';
+import supabaseService from '../../services/supabaseService';
 import supabase from '../../utils/supabase';
 import {
   Box,
@@ -99,33 +100,28 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
         setProviderConfigs(initialProviderConfigs);
         isInitialized.current = true;
       } else {
+        // Load provider configs from Supabase
         loadProviderConfigs();
-        isInitialized.current = true;
       }
     }
-    
-    // Reset initialization flag if user changes
-    return () => {
-      if (userId) {
-        isInitialized.current = false;
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]); // Only depend on userId, not on userPreferences or user.id
+  }, [userId, userPreferences.llm_providers]);
   
+  // Load provider configs from Supabase
   const loadProviderConfigs = async () => {
-    if (!userId) {
-      console.log('[LLMProviderSettings] No userId available, skipping loadProviderConfigs');
-      return;
-    }
+    if (!userId) return;
     
     setIsLoading(true);
     
     try {
       const configs = await llmProviderService.loadProviderConfigs(userId, isAuthMock);
       setProviderConfigs(configs);
+      isInitialized.current = true;
+      
+      if (onSuccess) {
+        onSuccess('Provider configurations loaded successfully');
+      }
     } catch (error) {
-      console.error('Error loading provider configs:', error);
+      console.error('[LLMProviderSettings] Error loading provider configs:', error);
       if (onError) {
         onError(`Failed to load provider configurations: ${error.message}`);
       }
@@ -139,8 +135,10 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
     setSelectedConfig(config);
     setShowProviderForm(true);
     
-    // Try to get the API key from storage
-    const apiKey = getApiKey(config.provider, apiKeyStorage, isAuthMock) || '';
+    // API keys are never stored locally, they're fetched from the database when needed
+    // Just set apiKey to empty string for the form
+    const apiKey = '';
+    console.log('[LLMProviderSettings] Not retrieving API key from local storage');
     
     // Always default to chat models tab when editing
     const modelType = 'chat';
@@ -170,19 +168,19 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
     // Check if the provider is Ollama (which doesn't require an API key)
     const isOllama = config.provider?.toLowerCase() === 'ollama';
     
-    // For Ollama, set API key verification to true regardless of whether there's an API key
-    // For other providers, only set to true if there's an API key
-    setIsApiKeyVerified(isOllama || !!apiKey);
+    // Log auth mock status to debug
+    console.log('[LLMProviderSettings] isAuthMock:', isAuthMock);
     
     // Set loading state
     setIsVerifyingApiKey(true);
     
-    // For Ollama, fetch models even if there's no API key
-    // For other providers, only fetch if there's an API key
-    if (isOllama || apiKey) {
-      // Fetch available models
+    // For Ollama, set API key verification to true immediately
+    if (isOllama) {
+      setIsApiKeyVerified(true);
+      
+      // Fetch models for Ollama
       llmProviderService.verifyApiKey(
-        apiKey, // This will be empty for Ollama, which is fine
+        '', // Empty API key for Ollama
         config.provider,
         config.baseUrl || '',
         userId,
@@ -196,24 +194,106 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
           setIsVerifyingApiKey(false);
         })
         .catch(err => {
-          console.error('[LLMProviderSettings] Error fetching models during edit:', err);
+          console.error('[LLMProviderSettings] Error fetching models for Ollama during edit:', err);
           setIsVerifyingApiKey(false);
-          
-          // Fallback: use models from the config to ensure they're at least available
-          const allModels = new Set();
-          if (config.models?.chat?.strong) allModels.add(config.models.chat.strong);
-          if (config.models?.chat?.weak) allModels.add(config.models.chat.weak);
-          if (config.models?.embedding?.large) allModels.add(config.models.embedding.large);
-          if (config.models?.embedding?.small) allModels.add(config.models.embedding.small);
-          
-          if (allModels.size > 0) {
-            // Sort models alphabetically
-            const sortedModels = [...allModels].sort();
-            setAvailableModels(sortedModels);
-          }
         });
+    } else {
+      // For other providers, check if the API key is verified in the database
+      console.log('[LLMProviderSettings] Condition check:', {
+        isAuthMock,
+        hasApiKey: !!apiKey,
+        condition: !isAuthMock && !!apiKey
+      });
+      
+      // Always check the database for verification status, even if no API key in local storage
+      if (!isAuthMock) {
+        console.log('[LLMProviderSettings] Checking API key verification in database');
+        // Query the llm_api_keys table to check if the API key is verified
+        // Use lowercase for provider name to ensure consistent matching
+        const providerLower = config.provider.toLowerCase();
+        console.log('[LLMProviderSettings] Provider:', providerLower);
+        
+        // First, check if there are any API keys for this user
+        // Only select the verified field, never the api_key field for security
+        console.log('[LLMProviderSettings] Checking for any API keys');
+        supabase
+          .from('llm_api_keys')
+          .select('provider,verified')
+          .then(({ data, error }) => {
+            if (error) {
+              console.error('[LLMProviderSettings] Error checking all API keys:', error);
+              setIsApiKeyVerified(false);
+              setIsVerifyingApiKey(false);
+              return;
+            }
+            
+            console.log('[LLMProviderSettings] All API keys in database:', data);
+            
+            // Find the matching provider (case insensitive)
+            const apiKeyEntry = data?.find(entry => 
+              entry.provider.toLowerCase() === providerLower
+            );
+            
+            console.log('[LLMProviderSettings] Matching API key entry:', apiKeyEntry);
+            
+            // Set isApiKeyVerified based on the verified field from the database
+            const isVerified = apiKeyEntry?.verified === true;
+            console.log('[LLMProviderSettings] API key verified:', isVerified);
+            setIsApiKeyVerified(isVerified);
+            
+            // If verified, fetch models
+            if (isVerified) {
+              // Fetch available models - we don't need to pass the API key
+              // The backend will fetch it from the database when needed
+              console.log('[LLMProviderSettings] API key is verified, fetching models');
+              
+              llmProviderService.verifyApiKey(
+                '', // Empty API key - backend will fetch it from the database
+                config.provider,
+                config.baseUrl || '',
+                userId,
+                isAuthMock
+              )
+                .then(models => {
+                  // Sort models alphabetically
+                  const sortedModels = [...models].sort();
+                  // Set available models
+                  setAvailableModels(sortedModels);
+                  setIsVerifyingApiKey(false);
+                })
+                .catch(err => {
+                  console.error('[LLMProviderSettings] Error fetching models during edit:', err);
+                  setIsVerifyingApiKey(false);
+                  
+                  // Fallback: use models from the config to ensure they're at least available
+                  const allModels = new Set();
+                  if (config.models?.chat?.strong) allModels.add(config.models.chat.strong);
+                  if (config.models?.chat?.weak) allModels.add(config.models.chat.weak);
+                  if (config.models?.embedding?.large) allModels.add(config.models.embedding.large);
+                  if (config.models?.embedding?.small) allModels.add(config.models.embedding.small);
+                  
+                  if (allModels.size > 0) {
+                    // Sort models alphabetically
+                    const sortedModels = [...allModels].sort();
+                    setAvailableModels(sortedModels);
+                  }
+                });
+            } else {
+              setIsVerifyingApiKey(false);
+            }
+          })
+          .catch(err => {
+            console.error('[LLMProviderSettings] Error in Supabase query:', err);
+            setIsApiKeyVerified(false);
+            setIsVerifyingApiKey(false);
+          });
+      } else {
+        // For mock auth or no API key, set verified to false
+        setIsApiKeyVerified(false);
+        setIsVerifyingApiKey(false);
+      }
     }
-  }, [apiKeyStorage, isAuthMock]);
+  }, [apiKeyStorage, isAuthMock, userId]);
   
   // Memoize handleDeleteConfig to prevent unnecessary re-renders
   const handleDeleteConfig = useCallback(async (configId) => {
@@ -398,22 +478,15 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
         .eq('provider', formData.provider.toLowerCase());
       
       if (error) {
-        console.error('[LLMProviderSettings] Error deleting API key:', error);
-        if (onError) {
-          onError(`Failed to delete API key: ${error.message}`);
-        }
-        return;
+        throw error;
       }
       
-      // Reset the API key verification state
-      setIsApiKeyVerified(false);
-      setApiKeyError('');
-      
-      // Clear the API key in the form
+      // Reset form state
       setFormData(prev => ({
         ...prev,
         apiKey: ''
       }));
+      setIsApiKeyVerified(false);
       
       if (onSuccess) {
         onSuccess('API key deleted successfully');
@@ -426,37 +499,18 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, formData.provider, onSuccess, onError]);
+  }, [formData.provider, userId, onSuccess, onError]);
   
-  // Memoize save function to avoid recreating on every render
+  // Memoize handleFormDataChange to prevent unnecessary re-renders
+  const handleFormDataChange = useCallback((newFormData) => {
+    setFormData(newFormData);
+  }, []);
+  
+  // Memoize saveProviderConfig to prevent unnecessary re-renders
   const saveProviderConfig = useCallback(async () => {
     if (!userId) {
       if (onError) {
-        onError('User ID is required to save provider configuration');
-      }
-      return;
-    }
-    
-    // Validate required fields based on model type
-    if (!formData.provider) {
-      if (onError) {
-        onError('Provider is required');
-      }
-      return;
-    }
-    
-    // For chat models, we need a strong chat model
-    if (formData.modelType === 'chat' && !formData.models.chat.strong) {
-      if (onError) {
-        onError('Strong Chat Model is required');
-      }
-      return;
-    }
-    
-    // For embedding models, we need a large embedding model
-    if (formData.modelType === 'embedding' && !formData.models.embedding.large) {
-      if (onError) {
-        onError('Large Embedding Model is required');
+        onError('User ID is required');
       }
       return;
     }
@@ -477,14 +531,14 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
       setProviderConfigs(result.updatedConfigs);
       
       if (!isAuthMock) {
-        // Update the Redux store with the new preferences
+        // Update both llm_providers and llm_preferences in Redux
         dispatch(updateUserPreferences({
           key: 'llm_providers',
           value: result.updatedConfigs
         }));
         
         if (result.updatedLlmPreferences) {
-          // Update Redux store
+          // Update llm_preferences in Redux
           dispatch(updateUserPreferences({
             key: 'llm_preferences',
             value: result.updatedLlmPreferences
@@ -495,14 +549,14 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
         }
       }
       
-      // Reset form and selection
+      // Reset form
       resetForm();
       
       if (onSuccess) {
         onSuccess('Provider configuration saved successfully');
       }
     } catch (error) {
-      console.error('Error saving provider config:', error);
+      console.error('[LLMProviderSettings] Error saving provider config:', error);
       if (onError) {
         onError(`Failed to save provider configuration: ${error.message}`);
       }
@@ -510,21 +564,95 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
       setIsLoading(false);
     }
   }, [
-    userId,
     formData,
     selectedConfig,
     providerConfigs,
-    isAuthMock,
-    apiKeyStorage,
+    userId,
     userPreferences,
+    apiKeyStorage,
+    isAuthMock,
     dispatch,
     resetForm,
     onSuccess,
     onError
   ]);
   
-  // Handle API key storage preference change
+  // Memoize handleSetDefaultProvider to prevent unnecessary re-renders
+  const handleSetDefaultProvider = useCallback(async (provider) => {
+    if (!userId) {
+      if (onError) {
+        onError('User ID is required');
+      }
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      // Update llm_preferences in Redux and Supabase
+      const currentLlmPreferences = userPreferences.llm_preferences || {};
+      
+      // Make sure we preserve the API key storage preference
+      const apiKeyStorage = currentLlmPreferences.apiKeyStorage || API_STORAGE_TYPES.LOCAL;
+      
+      const updatedLlmPreferences = {
+        ...currentLlmPreferences,
+        defaultProvider: provider,
+        default: provider, // Adding 'default' key for backward compatibility
+        apiKeyStorage
+      };
+      
+      if (isAuthMock) {
+        console.log('[MOCK] Setting default provider to', provider);
+      } else {
+        // Save to Supabase
+        const { error } = await supabaseService.executeQuery(supabase =>
+          supabase
+            .from('user_preferences')
+            .upsert({
+              user_id: userId,
+              preference_key: 'llm_preferences',
+              preference_value: updatedLlmPreferences
+            }, {
+              onConflict: 'user_id,preference_key'
+            })
+            .select()
+        );
+          
+        if (error) throw error;
+        
+        // Update Redux
+        dispatch(updateUserPreferences({
+          key: 'llm_preferences',
+          value: updatedLlmPreferences
+        }));
+        
+        // Update llmSlice
+        dispatch(setDefaultProvider(provider));
+      }
+      
+      if (onSuccess) {
+        onSuccess(`Default provider set to ${provider}`);
+      }
+    } catch (error) {
+      console.error('[LLMProviderSettings] Error setting default provider:', error);
+      if (onError) {
+        onError(`Failed to set default provider: ${error.message}`);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId, userPreferences, isAuthMock, dispatch, onSuccess, onError]);
+  
+  // Memoize handleApiKeyStorageChange to prevent unnecessary re-renders
   const handleApiKeyStorageChange = useCallback(async (newStorageType) => {
+    if (!userId) {
+      if (onError) {
+        onError('User ID is required');
+      }
+      return;
+    }
+    
     setIsLoading(true);
     
     try {
@@ -536,7 +664,7 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
       );
       
       if (!isAuthMock && result.updatedLlmPreferences) {
-        // Update Redux store
+        // Update llm_preferences in Redux
         dispatch(updateUserPreferences({
           key: 'llm_preferences',
           value: result.updatedLlmPreferences
@@ -544,10 +672,10 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
       }
       
       if (onSuccess) {
-        onSuccess('API key storage preference updated successfully');
+        onSuccess(`API key storage preference updated to ${newStorageType}`);
       }
     } catch (error) {
-      console.error('Error updating API key storage preference:', error);
+      console.error('[LLMProviderSettings] Error updating API key storage preference:', error);
       if (onError) {
         onError(`Failed to update API key storage preference: ${error.message}`);
       }
@@ -555,156 +683,6 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
       setIsLoading(false);
     }
   }, [userId, userPreferences, isAuthMock, dispatch, onSuccess, onError]);
-  
-  // Handle setting a provider as the default
-  const handleSetDefaultProvider = useCallback(async (providerName) => {
-    if (!userId) return;
-    
-    setIsLoading(true);
-    
-    try {
-      // Update the llm_preferences with the new default provider
-      const currentLlmPreferences = userPreferences.llm_preferences || {};
-      
-      const updatedLlmPreferences = {
-        ...currentLlmPreferences,
-        defaultProvider: providerName,
-        default: providerName // Adding 'default' key for backward compatibility
-      };
-      
-      if (isAuthMock) {
-        console.log('[MOCK] Setting default provider to', providerName);
-      } else {
-        // Save to Supabase
-        const { error } = await supabase
-          .from('user_preferences')
-          .upsert({
-            user_id: userId,
-            preference_key: 'llm_preferences',
-            preference_value: updatedLlmPreferences
-          }, {
-            onConflict: 'user_id,preference_key'
-          })
-          .select();
-        
-        if (error) throw error;
-        
-        // Update Redux store
-        dispatch(updateUserPreferences({
-          key: 'llm_preferences',
-          value: updatedLlmPreferences
-        }));
-        
-        // Update llmSlice
-        dispatch(setDefaultProvider(providerName));
-      }
-      
-      if (onSuccess) {
-        onSuccess(`${providerName} set as default provider`);
-      }
-    } catch (error) {
-      console.error('Error setting default provider:', error);
-      if (onError) {
-        onError(`Failed to set default provider: ${error.message}`);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [userId, userPreferences, isAuthMock, dispatch, onSuccess, onError]);
-  
-  // Handle form data changes
-  const handleFormDataChange = useCallback((newFormData) => {
-    const providerChanged = newFormData.provider !== formData.provider;
-    
-    setFormData(newFormData);
-    
-    // If the provider changed, check for existing verified API key
-    if (providerChanged && newFormData.provider) {
-      checkExistingApiKey(newFormData.provider);
-    }
-  }, [formData.provider]);
-  
-  // Check if there's already a verified API key for this provider
-  const checkExistingApiKey = useCallback(async (provider) => {
-    if (!userId || !provider) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from('llm_api_keys')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('provider', provider.toLowerCase())
-        .maybeSingle();
-        
-      if (error) {
-        console.error('[LLMProviderSettings] Error checking API key:', error);
-        return;
-      }
-      
-      if (data) {
-        // If we have a key, update the form data
-        setFormData(prev => ({
-          ...prev,
-          apiKey: data.api_key || ''
-        }));
-        
-        // Track if the key is verified
-        let keyIsVerified = false;
-        
-        // If the key is verified, update the UI accordingly
-        if (data.verified) {
-          setIsApiKeyVerified(true);
-          setApiKeyError('');
-          keyIsVerified = true;
-        } else {
-          // If we have a key but it's not verified, update it to verified if it's valid
-          try {
-            // Update the key's verified status in the database
-            const { error: updateError } = await supabase
-              .from('llm_api_keys')
-              .upsert({
-                user_id: userId,
-                provider: provider.toLowerCase(),
-                api_key: data.api_key,
-                verified: true
-              }, {
-                onConflict: 'user_id,provider'
-              });
-              
-            if (!updateError) {
-              setIsApiKeyVerified(true);
-              keyIsVerified = true;
-            }
-          } catch (err) {
-            console.error('[LLMProviderSettings] Error updating API key verified status:', err);
-          }
-        }
-        
-        // If the key is verified, fetch models
-        if (keyIsVerified) {
-          try {
-            const models = await llmProviderService.verifyApiKey(
-              data.api_key,
-              provider,
-              formData.baseUrl,
-              userId,
-              isAuthMock
-            );
-            setAvailableModels(models);
-          } catch (err) {
-            console.error('[LLMProviderSettings] Error fetching models:', err);
-          }
-        }
-      } else {
-        // If no API key is set for this provider, reset verification state
-        setIsApiKeyVerified(false);
-        setApiKeyError('');
-        setAvailableModels([]);
-      }
-    } catch (err) {
-      console.error('[LLMProviderSettings] Error in provider change:', err);
-    }
-  }, [userId, formData.baseUrl, isAuthMock]);
   
   // If loading, show loading indicator
   if (isLoading && !providerConfigs.length) {
