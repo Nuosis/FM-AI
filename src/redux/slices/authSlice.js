@@ -715,6 +715,24 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = action.payload || 'Failed to update profile';
       })
+      
+      // Restore User From Session
+      .addCase(restoreUserFromSession.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(restoreUserFromSession.fulfilled, (state, action) => {
+        console.log('[Auth] User state restoration thunk fulfilled');
+        state.loading = false;
+        state.user = action.payload.user;
+        state.address = action.payload.address;
+        state.error = null;
+      })
+      .addCase(restoreUserFromSession.rejected, (state, action) => {
+        console.error('[Auth] User state restoration thunk rejected');
+        state.loading = false;
+        state.error = action.payload || 'Failed to restore user state';
+      })
   }
 });
 
@@ -729,6 +747,8 @@ export const {
   resetFailedAttempts,
   updateUserPreferences
 } = authSlice.actions;
+
+/* Removed redundant export of setSession. */
 
 /* Removed redundant export of setSession. */
 
@@ -1264,6 +1284,52 @@ export const updateProfile = createAsyncThunk(
       };
     } catch (error) {
       console.error('[Auth] Profile update failed:', error.message);
+      return thunkAPI.rejectWithValue(error.message);
+    }
+  }
+);
+
+// Export the restoreUserFromSession thunk
+export const restoreUserFromSession = createAsyncThunk(
+  'auth/restoreUserFromSession',
+  async (_, thunkAPI) => {
+    console.log('[Auth] Restoring user state from session');
+    try {
+      // Get current session from Redux state
+      const state = thunkAPI.getState();
+      const session = state.auth.session;
+      
+      if (!session) {
+        console.log('[Auth] No session found, cannot restore user state');
+        return thunkAPI.rejectWithValue('No active session');
+      }
+      
+      // Use the existing fetchUserData function to get user data
+      const userData = await fetchUserData({ user: session.user, session });
+      
+      console.log('[Auth] User state restored successfully');
+      return {
+        session,
+        user: {
+          ...session.user,
+          ...userData.profile,
+          org_id: userData.profile?.organization_id || null,
+          organization: userData.organization,
+          preferences: userData.preferences,
+          phone: userData.customer?.phone || '',
+          customer: userData.customer ? {
+            id: userData.customer.id,
+            name: userData.customer.name,
+            email: userData.customer.email
+          } : null,
+          address: userData.address,
+          conversations: userData.conversations || [],
+          functions: userData.functions || []
+        },
+        address: userData.address
+      };
+    } catch (error) {
+      console.error('[Auth] User state restoration failed:', error.message);
       return thunkAPI.rejectWithValue(error.message);
     }
   }

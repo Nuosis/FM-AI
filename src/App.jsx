@@ -9,7 +9,7 @@ import { Tools } from './components/Tools';
 import LLMChat from './components/Chat/LLMChat';
 import { createLog, LogType, /*toggleLogViewer*/ } from './redux/slices/appSlice';
 import { fetchOrgLicenses } from './redux/slices/licenseSlice';
-import { logoutSuccess, setSession } from './redux/slices/authSlice';
+import { logoutSuccess, setSession, restoreUserFromSession } from './redux/slices/authSlice';
 import supabase from './utils/supabase';
 import UnderRepair from './components/UnderRepair';
 import Welcome from './components/Welcome/Welcome';
@@ -98,6 +98,21 @@ function App() {
     
     checkSession();
   }, [dispatch]);
+  
+  // Effect to restore user state if session exists but user is null
+  useEffect(() => {
+    if (auth.session && !auth.user && sessionChecked) {
+      dispatch(createLog('Session exists but user state is null, restoring user state', LogType.INFO));
+      dispatch(restoreUserFromSession())
+        .unwrap()
+        .then(() => {
+          dispatch(createLog('User state restored successfully', LogType.INFO));
+        })
+        .catch(error => {
+          dispatch(createLog(`Failed to restore user state: ${error}`, LogType.ERROR));
+        });
+    }
+  }, [auth.session, auth.user, sessionChecked, dispatch]);
   
   useEffect(() => {
     // Log auth state changes
