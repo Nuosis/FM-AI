@@ -73,7 +73,6 @@ const getInitialState = () => {
   return {
     temperature: 0.7,
     systemInstructions: 'You are a helpful assistant.',
-    model: '',
     darkMode: 'system', // 'system', 'dark', 'light'
     defaultProvider: 'openai', // 'openai', 'anthropic', 'gemini', 'lmStudio', 'ollama'
     defaultStrongModel: '',
@@ -118,10 +117,7 @@ const llmSlice = createSlice({
       state.systemInstructions = action.payload;
       // Removed localStorage.setItem
     },
-    setModel: (state, action) => {
-      state.model = action.payload;
-      // Removed localStorage.setItem
-    },
+    // setModel reducer removed - use defaultStrongModel or defaultWeakModel instead
     // New preference reducers
     setDarkMode: (state, action) => {
       state.darkMode = action.payload;
@@ -162,7 +158,7 @@ const llmSlice = createSlice({
 export const {
   setTemperature,
   setSystemInstructions,
-  setModel,
+  // setModel removed
   // New preference actions
   setDarkMode,
   setDefaultProvider,

@@ -8,9 +8,10 @@ import {
   setTemperature,
   setSystemInstructions,
   setDefaultProvider,
-  setModel,
   selectLlmPreferences,
-  updateState
+  updateState,
+  setDefaultStrongModel,
+  setDefaultWeakModel
 } from '../../redux/slices/llmSlice';
 import {
   Box,
@@ -175,12 +176,16 @@ const LLMChat = () => {
       // Check for weak chat model first
       if (providerConfig.models.chat.weak) {
         setSelectedModel(providerConfig.models.chat.weak);
-        dispatch(setModel(providerConfig.models.chat.weak));
+        dispatch(setDefaultWeakModel(providerConfig.models.chat.weak));
+        // If weak model exists, also update the strong model for completeness
+        if (providerConfig.models.chat.strong) {
+          dispatch(setDefaultStrongModel(providerConfig.models.chat.strong));
+        }
       }
       // If no weak model, check for strong chat model
       else if (providerConfig.models.chat.strong) {
         setSelectedModel(providerConfig.models.chat.strong);
-        dispatch(setModel(providerConfig.models.chat.strong));
+        dispatch(setDefaultStrongModel(providerConfig.models.chat.strong));
       }
       // If neither weak nor strong model is available
       else {
@@ -198,10 +203,21 @@ const LLMChat = () => {
     const model = event.target.value;
     setSelectedModel(model);
     
-    // Only dispatch setModel when the user explicitly changes the model
+    // Only dispatch model update when the user explicitly changes the model
     // This is a user-initiated action, not an automatic update
     if (event.type === 'change') {
-      dispatch(setModel(model));
+      // Determine if this is a strong or weak model based on the provider config
+      const providerConfig = providers.find(p => p.provider.toLowerCase() === selectedProvider.toLowerCase());
+      if (providerConfig) {
+        const isStrongModel = model === providerConfig.models?.chat?.strong;
+        const isWeakModel = model === providerConfig.models?.chat?.weak;
+        
+        if (isStrongModel) {
+          dispatch(setDefaultStrongModel(model));
+        } else if (isWeakModel) {
+          dispatch(setDefaultWeakModel(model));
+        }
+      }
     }
   };
 
@@ -216,6 +232,19 @@ const LLMChat = () => {
     if (providerChatModels.length > 0 && !providerChatModels.includes(selectedModel)) {
       setError('Selected model is not available in your preferences. Please select a different model.');
       return;
+    }
+
+    // Ensure we're using the appropriate model in Redux state
+    // Prefer weak model if available, otherwise use strong model
+    if (providerConfig?.models?.chat) {
+      const isWeakModel = selectedModel === providerConfig.models.chat.weak;
+      const isStrongModel = selectedModel === providerConfig.models.chat.strong;
+      
+      if (isWeakModel) {
+        dispatch(setDefaultWeakModel(selectedModel));
+      } else if (isStrongModel) {
+        dispatch(setDefaultStrongModel(selectedModel));
+      }
     }
 
     const newMessage = { role: 'user', content: input };
