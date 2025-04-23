@@ -1,5 +1,90 @@
-import { createSlice } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { createSelector } from 'reselect';
+
+// Async thunk to sync LLM state with user preferences
+export const syncLlmWithPreferences = createAsyncThunk(
+  'llm/syncLlmWithPreferences',
+  async (_, { getState, dispatch }) => {
+    console.log('[LlmSlice] Syncing LLM state with user preferences...');
+    const state = getState(); 
+    /**
+     * app: {isVerboseEnabled: false, showLogViewer: false, logs: [{timestamp: "2025-04-23T22:44:52.404Z", message: "Current auth state: {↵  \"isAuthenticated\": false,↵…ull,↵  \"session\": null,↵  \"isRefreshing\": false↵}", type: "debug"}, {timestamp: "2025-04-23T22:44:52.404Z", message: "Current auth state: {↵  \"isAuthenticated\": false,↵…ull,↵  \"session\": null,↵  \"isRefreshing\": false↵}", type: "debug"}, {timestamp: "2025-04-23T22:44:52.407Z", message: "Active session restored on startup", type: "info"}, {timestamp: "2025-04-23T22:44:52.408Z", message: "Current auth state: {↵  \"isAuthenticated\": true,↵ …mous\": false↵    }↵  },↵  \"isRefreshing\": false↵}", type: "debug"}, {timestamp: "2025-04-23T22:44:52.426Z", message: "Active session restored on startup", type: "info"}], serverHealth: {status: "unknown", lastChecked: null}}
+     * auth: {isAuthenticated: true, user: null, loading: false, error: null, failedAttempts: 0, …}
+     * functions: {items: [], isLoading: false, error: null}
+     * license: {searchQuery: "", sortConfig: {field: "dateEnd", direction: "asc"}, notification: null, licenses: [], activeLicenseId: null, …
+     * llm: Object
+     *    apiKeyStorage: "saved"
+     *    darkMode: "system"
+     *    defaultEmbeddingModelLarge: ""
+     *    defaultEmbeddingModelSmall: ""  
+     *    defaultProvider: "openai"
+     *    defaultStrongModel: ""
+     *    defaultWeakModel: ""
+     *    isLlmReady: false
+     *    systemInstructions: "You are a helpful assistant."
+     *    temperature: 0.7
+     * tools: {items: [], isLoading: false, error: null, executionResult: null, executionError: null, …}
+     */
+    const llmState = state.llm;
+    const userPreferences = state.auth.user?.preferences || {};
+    const llmPreferences = userPreferences.llm_preferences || {};
+    const llmProviders = userPreferences.llm_providers || [];
+
+    console.log('[LlmSlice] state:', state);
+    console.log('[LlmSlice] User preferences:', userPreferences);
+    console.log('[LlmSlice] LLM preferences:', llmPreferences);
+    console.log('[LlmSlice] LLM providers:', llmProviders);
+    
+    // Find the provider configuration for the default provider
+    const defaultProvider = llmPreferences.defaultProvider || llmState.defaultProvider;
+    const providerConfig = llmProviders.find(p =>
+      p?.provider?.toLowerCase() === defaultProvider?.toLowerCase()
+    );
+    
+    // Extract models and other settings
+    let strongModel = '';
+    let weakModel = '';
+    let defaultEmbeddingModelLarge = '';
+    let defaultEmbeddingModelSmall = '';
+    let baseUrl = '';
+    
+    if (providerConfig) {
+      strongModel = providerConfig.models?.chat?.strong || '';
+      weakModel = providerConfig.models?.chat?.weak || '';
+      defaultEmbeddingModelLarge = providerConfig.models?.embedding?.large || '';
+      defaultEmbeddingModelSmall = providerConfig.models?.embedding?.small || '';
+      baseUrl = providerConfig.baseUrl || '';
+    }
+    
+    // Get system instructions and temperature
+    const systemInstructions = llmPreferences.systemInstructions || llmState.systemInstructions;
+    const temperature = llmPreferences.temperature || llmState.temperature;
+    
+    // Create updated state object
+    const updatedState = {
+      darkMode: llmState.darkMode,
+      defaultProvider: defaultProvider,
+      preferredStrongModel: strongModel,
+      preferredWeakModel: weakModel,
+      defaultStrongModel: strongModel,
+      defaultWeakModel: weakModel,
+      defaultEmbeddingModelLarge: defaultEmbeddingModelLarge,
+      defaultEmbeddingModelSmall,
+      baseUrl: baseUrl,
+      apiKeyStorage: llmState.apiKeyStorage,
+      systemInstructions: systemInstructions,
+      temperature: temperature,
+      isLlmReady: true
+    };
+
+    console.log('[LlmSlice] Updated LLM state:', updatedState);
+
+    // Update the state
+    dispatch(updateState(updatedState));
+    
+    return updatedState;
+  }
+);
 
 // Memoized selector for llm preferences
 export const selectLlmPreferences = createSelector(
@@ -16,9 +101,7 @@ export const selectLlmPreferences = createSelector(
     const providerConfig = llmProviders.find(p =>
       p?.provider?.toLowerCase() === defaultProvider?.toLowerCase()
     );
-// Removed console.log to prevent excessive logging
-
-  
+    
     // Extract models and baseUrl from provider configuration
     let strongModel = '';
     let weakModel = '';
@@ -63,9 +146,54 @@ export const selectLlmPreferences = createSelector(
       baseUrl: baseUrl,
       apiKeyStorage: llm.apiKeyStorage,
       systemInstructions: systemInstructions,
-      temperature: temperature
+      temperature: temperature,
+      isLlmReady: llm.isLlmReady
     };
   }
+);
+
+// Selector for provider options
+export const selectProviderOptions = createSelector(
+  state => state.auth.user?.preferences?.llm_providers || [],
+  (providers) => providers.map(p => p.provider)
+);
+
+// Selector for model options for the selected provider
+export const selectModelOptions = createSelector(
+  state => state.auth.user?.preferences?.llm_providers || [],
+  state => state.llm.defaultProvider,
+  (providers, defaultProvider) => {
+    const providerConfig = providers.find(p =>
+      p?.provider?.toLowerCase() === defaultProvider?.toLowerCase()
+    );
+    
+    if (!providerConfig || !providerConfig.models || !providerConfig.models.chat) {
+      return [];
+    }
+    
+    return [
+      providerConfig.models.chat.strong,
+      providerConfig.models.chat.weak
+    ].filter(Boolean);
+  }
+);
+
+// Selector for active provider
+export const selectActiveProvider = createSelector(
+  state => state.llm.defaultProvider,
+  (defaultProvider) => defaultProvider
+);
+
+// Selector for active model
+export const selectActiveModel = createSelector(
+  state => state.llm.defaultWeakModel,
+  (defaultWeakModel) => defaultWeakModel
+);
+
+// Selector for isLlmReady
+export const selectIsLlmReady = createSelector(
+  state => state.llm.isLlmReady,
+  (isLlmReady) => isLlmReady
 );
 
 const getInitialState = () => {
@@ -80,6 +208,7 @@ const getInitialState = () => {
     defaultEmbeddingModelLarge: '',
     defaultEmbeddingModelSmall: '',
     apiKeyStorage: 'saved', // 'session', 'local', 'saved'
+    isLlmReady: false, // New flag to indicate if LLM state is synced with preferences
   };
 };
 
@@ -172,4 +301,8 @@ export const {
   updateState
 } = llmSlice.actions;
 
-export default llmSlice.reducer;
+// Export the reducer with the extra reducers for the thunk
+export const llmReducer = llmSlice.reducer;
+
+// Export the reducer as default as well
+export default llmReducer;

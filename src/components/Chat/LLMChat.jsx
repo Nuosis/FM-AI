@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Snackbar } from '@mui/material';
+import { Snackbar, CircularProgress } from '@mui/material';
 import ProgressText from './ProgressText';
 import supabase from '../../utils/supabase';
 import { createLog, LogType } from '../../redux/slices/appSlice';
@@ -9,9 +9,14 @@ import {
   setSystemInstructions,
   setDefaultProvider,
   selectLlmPreferences,
-  updateState,
   setDefaultStrongModel,
-  setDefaultWeakModel
+  setDefaultWeakModel,
+  syncLlmWithPreferences,
+  selectProviderOptions,
+  selectModelOptions,
+  selectActiveProvider,
+  selectActiveModel,
+  selectIsLlmReady
 } from '../../redux/slices/llmSlice';
 import {
   Box,
@@ -40,39 +45,33 @@ import {
 
 const LLMChat = () => {
   const dispatch = useDispatch();
-  // const isAuthenticated = useSelector(state => state.auth.isAuthenticated);
   const llmSettings = useSelector(state => state.llm);
-  // Use the memoized selector to get LLM preferences
   const llmPreferences = useSelector(selectLlmPreferences);
+  const isLlmReady = useSelector(selectIsLlmReady);
+  
+  // Use Redux selectors for provider/model options
+  const providerOptions = useSelector(selectProviderOptions);
+  const modelOptions = useSelector(selectModelOptions);
+  const activeProvider = useSelector(selectActiveProvider);
+  const activeModel = useSelector(selectActiveModel);
+  
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [error, setError] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsPanelWidth, setSettingsPanelWidth] = useState(0);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const messagesEndRef = useRef(null);
+  
+  // Sync LLM state with preferences on mount
+  useEffect(() => {
+    dispatch(syncLlmWithPreferences());
+  }, [llmPreferences]);
   
   // Log LLM preferences when they change
   useEffect(() => {
     console.log('Provider configuration:', llmPreferences);
   }, [llmPreferences]);
-
-  // One-time sync from llmPreferences to state.llm when component mounts
-  useEffect(() => {
-    // Dispatch the action to update the entire state at once
-    if (llmPreferences && Object.keys(llmPreferences).length > 0) {
-      console.log('Updating entire llm state with:', llmPreferences);
-      dispatch(updateState(llmPreferences));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run once on mount
-  // Get user preferences for LLM providers
-  const userLlmProviders = useSelector(state => state.auth.user?.preferences?.llm_providers || []);
-  const [providers, setProviders] = useState([]);
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [error, setError] = useState(null);
-  // Removed legacy AI module fetching state
-  const [selectedProvider, setSelectedProvider] = useState(llmPreferences.defaultProvider?.toLowerCase() || '');
-  const [selectedModel, setSelectedModel] = useState('');
-  const [providerModels, setProviderModels] = useState([]);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsPanelWidth, setSettingsPanelWidth] = useState(0);
-  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
-  const messagesEndRef = useRef(null);
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -82,171 +81,41 @@ const LLMChat = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Update local providers state when userLlmProviders changes
-  useEffect(() => {
-    setProviders(userLlmProviders);
-  }, [userLlmProviders]);
-
-  // Set initial provider from user preferences only if it exists in providers
-  useEffect(() => {
-    if (llmPreferences?.defaultProvider && providers.length > 0) {
-      // Check if the default provider exists in the available providers
-      const providerExists = providers.some(
-        p => p.provider.toLowerCase() === llmPreferences.defaultProvider.toLowerCase()
-      );
-      
-      if (providerExists) {
-        // Only update the local state, don't dispatch to Redux to avoid infinite loop
-        setSelectedProvider(llmPreferences.defaultProvider);
-      } else if (providers.length > 0) {
-        // If default provider doesn't exist, set to the first available provider
-        setSelectedProvider(providers[0].provider);
-      }
-    }
-  }, [llmPreferences, providers]);
-
-  // Update models when provider is selected
-  useEffect(() => {
-    if (!selectedProvider) return;
-    
-    setError(null);
-    
-    // Find the provider object in providers array that matches the selected provider
-    const providerConfig = providers.find(p => p.provider.toLowerCase() === selectedProvider.toLowerCase());
-    
-    // If provider config exists, use its models
-    if (providerConfig && providerConfig.models && providerConfig.models.chat) {
-      // Get all models from the provider (both strong and weak)
-      const providerChatModels = [
-        providerConfig.models.chat.strong,
-        providerConfig.models.chat.weak
-      ].filter(Boolean); // Filter out empty values
-      
-      // Set the provider models directly from user preferences
-      setProviderModels(providerChatModels);
-      
-      // Automatically select the appropriate model
-      if (providerChatModels.length > 0) {
-        // First try to use the weak chat model
-        if (providerConfig.models.chat.weak) {
-          setSelectedModel(providerConfig.models.chat.weak);
-          // Don't dispatch to Redux in the useEffect to avoid infinite loops
-        }
-        // If weak model is not available, try the strong chat model
-        else if (providerConfig.models.chat.strong) {
-          setSelectedModel(providerConfig.models.chat.strong);
-          // Don't dispatch to Redux in the useEffect to avoid infinite loops
-        }
-      } else {
-        setSelectedModel('');
-        setError('No chat models are available for this provider.');
-      }
-    } else {
-      // If no provider config found or no chat models defined
-      setProviderModels([]);
-      setSelectedModel('');
-      setError('No chat models are configured for this provider.');
-    }
-  }, [selectedProvider, dispatch, providers]);
-
   const handleProviderChange = (event) => {
     const provider = event.target.value;
-    setSelectedProvider(provider);
     
-    // Only dispatch setDefaultProvider when the user explicitly changes the provider
-    // This is a user-initiated action, not an automatic update
-    if (event.type === 'change') {
-      dispatch(setDefaultProvider(provider));
-    }
+    // Update user preferences only (not state.llm directly)
+    dispatch(setDefaultProvider(provider));
     
-    // Find the provider configuration
-    const providerConfig = providers.find(p => p.provider.toLowerCase() === provider.toLowerCase());
-    
-    // Check if the provider has chat models
-    if (providerConfig && providerConfig.models && providerConfig.models.chat) {
-      // Get all models from the provider (both strong and weak)
-      const providerChatModels = [
-        providerConfig.models.chat.strong,
-        providerConfig.models.chat.weak
-      ].filter(Boolean); // Filter out empty values
-      
-      // Set the provider models directly from user preferences
-      setProviderModels(providerChatModels);
-      
-      // Check for weak chat model first
-      if (providerConfig.models.chat.weak) {
-        setSelectedModel(providerConfig.models.chat.weak);
-        dispatch(setDefaultWeakModel(providerConfig.models.chat.weak));
-        // If weak model exists, also update the strong model for completeness
-        if (providerConfig.models.chat.strong) {
-          dispatch(setDefaultStrongModel(providerConfig.models.chat.strong));
-        }
-      }
-      // If no weak model, check for strong chat model
-      else if (providerConfig.models.chat.strong) {
-        setSelectedModel(providerConfig.models.chat.strong);
-        dispatch(setDefaultStrongModel(providerConfig.models.chat.strong));
-      }
-      // If neither weak nor strong model is available
-      else {
-        setSelectedModel('');
-        setError('No chat models are available for this provider.');
-      }
-    } else {
-      setSelectedModel('');
-      setProviderModels([]);
-      setError('No chat models are available for this provider.');
-    }
+    // The syncLlmWithPreferences thunk will handle updating the Redux state
+    // after the preferences are updated
   };
 
   const handleModelChange = (event) => {
     const model = event.target.value;
-    setSelectedModel(model);
     
-    // Only dispatch model update when the user explicitly changes the model
-    // This is a user-initiated action, not an automatic update
-    if (event.type === 'change') {
-      // Determine if this is a strong or weak model based on the provider config
-      const providerConfig = providers.find(p => p.provider.toLowerCase() === selectedProvider.toLowerCase());
-      if (providerConfig) {
-        const isStrongModel = model === providerConfig.models?.chat?.strong;
-        const isWeakModel = model === providerConfig.models?.chat?.weak;
-        
-        if (isStrongModel) {
-          dispatch(setDefaultStrongModel(model));
-        } else if (isWeakModel) {
-          dispatch(setDefaultWeakModel(model));
-        }
+    // Update only the Redux state for the model
+    // Determine if this is a strong or weak model based on the provider config
+    const userLlmProviders = llmPreferences.llm_providers || [];
+    const providerConfig = userLlmProviders.find(
+      p => p?.provider?.toLowerCase() === activeProvider?.toLowerCase()
+    );
+    
+    if (providerConfig) {
+      const isStrongModel = model === providerConfig.models?.chat?.strong;
+      const isWeakModel = model === providerConfig.models?.chat?.weak;
+      
+      if (isStrongModel) {
+        dispatch(setDefaultStrongModel(model));
+      } else if (isWeakModel) {
+        dispatch(setDefaultWeakModel(model));
       }
     }
   };
 
   const handleSubmit = async () => {
-    if (!input.trim() || !selectedProvider || !selectedModel) return;
+    if (!input.trim() || !activeProvider || !activeModel) return;
   
-    // Validate that the selected model is in the list of available models from user preferences
-    const providerConfig = providers.find(p => p.provider.toLowerCase() === selectedProvider.toLowerCase());
-    const providerChatModels = providerConfig?.models?.chat ?
-      [providerConfig.models.chat.strong, providerConfig.models.chat.weak].filter(Boolean) : [];
-    
-    if (providerChatModels.length > 0 && !providerChatModels.includes(selectedModel)) {
-      setError('Selected model is not available in your preferences. Please select a different model.');
-      return;
-    }
-
-    // Ensure we're using the appropriate model in Redux state
-    // Prefer weak model if available, otherwise use strong model
-    if (providerConfig?.models?.chat) {
-      const isWeakModel = selectedModel === providerConfig.models.chat.weak;
-      const isStrongModel = selectedModel === providerConfig.models.chat.strong;
-      
-      if (isWeakModel) {
-        dispatch(setDefaultWeakModel(selectedModel));
-      } else if (isStrongModel) {
-        dispatch(setDefaultStrongModel(selectedModel));
-      }
-    }
-
     const newMessage = { role: 'user', content: input };
     setMessages(prev => [...prev, newMessage]);
     setInput('');
@@ -268,20 +137,20 @@ const LLMChat = () => {
       
       // Log the payload for debugging
       console.log('Chat payload:', {
-        provider: selectedProvider,
+        provider: activeProvider,
         type: 'chat',
-        model: selectedModel,
+        model: activeModel,
         messagesCount: previousMessages.length + 2, // system + user message
         newMessage
       });
 
-      // Call the Supabase Edge Function
+      // Call the Supabase Edge Function using Redux state
       const { data, error: functionError } = await supabase.functions.invoke('llmProxyHandler', {
         body: {
-          provider: selectedProvider.toLowerCase(),
+          provider: activeProvider.toLowerCase(),
           type: 'chat',
-          model: selectedModel,
-          baseUrl: null,
+          model: activeModel,
+          baseUrl: llmPreferences.baseUrl || null,
           messages: [
             { role: 'system', content: llmPreferences.systemInstructions || llmSettings.systemInstructions },
             ...previousMessages.map(msg => ({
@@ -312,13 +181,13 @@ const LLMChat = () => {
         console.error('Error details:', {
           message: functionError.message,
           details: functionError.details,
-          provider: selectedProvider,
-          model: selectedModel
+          provider: activeProvider,
+          model: activeModel
         });
         
         throw new Error(
           `${functionError.message || 'Failed to get response from edge function'}\n` +
-          `Provider: ${selectedProvider}, Model: ${selectedModel}\n` +
+          `Provider: ${activeProvider}, Model: ${activeModel}\n` +
           (errorDetails ? `Details: ${errorDetails}` : '')
         );
       }
@@ -341,7 +210,6 @@ const LLMChat = () => {
       }]);
     }
   };
-
 
   // Handle clear chat confirmation
   const handleClearConfirm = () => {
@@ -379,7 +247,27 @@ const LLMChat = () => {
       overflow: 'hidden',
       position: 'relative' // For absolute positioning of hamburger menu
     }}>
-      <Snackbar
+      {/* Loading state when LLM is not ready */}
+      {!isLlmReady && (
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '100%',
+            flexDirection: 'column',
+            gap: 2
+          }}
+        >
+          <CircularProgress />
+          <Typography variant="body1">Loading LLM settings...</Typography>
+        </Box>
+      )}
+      
+      {/* Only render the chat UI when LLM is ready */}
+      {isLlmReady && (
+        <>
+          <Snackbar
         open={Boolean(error)}
         autoHideDuration={3000}
         onClose={() => setError(null)}
@@ -442,17 +330,17 @@ const LLMChat = () => {
             <FormControl sx={{ minWidth: 200 }}>
               <InputLabel>AI Provider</InputLabel>
               <Select
-                value={selectedProvider}
+                value={activeProvider}
                 label="AI Provider"
                 onChange={handleProviderChange}
               >
-                {providers.length > 0 ? (
-                  providers.map(provider => (
+                {providerOptions.length > 0 ? (
+                  providerOptions.map(provider => (
                     <MenuItem
-                      key={provider.id || `provider-${provider.provider}`}
-                      value={provider.provider}
+                      key={`provider-${provider}`}
+                      value={provider}
                     >
-                      {provider.provider}
+                      {provider}
                     </MenuItem>
                   ))
                 ) : (
@@ -466,13 +354,13 @@ const LLMChat = () => {
             <FormControl sx={{ minWidth: 200 }}>
               <InputLabel>Model</InputLabel>
               <Select
-                value={selectedModel}
+                value={activeModel}
                 label="Model"
                 onChange={handleModelChange}
-                disabled={!selectedProvider}
+                disabled={!activeProvider}
               >
-                {providerModels.length > 0 ? (
-                  providerModels.map(model => (
+                {modelOptions.length > 0 ? (
+                  modelOptions.map(model => (
                     <MenuItem key={model} value={model}>
                       {model}
                     </MenuItem>
@@ -606,7 +494,7 @@ const LLMChat = () => {
         </IconButton>
         <IconButton
           onClick={handleSubmit}
-          disabled={!input.trim() || !selectedProvider || !selectedModel}
+          disabled={!input.trim() || !activeProvider || !activeModel}
           color="primary"
           title="Send message"
           sx={{ alignSelf: 'center' }}
@@ -615,6 +503,8 @@ const LLMChat = () => {
         </IconButton>
       </Box>
 
+        </>
+      )}
     </Box>
   );
 };
