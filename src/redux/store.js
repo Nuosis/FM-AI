@@ -17,4 +17,21 @@ export const store = configureStore({
   },
 });
 
+// Expose store to window object for debugging
+if (import.meta.env.DEV) {
+  window.reduxStore = store;
+  
+  // Add a helper function to get the current state
+  window.getReduxState = () => store.getState();
+  
+  // Log initial state to console
+  console.log('Initial Redux State:', store.getState());
+  
+  // Subscribe to state changes and update window object
+  store.subscribe(() => {
+    window.reduxState = store.getState();
+    //console.log('Redux State Updated:', window.reduxState);
+  });
+}
+
 export default store;

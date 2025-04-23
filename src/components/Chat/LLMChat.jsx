@@ -7,8 +7,10 @@ import { createLog, LogType } from '../../redux/slices/appSlice';
 import {
   setTemperature,
   setSystemInstructions,
-  setProvider,
+  setDefaultProvider,
   setModel,
+  selectLlmPreferences,
+  updateState
 } from '../../redux/slices/llmSlice';
 import {
   Box,
@@ -39,15 +41,31 @@ const LLMChat = () => {
   const dispatch = useDispatch();
   // const isAuthenticated = useSelector(state => state.auth.isAuthenticated);
   const llmSettings = useSelector(state => state.llm);
-  // Get user preferences for LLM
-  const userLlmPreferences = useSelector(state => state.auth.user?.preferences?.llm_preferences || {});
+  // Use the memoized selector to get LLM preferences
+  const llmPreferences = useSelector(selectLlmPreferences);
+  
+  // Log LLM preferences when they change
+  useEffect(() => {
+    console.log('Provider configuration:', llmPreferences);
+  }, [llmPreferences]);
+
+  // One-time sync from llmPreferences to state.llm when component mounts
+  useEffect(() => {
+    // Dispatch the action to update the entire state at once
+    if (llmPreferences && Object.keys(llmPreferences).length > 0) {
+      console.log('Updating entire llm state with:', llmPreferences);
+      dispatch(updateState(llmPreferences));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
+  // Get user preferences for LLM providers
   const userLlmProviders = useSelector(state => state.auth.user?.preferences?.llm_providers || []);
   const [providers, setProviders] = useState([]);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [error, setError] = useState(null);
   // Removed legacy AI module fetching state
-  const [selectedProvider, setSelectedProvider] = useState(userLlmPreferences.defaultProvider?.toLowerCase() || '');
+  const [selectedProvider, setSelectedProvider] = useState(llmPreferences.defaultProvider?.toLowerCase() || '');
   const [selectedModel, setSelectedModel] = useState('');
   const [providerModels, setProviderModels] = useState([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -70,22 +88,21 @@ const LLMChat = () => {
 
   // Set initial provider from user preferences only if it exists in providers
   useEffect(() => {
-    if (userLlmPreferences?.defaultProvider && providers.length > 0) {
+    if (llmPreferences?.defaultProvider && providers.length > 0) {
       // Check if the default provider exists in the available providers
       const providerExists = providers.some(
-        p => p.provider.toLowerCase() === userLlmPreferences.defaultProvider.toLowerCase()
+        p => p.provider.toLowerCase() === llmPreferences.defaultProvider.toLowerCase()
       );
       
       if (providerExists) {
-        setSelectedProvider(userLlmPreferences.defaultProvider);
-        dispatch(setProvider(userLlmPreferences.defaultProvider));
-      } else {
+        // Only update the local state, don't dispatch to Redux to avoid infinite loop
+        setSelectedProvider(llmPreferences.defaultProvider);
+      } else if (providers.length > 0) {
         // If default provider doesn't exist, set to the first available provider
         setSelectedProvider(providers[0].provider);
-        dispatch(setProvider(providers[0].provider));
       }
     }
-  }, [dispatch, userLlmPreferences, providers]);
+  }, [llmPreferences, providers]);
 
   // Update models when provider is selected
   useEffect(() => {
@@ -112,12 +129,12 @@ const LLMChat = () => {
         // First try to use the weak chat model
         if (providerConfig.models.chat.weak) {
           setSelectedModel(providerConfig.models.chat.weak);
-          dispatch(setModel(providerConfig.models.chat.weak));
+          // Don't dispatch to Redux in the useEffect to avoid infinite loops
         }
         // If weak model is not available, try the strong chat model
         else if (providerConfig.models.chat.strong) {
           setSelectedModel(providerConfig.models.chat.strong);
-          dispatch(setModel(providerConfig.models.chat.strong));
+          // Don't dispatch to Redux in the useEffect to avoid infinite loops
         }
       } else {
         setSelectedModel('');
@@ -134,7 +151,12 @@ const LLMChat = () => {
   const handleProviderChange = (event) => {
     const provider = event.target.value;
     setSelectedProvider(provider);
-    dispatch(setProvider(provider));
+    
+    // Only dispatch setDefaultProvider when the user explicitly changes the provider
+    // This is a user-initiated action, not an automatic update
+    if (event.type === 'change') {
+      dispatch(setDefaultProvider(provider));
+    }
     
     // Find the provider configuration
     const providerConfig = providers.find(p => p.provider.toLowerCase() === provider.toLowerCase());
@@ -175,7 +197,12 @@ const LLMChat = () => {
   const handleModelChange = (event) => {
     const model = event.target.value;
     setSelectedModel(model);
-    dispatch(setModel(model));
+    
+    // Only dispatch setModel when the user explicitly changes the model
+    // This is a user-initiated action, not an automatic update
+    if (event.type === 'change') {
+      dispatch(setModel(model));
+    }
   };
 
   const handleSubmit = async () => {
@@ -227,7 +254,7 @@ const LLMChat = () => {
           model: selectedModel,
           baseUrl: null,
           messages: [
-            { role: 'system', content: userLlmPreferences?.systemInstructions || llmSettings.systemInstructions },
+            { role: 'system', content: llmPreferences.systemInstructions || llmSettings.systemInstructions },
             ...previousMessages.map(msg => ({
               role: msg.role,
               content: typeof msg.content === 'string' ? msg.content : 'Thinking...'
@@ -235,7 +262,7 @@ const LLMChat = () => {
             { role: newMessage.role, content: newMessage.content }
           ],
           options: {
-            temperature: userLlmPreferences?.temperature || llmSettings.temperature,
+            temperature: llmPreferences.temperature || llmSettings.temperature,
             max_tokens: 500,
             stream: false
           }
@@ -434,14 +461,14 @@ const LLMChat = () => {
               multiline
               rows={4}
               label="System Instructions"
-              value={userLlmPreferences?.systemInstructions || llmSettings.systemInstructions}
+              value={llmPreferences.systemInstructions || llmSettings.systemInstructions}
               onChange={(e) => dispatch(setSystemInstructions(e.target.value))}
             />
             
             <Box>
-              <Typography gutterBottom>Temperature: {userLlmPreferences?.temperature || llmSettings.temperature}</Typography>
+              <Typography gutterBottom>Temperature: {llmPreferences.temperature || llmSettings.temperature}</Typography>
               <Slider
-                value={userLlmPreferences?.temperature || llmSettings.temperature}
+                value={llmPreferences.temperature || llmSettings.temperature}
                 onChange={(e, value) => dispatch(setTemperature(value))}
                 min={0}
                 max={2}

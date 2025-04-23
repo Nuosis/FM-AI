@@ -627,6 +627,73 @@ const llmProviderService = {
       console.error('[llmProviderService] Error updating API key storage preference:', error);
       throw error;
     }
+  },
+
+  /**
+   * Generate tool input parameters using LLM
+   * @param {Object} options
+   * @param {string} options.prompt - The prompt to send to the LLM
+   * @param {string} options.provider - The LLM provider (e.g., 'openai')
+   * @param {string} options.model - The model to use (e.g., 'gpt-4-turbo')
+   * @param {string} [options.baseUrl] - Optional base URL for local providers
+   * @returns {Promise<string>} - The LLM's response (JSON string)
+   */
+  generateToolInputWithLLM: async ({ prompt, provider, model, baseUrl }) => {
+    try {
+      const providerLower = provider.toLowerCase();
+      const messages = [
+        { role: 'system', content: 'You are an expert at generating valid JSON input objects for tool APIs.' },
+        { role: 'user', content: prompt }
+      ];
+
+      // Get auth token for the edge function
+      const { data: authData } = await supabase.auth.getSession();
+      const session = authData?.session;
+      
+      if (!session) {
+        throw new Error('Authentication required');
+      }
+
+      // Call the Supabase Edge Function with auth header
+      const { data, error } = await supabase.functions.invoke('llmProxyHandler', {
+        body: {
+          provider: providerLower,
+          type: 'chat',
+          model,
+          baseUrl: baseUrl || null,
+          messages,
+          options: {
+            temperature: 0.7,
+            max_tokens: 500
+          }
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      });
+
+      if (error) throw error;
+
+      // Parse the response if it's a string
+      const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+      
+      // Extract content based on response format
+      let content = '';
+      if (parsedData.choices && parsedData.choices[0] && parsedData.choices[0].message) {
+        // OpenAI format
+        content = parsedData.choices[0].message.content;
+      } else if (parsedData.content) {
+        // Direct content format
+        content = parsedData.content;
+      } else {
+        throw new Error('Invalid LLM response format');
+      }
+      
+      return content;
+    } catch (err) {
+      console.error('[llmProviderService] Error generating tool input with LLM:', err);
+      throw err;
+    }
   }
 };
 

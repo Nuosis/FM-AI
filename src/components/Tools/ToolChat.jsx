@@ -82,8 +82,15 @@ const ToolChat = () => {
           if (providerConfig.models.chat.weak) models.push(providerConfig.models.chat.weak);
           setAvailableModels(models);
           
-          // Set selected model (default to weak model)
-          setSelectedModel(providerConfig.models.chat.strong || providerConfig.models.chat.weak || '');
+          // Check if we have defaultWeakModel or defaultStrongModel in preferences
+          if (llmPreferences.defaultWeakModel) {
+            setSelectedModel(llmPreferences.defaultWeakModel);
+          } else if (llmPreferences.defaultStrongModel) {
+            setSelectedModel(llmPreferences.defaultStrongModel);
+          } else {
+            // Fallback to the provider's models
+            setSelectedModel(providerConfig.models.chat.strong || providerConfig.models.chat.weak || '');
+          }
         }
       }
     }
@@ -187,8 +194,18 @@ const ToolChat = () => {
       if (providerConfig.models.chat.weak) models.push(providerConfig.models.chat.weak);
       setAvailableModels(models);
       
-      // Set selected model (default to weak model)
-      setSelectedModel(providerConfig.models.chat.weak || providerConfig.models.chat.strong || '');
+      // Check if we have defaultWeakModel in preferences for this provider
+      const defaultWeakModel = llmPreferences.defaultWeakModel;
+      const defaultStrongModel = llmPreferences.defaultStrongModel;
+      
+      if (defaultWeakModel && models.includes(defaultWeakModel)) {
+        setSelectedModel(defaultWeakModel);
+      } else if (defaultStrongModel && models.includes(defaultStrongModel)) {
+        setSelectedModel(defaultStrongModel);
+      } else {
+        // Fallback to the provider's models
+        setSelectedModel(providerConfig.models.chat.weak || providerConfig.models.chat.strong || '');
+      }
     } else {
       setAvailableModels([]);
       setSelectedModel('');

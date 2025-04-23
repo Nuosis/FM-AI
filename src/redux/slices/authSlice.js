@@ -172,9 +172,8 @@ const fetchUserData = async (result) => {
         acc[pref.preference_key] = pref.preference_value;
         return acc;
       }, {});
+      // Removed localStorage sync
       
-      // Sync LLM preferences with localStorage
-      syncLlmPreferencesWithLocalStorage(userData.preferences);
       
       // Check if llm_storage preference exists with apiKeyStorage set to 'local'
       const llmStorage = userData.preferences.llm_storage;
@@ -263,27 +262,7 @@ const createDefaultProfile = (result, organizationId) => {
   };
 };
 
-/**
- * Sync LLM preferences with localStorage
- * @param {Object} preferences - User preferences
- */
-const syncLlmPreferencesWithLocalStorage = (preferences) => {
-  const llmPreferences = preferences.llm_preferences;
-  if (llmPreferences) {
-    const currentLlmSettings = localStorage.getItem('llmSettings');
-    let updatedSettings = currentLlmSettings ? JSON.parse(currentLlmSettings) : {};
-    
-    updatedSettings = {
-      ...updatedSettings,
-      defaultProvider: llmPreferences.defaultProvider || updatedSettings.defaultProvider || 'openAI',
-      preferredStrongModel: llmPreferences.preferredStrongModel || updatedSettings.preferredStrongModel || '',
-      preferredWeakModel: llmPreferences.preferredWeakModel || updatedSettings.preferredWeakModel || '',
-      apiKeyStorage: llmPreferences.apiKeyStorage || updatedSettings.apiKeyStorage || 'local'
-    };
-    
-    localStorage.setItem('llmSettings', JSON.stringify(updatedSettings));
-  }
-};
+// Removed syncLlmPreferencesWithLocalStorage function
 
 /**
  * Fetch customer data for user
@@ -466,9 +445,7 @@ const updateUserMetadataIfNeeded = async (result, profile) => {
  */
 const syncLocalApiKeysToDatabase = async (userId) => {
   try {
-    // Get all provider configs from localStorage
-    const llmSettings = localStorage.getItem('llmSettings');
-    if (!llmSettings) return;
+    // No longer checking llmSettings from localStorage
     
     // Get all API keys from localStorage
     const providers = ['openAI', 'anthropic', 'google', 'mistral', 'cohere'];
@@ -806,35 +783,27 @@ export const signUpWithEmail = createAsyncThunk(
 
       if (orgError) throw orgError;
 
-      // Get LLM preferences from localStorage to initialize user preferences
-      const llmSettings = localStorage.getItem('llmSettings');
-      let llmPreferences = {};
+      // Initialize default LLM preferences
+      const llmPreferences = {
+        defaultProvider: 'openAI',
+        preferredStrongModel: '',
+        preferredWeakModel: '',
+        apiKeyStorage: 'local'
+      };
       
-      if (llmSettings) {
-        const parsedSettings = JSON.parse(llmSettings);
-        llmPreferences = {
-          defaultProvider: parsedSettings.defaultProvider || 'openAI',
-          preferredStrongModel: parsedSettings.preferredStrongModel || '',
-          preferredWeakModel: parsedSettings.preferredWeakModel || '',
-          apiKeyStorage: parsedSettings.apiKeyStorage || 'local'
-        };
-        
-        // Save LLM preferences to user_preferences table
-        await supabaseService.executeQuery(supabase =>
-          supabase
-            .from('user_preferences')
-            .insert({
-              user_id: data.user.id,
-              preference_key: 'llm_preferences',
-              preference_value: llmPreferences
-            })
-        );
-        
-        // Check if apiKeyStorage is set to 'local' and sync API keys to database
-        if (llmPreferences.apiKeyStorage === 'local') {
-          await syncLocalApiKeysToDatabase(data.user.id);
-        }
-      }
+      // Save default LLM preferences to user_preferences table
+      await supabaseService.executeQuery(supabase =>
+        supabase
+          .from('user_preferences')
+          .insert({
+            user_id: data.user.id,
+            preference_key: 'llm_preferences',
+            preference_value: llmPreferences
+          })
+      );
+      
+      // Sync API keys to database if needed
+      await syncLocalApiKeysToDatabase(data.user.id);
 
       // Initialize empty preferences, conversations, and functions for new user
       console.log('[Auth] User registration complete');
@@ -1003,23 +972,8 @@ export const getSession = createAsyncThunk(
         return acc;
       }, {}) : {};
       
-      // Sync LLM preferences with localStorage
-      const llmPreferences = preferences.llm_preferences;
-      if (llmPreferences) {
-        const currentLlmSettings = localStorage.getItem('llmSettings');
-        let updatedSettings = currentLlmSettings ? JSON.parse(currentLlmSettings) : {};
-        
-        // Update localStorage with database preferences
-        updatedSettings = {
-          ...updatedSettings,
-          defaultProvider: llmPreferences.defaultProvider || updatedSettings.defaultProvider || 'openAI',
-          preferredStrongModel: llmPreferences.preferredStrongModel || updatedSettings.preferredStrongModel || '',
-          preferredWeakModel: llmPreferences.preferredWeakModel || updatedSettings.preferredWeakModel || '',
-          apiKeyStorage: llmPreferences.apiKeyStorage || updatedSettings.apiKeyStorage || 'local'
-        };
-        
-        localStorage.setItem('llmSettings', JSON.stringify(updatedSettings));
-      }
+      // No longer syncing with localStorage
+      // Removed unused variable
       
       // Check if llm_storage preference exists with apiKeyStorage set to 'local'
       const llmStorage = preferences.llm_storage;
