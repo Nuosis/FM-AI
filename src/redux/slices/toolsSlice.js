@@ -117,33 +117,122 @@ export const saveTool = createAsyncThunk(
   }
 );
 
+export const updateToolAsync = createAsyncThunk(
+  'tools/updateToolAsync',
+  async (toolData, { rejectWithValue, dispatch }) => {
+    try {
+      console.log('Updating tool with data:', toolData);
+      const response = await supabaseService.executeQuery(supabase =>
+        supabase
+          .from('functions')
+          .update(toolData)
+          .eq('id', toolData.id)
+          .select()
+      );
+      
+      console.log('Update tool response:', response);
+      
+      // Dispatch the action to update the state
+      if (response.data && response.data.length > 0) {
+        dispatch({ type: 'tools/updateTool', payload: response.data[0] });
+      }
+      
+      // Return the entire response
+      return response;
+    } catch (error) {
+      console.error('Update tool error:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      return rejectWithValue(error.response?.data || 'Failed to update tool');
+    }
+  }
+);
+
 export const executeToolCode = createAsyncThunk(
   'tools/executeToolCode',
   async ({ id, input }, { rejectWithValue }) => {
     try {
       console.log('Executing tool with ID:', id, 'and input:', input);
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/functions/execute/${id}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
-        },
-        body: JSON.stringify(input)
-      });
-
-      console.log('Execute tool response status:', response.status);
-
-      if (!response.ok) {
-        const errorMessage = `Failed to execute tool: ${response.status} ${response.statusText}`;
-        console.error(errorMessage);
-        throw new Error(errorMessage);
-      }
-
-      const result = await response.json();
-      console.log('Raw execution result:', result);
       
-      // Just return the result directly
-      return result;
+      // First, fetch the tool code from the database
+      console.log('Fetching tool code from database for ID:', id);
+      let toolData;
+      try {
+        toolData = await supabaseService.executeQuery(supabase =>
+          supabase
+            .from('functions')
+            .select('*')  // Select all fields to see what's available
+            .eq('id', id)
+            .single()
+        );
+        
+        console.log('Tool data fetched successfully:', toolData);
+      } catch (dbError) {
+        console.error('Database error when fetching tool:', dbError);
+        throw new Error(`Failed to fetch tool code: ${dbError.message}`);
+      }
+      
+      if (!toolData) {
+        console.error('No tool found with ID:', id);
+        throw new Error(`Tool not found with ID: ${id}`);
+      }
+      
+      if (!toolData.code) {
+        console.error('Tool has no code field:', toolData);
+        throw new Error('Tool exists but has no code field');
+      }
+      
+      console.log('Tool code fetched successfully');
+      
+      // Check if the local proxy server is running
+      try {
+        // Try to connect to the proxy server health endpoint
+        const healthResponse = await fetch('http://localhost:3500/health', { method: 'GET' });
+        
+        // Check if response is ok and the text is exactly 'ok'
+        if (healthResponse.ok) {
+          const responseText = await healthResponse.text();
+          if (responseText === 'ok') {
+            console.log('Proxy server health check successful, executing code');
+            
+            // Execute the code using the proxy server's /execute endpoint
+            const executeResponse = await fetch('http://localhost:3500/execute', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                code: toolData.code,
+                input: input
+              })
+            });
+            
+            if (!executeResponse.ok) {
+              throw new Error(`Execution failed with status: ${executeResponse.status}`);
+            }
+            
+            const result = await executeResponse.json();
+            console.log('Execution result:', result);
+            
+            return result;
+          } else {
+            throw new Error(`Proxy server health check failed: unexpected response "${responseText}"`);
+          }
+        } else {
+          throw new Error(`Proxy server health check failed with status: ${healthResponse.status}`);
+        }
+      } catch (proxyError) {
+        console.error('Proxy server error:', proxyError);
+        
+        // Return an error indicating the proxy server is not running
+        return {
+          success: false,
+          output: "",
+          error: "Local proxy server is not running. Please deploy the server to execute Python code."
+        };
+      }
     } catch (error) {
       console.error('Execute tool error:', error);
       return rejectWithValue(error.message || 'Failed to execute tool');

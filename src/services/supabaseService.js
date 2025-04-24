@@ -307,6 +307,46 @@ class SupabaseService {
       return this.handleError(error, 'executeQuery');
     }
   }
+
+  /**
+   * Invoke a Supabase Edge Function
+   * @param {string} functionName - The name of the edge function to invoke
+   * @param {Object} payload - The payload to send to the function
+   * @param {Object} options - Options object
+   * @param {boolean} options.requireAuth - Whether to require authentication (default: true)
+   * @returns {Promise<Object>} The function result
+   */
+  async invokeFunction(functionName, payload, { requireAuth = true } = {}) {
+    try {
+      if (requireAuth) {
+        this.ensureAuthenticated();
+      } else {
+        console.log('[SupabaseService] Auth check for function invocation: SKIPPED');
+      }
+
+      console.log(`[SupabaseService] Invoking edge function: ${functionName}`, payload);
+      
+      const { data, error } = await supabase.functions.invoke(functionName, {
+        body: payload
+      });
+
+      if (error) {
+        console.error(`[SupabaseService] Edge function error:`, error);
+        throw error;
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('[SupabaseService] invokeFunction error:',
+        error.message,
+        error.stack,
+        'Full error object:',
+        JSON.stringify(error, Object.getOwnPropertyNames(error), 2)
+      );
+      
+      return this.handleError(error, `invokeFunction:${functionName}`);
+    }
+  }
 }
 
 // Create and export a singleton instance

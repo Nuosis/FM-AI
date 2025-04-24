@@ -58,27 +58,33 @@ const ApiKeyVerifier = ({
     setProxyStatus(prev => ({ ...prev, checking: true, error: null }));
     
     try {
-      // Try to connect to the proxy server
-      const proxyUrl = 'http://localhost:3500/';
-      console.log('[ApiKeyVerifier] Attempting to connect to proxy at', proxyUrl);
-      const response = await fetch(proxyUrl, { method: 'OPTIONS' });
+      // Try to connect to the proxy server health endpoint
+      const proxyUrl = 'http://localhost:3500/health';
+      console.log('[ApiKeyVerifier] Attempting to connect to proxy health endpoint at', proxyUrl);
+      const response = await fetch(proxyUrl, { method: 'GET' });
       
+      // Check if response is ok and the text is exactly 'ok'
       if (response.ok) {
-        console.log('[ApiKeyVerifier] Proxy server connection successful');
-        setProxyStatus({
-          checking: false,
-          connected: true,
-          error: null
-        });
+        const responseText = await response.text();
+        if (responseText === 'ok') {
+          console.log('[ApiKeyVerifier] Proxy server health check successful');
+          setProxyStatus({
+            checking: false,
+            connected: true,
+            error: null
+          });
+        } else {
+          throw new Error(`Proxy server health check failed: unexpected response "${responseText}"`);
+        }
       } else {
-        throw new Error(`Proxy server returned status: ${response.status}`);
+        throw new Error(`Proxy server health check failed with status: ${response.status}`);
       }
     } catch (error) {
       console.error('[ApiKeyVerifier] Proxy server connection error:', error);
       setProxyStatus({
         checking: false,
         connected: false,
-        error: 'Could not connect to the local LLM proxy server'
+        error: 'Could not connect to the local LLM proxy server health endpoint'
       });
     }
   }, [isLocalProvider, provider]);
@@ -156,19 +162,25 @@ const ApiKeyVerifier = ({
               <Typography variant="body2">
                 Please download and run the proxy script:
               </Typography>
-              <Box sx={{ mt: 1 }}>
+              <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <Link
-                  href="https://koxofrstjtsywvgflhyu.supabase.co/storage/v1/object/public/clarity-assets//local-llm-proxy.cjs"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href="/scripts/local-llm-proxy.py"
+                  download="local-llm-proxy.py"
                 >
                   Download proxy script
                 </Link>
+                <Typography variant="body2">
+                  Run it on MacOs/Linux: <code>python3 -m venv venv && source venv/bin/activate && python ~/Downloads/local-llm-proxy.py</code>
+                </Typography>
+                <Typography variant="body2">
+                  Run it on Windows Command Prompt: <code>cd %USERPROFILE%\Downloads && python -m venv venv && venv\Scripts\activate && python local-llm-proxy.py</code>
+                </Typography>
+                <Typography variant="body2" color="text.secondary" fontSize="0.75rem">
+                  This proxy server supports both LLM proxying and Python code execution.
+                </Typography>
               </Box>
-              <Typography variant="body2" sx={{ mt: 1 }}>
-                Run it with: <code>node ~///Downloads/local-llm-proxy.cjs</code>
-              </Typography>
-              <Box sx={{ mt: 1 }}>
+              
+              <Box sx={{ mt: 2 }}>
                 <Button
                   size="small"
                   variant="outlined"

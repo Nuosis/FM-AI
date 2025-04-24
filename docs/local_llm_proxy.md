@@ -1,6 +1,8 @@
 # Local LLM Proxy Server
 
-This proxy server allows you to forward requests from your browser to local LLM instances (Ollama or LM Studio) while adding necessary CORS headers to avoid browser CORS issues.
+This proxy server allows you to forward requests from your browser to local LLM instances (Ollama or LM Studio) while adding necessary CORS headers to avoid browser CORS issues. It also provides a Python code execution endpoint.
+
+> **Note:** A new unified Python implementation is now available that replaces the Node.js version. See the [Unified Python Implementation](#unified-python-implementation) section below.
 
 ## Why Use This Proxy?
 
@@ -10,7 +12,11 @@ This proxy server sits between your browser application and the local LLM servic
 
 ## Installation
 
-No installation is required. The script is ready to use as long as you have Node.js installed on your system.
+### Node.js Version
+No installation is required for the Node.js version. The script is ready to use as long as you have Node.js installed on your system.
+
+### Python Version
+The Python version requires Python 3 and will automatically install its dependencies (Flask and requests) if they are not already installed.
 
 ## Usage
 
@@ -19,30 +25,27 @@ No installation is required. The script is ready to use as long as you have Node
 Run the script from the command line:
 
 ```bash
-# Basic usage with default settings
-node scripts/local-llm-proxy.cjs
-
-# Or make it executable and run directly
-chmod +x scripts/local-llm-proxy.cjs
-./scripts/local-llm-proxy.cjs
+python scripts/local-llm-proxy.py
 ```
 
 ### Command Line Options
 
-The proxy server accepts several command line options:
+#### Python Version
+The Python proxy server accepts similar command line options:
 
 ```
---port <number>           Port to run the proxy server on (default: 3500)
---ollama-port <number>    Port for Ollama (default: 11434)
---lmstudio-port <number>  Port for LM Studio (default: 1234)
---debug                   Enable debug logging
---help                    Show help message
+--port PORT                 Proxy server port (default: 3500)
+--ollama-port PORT          Ollama port (default: 11434)
+--lmstudio-port PORT        LM Studio port (default: 1234)
+--ollama-base-url URL       Custom Ollama base URL
+--lmstudio-base-url URL     Custom LM Studio base URL
+--debug                     Enable debug logging
 ```
 
 Example with custom ports:
 
 ```bash
-node scripts/local-llm-proxy.cjs --port 8000 --ollama-port 11435 --lmstudio-port 5000
+python scripts/local-llm-proxy.py --port 8000 --ollama-port 11435 --lmstudio-port 5000
 ```
 
 ### Connecting to the Proxy
@@ -59,9 +62,14 @@ The proxy uses URL patterns to determine which LLM service to route to:
 - **LM Studio**: `http://localhost:3500/lmstudio/*`
   - Example: `http://localhost:3500/lmstudio/v1/chat/completions`
 
-- **Auto-routing**:
-  - Paths starting with `/v1/` are automatically routed to LM Studio (OpenAI-compatible)
-  - Paths containing `api/chat` or `api/tags` are automatically routed to Ollama
+- **OpenAI-compatible**: `http://localhost:3500/v1/*`
+  - Example: `http://localhost:3500/v1/chat/completions`
+
+- **Python Code Execution** (Python version only): `http://localhost:3500/execute`
+  - POST endpoint for executing Python code
+
+- **Health Check** (Python version only): `http://localhost:3500/health`
+  - Returns "ok" for frontend detection
 
 ### Example: Configuring Your Application
 
@@ -101,3 +109,73 @@ If you're still seeing CORS errors:
 ## Security Considerations
 
 This proxy is intended for local development use only. It adds permissive CORS headers that allow any origin to access the LLM services. Do not use this in a production environment without proper security measures.
+
+## Unified Python Implementation
+
+A new unified Python implementation is now available that combines:
+1. LLM proxying functionality (same as the Node.js version)
+2. Python code execution via a `/execute` endpoint
+
+### Features
+
+- **Cross-platform**: Works on Windows, Mac, and Linux with Python 3
+- **No dependencies**: Automatically installs required packages (Flask and requests)
+- **LLM Proxying**: Same functionality as the Node.js version
+- **Python Code Execution**: Run Python code directly from the frontend
+- **Health Check**: Endpoint for frontend detection
+
+### Python Code Execution
+
+The Python implementation adds a new `/execute` endpoint for running Python code:
+
+```javascript
+// Example: Execute Python code
+fetch('http://localhost:3500/execute', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    code: `
+import json
+import sys
+
+# Get input from stdin
+input_data = json.loads(sys.stdin.read())
+
+# Process the input
+result = {
+    "message": f"Hello, {input_data.get('name', 'World')}!",
+    "timestamp": input_data.get('timestamp')
+}
+
+# Output the result as JSON
+print(json.dumps(result))
+    `,
+    input: {
+      name: "User",
+      timestamp: Date.now()
+    }
+  })
+})
+.then(response => response.json())
+.then(data => console.log(data));
+```
+
+The response will be in this format:
+
+```json
+{
+  "output": "...", // Standard output from the Python code
+  "error": "...",  // Standard error or exception message (null if successful)
+  "success": true  // Boolean indicating if execution was successful
+}
+```
+
+### Security Considerations
+
+The Python code execution feature runs code directly on your machine. Only use it with code you trust and understand the risks. The server:
+
+- Only listens on localhost for security
+- Limits execution time to 10 seconds
+- Cleans up temporary files after execution

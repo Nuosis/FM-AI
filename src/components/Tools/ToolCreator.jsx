@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { useDispatch, useSelector } from 'react-redux';
-import { saveTool } from '../../redux/slices/toolsSlice';
+import { saveTool, updateToolAsync } from '../../redux/slices/toolsSlice';
 import {
   Box,
   Paper,
@@ -15,14 +15,26 @@ import {
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { materialDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
-const ToolCreator = ({ onCancel }) => {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [code, setCode] = useState('');
+const ToolCreator = ({ onCancel, toolToEdit = null }) => {
+  const [name, setName] = useState(toolToEdit ? toolToEdit.name : '');
+  const [description, setDescription] = useState(toolToEdit ? toolToEdit.description : '');
+  const [code, setCode] = useState(toolToEdit ? toolToEdit.code : '');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const dispatch = useDispatch();
   const user = useSelector(state => state.auth.user);
+  
+  // Check if the current user is the owner of the tool
+  const isOwner = !toolToEdit || (toolToEdit && toolToEdit.user_id === user?.user_id);
+  
+  // Initialize form with tool data when editing
+  useEffect(() => {
+    if (toolToEdit) {
+      setName(toolToEdit.name || '');
+      setDescription(toolToEdit.description || '');
+      setCode(toolToEdit.code || '');
+    }
+  }, [toolToEdit]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -36,16 +48,26 @@ const ToolCreator = ({ onCancel }) => {
         name,
         description,
         code,
-        created_by: user.id, // Required field according to data model
-        // user_id is optional and user_name doesn't exist in the schema
-        // created_at and updated_at have default values in the database
+        // Include id when editing
+        ...(toolToEdit && { id: toolToEdit.id }),
+        // Only include created_by when creating a new tool
+        ...(!toolToEdit && { created_by: user.user_id }),
+        // Add user_id for both create and update
+        user_id: user.user_id
       };
 
-      await dispatch(saveTool(toolData)).unwrap();
-      onCancel(); // Close the form after successful creation
+      if (toolToEdit) {
+        // Update existing tool
+        await dispatch(updateToolAsync(toolData)).unwrap();
+      } else {
+        // Create new tool
+        await dispatch(saveTool(toolData)).unwrap();
+      }
+      
+      onCancel(); // Close the form after successful operation
     } catch (error) {
-      console.error('Error creating tool:', error);
-      setError(error.message || 'Failed to create tool');
+      console.error(`Error ${toolToEdit ? 'updating' : 'creating'} tool:`, error);
+      setError(error.message || `Failed to ${toolToEdit ? 'update' : 'create'} tool`);
     } finally {
       setIsLoading(false);
     }
@@ -77,7 +99,7 @@ def ${functionName}(input_text: Any) -> Any:
   return (
     <Paper elevation={1} sx={{ p: 3 }}>
       <Typography variant="h6" sx={{ mb: 2 }}>
-        Create New Tool
+        {toolToEdit ? 'Edit Tool' : 'Create New Tool'}
       </Typography>
       
       <form onSubmit={handleSubmit}>
@@ -142,6 +164,11 @@ def ${functionName}(input_text: Any) -> Any:
                 Preview:
               </Typography>
             )}
+            {toolToEdit && !isOwner && (
+              <Typography variant="caption" color="error" sx={{ display: 'block', mt: 1 }}>
+                Note: Only the owner can save changes to the database.
+              </Typography>
+            )}
           </Box>
           <Box sx={{ display: 'flex', gap: 2 }}>
             <Button
@@ -153,10 +180,10 @@ def ${functionName}(input_text: Any) -> Any:
             <Button
               type="submit"
               variant="contained"
-              disabled={isLoading || !name.trim() || !description.trim() || !code.trim()}
+              disabled={isLoading || !name.trim() || !description.trim() || !code.trim() || (toolToEdit && !isOwner)}
               startIcon={isLoading ? <CircularProgress size={20} /> : null}
             >
-              {isLoading ? 'Creating...' : 'Create Tool'}
+              {isLoading ? (toolToEdit ? 'Updating...' : 'Creating...') : (toolToEdit ? 'Update Tool' : 'Create Tool')}
             </Button>
           </Box>
         </Box>
@@ -189,7 +216,15 @@ def ${functionName}(input_text: Any) -> Any:
 };
 
 ToolCreator.propTypes = {
-  onCancel: PropTypes.func.isRequired
+  onCancel: PropTypes.func.isRequired,
+  toolToEdit: PropTypes.shape({
+    id: PropTypes.string,
+    name: PropTypes.string,
+    description: PropTypes.string,
+    code: PropTypes.string,
+    user_id: PropTypes.string,
+    created_by: PropTypes.string
+  })
 };
 
 export default ToolCreator;

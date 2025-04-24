@@ -31,9 +31,11 @@ import {
   ExpandMore as ExpandMoreIcon,
   Search as SearchIcon,
   PlayArrow as PlayArrowIcon,
-  GetApp as GetAppIcon
+  GetApp as GetAppIcon,
+  Edit as EditIcon
 } from '@mui/icons-material';
 import ToolPlayground from './ToolPlayground';
+import ToolCreator from './ToolCreator';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { materialDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -50,6 +52,7 @@ const ToolList = () => {
   const [showMyToolsOnly, setShowMyToolsOnly] = useState(false);
   const [selectedTool, setSelectedTool] = useState(null);
   const [activeTab, setActiveTab] = useState(1); // 0: Details, 1: Playground (default to Playground)
+  const [editingTool, setEditingTool] = useState(null);
 
   // Extract tools from the response
   const tools = useMemo(() => {
@@ -68,7 +71,7 @@ const ToolList = () => {
     // First filter by search term and optionally by user's id
     let filtered = tools.filter(tool => {
       const matchesSearch = tool.name?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesUser = !showMyToolsOnly || tool.user_id === user?.id;
+      const matchesUser = !showMyToolsOnly || tool.user_id === user?.user_id;
       return matchesSearch && matchesUser;
     });
 
@@ -107,6 +110,14 @@ const ToolList = () => {
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
   };
+  
+  const handleEditTool = (tool) => {
+    setEditingTool(tool);
+  };
+  
+  const handleCancelEdit = () => {
+    setEditingTool(null);
+  };
 
   const handleDownload = (tool) => {
     // Generate Python code with @tool() decorator
@@ -143,6 +154,16 @@ def ${name?.toLowerCase().replace(/\s+/g, '_')}(*args, **kwargs):
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
+  // Show the tool editor when editing a tool
+  if (editingTool) {
+    return (
+      <ToolCreator
+        toolToEdit={editingTool}
+        onCancel={handleCancelEdit}
+      />
+    );
+  }
 
   if (isLoading) {
     return (
@@ -218,15 +239,25 @@ def ${name?.toLowerCase().replace(/\s+/g, '_')}(*args, **kwargs):
                     <GetAppIcon />
                   </IconButton>
                 </Tooltip>
-                {selectedTool.user_id === user?.id && (
-                  <Tooltip title="Delete Tool">
-                    <IconButton
-                      color="error"
-                      onClick={() => handleDelete(selectedTool)}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </Tooltip>
+                {selectedTool.user_id === user?.user_id && (
+                  <>
+                    <Tooltip title="Edit Tool">
+                      <IconButton
+                        color="primary"
+                        onClick={() => handleEditTool(selectedTool)}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Delete Tool">
+                      <IconButton
+                        color="error"
+                        onClick={() => handleDelete(selectedTool)}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </>
                 )}
               </Box>
             </Box>
@@ -324,28 +355,52 @@ def ${name?.toLowerCase().replace(/\s+/g, '_')}(*args, **kwargs):
                   <GetAppIcon />
                 </IconButton>
               </Tooltip>
-              {tool.user_id === user?.id ? (
-                <Tooltip title="Delete Tool">
-                  <IconButton
-                    size="small"
-                    color="error"
-                    onClick={() => handleDelete(tool)}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </Tooltip>
-              ) : (
-                <Tooltip title="Only the owner can delete this tool">
-                  <span>
+              {tool.user_id === user?.user_id ? (
+                <>
+                  <Tooltip title="Edit Tool">
+                    <IconButton
+                      size="small"
+                      color="primary"
+                      onClick={() => handleEditTool(tool)}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Delete Tool">
                     <IconButton
                       size="small"
                       color="error"
-                      disabled
+                      onClick={() => handleDelete(tool)}
                     >
                       <DeleteIcon />
                     </IconButton>
-                  </span>
-                </Tooltip>
+                  </Tooltip>
+                </>
+              ) : (
+                <>
+                  <Tooltip title="Only the owner can update this tool in the database">
+                    <span>
+                      <IconButton
+                        size="small"
+                        color="primary"
+                        disabled
+                      >
+                        <EditIcon />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title="Only the owner can delete this tool">
+                    <span>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        disabled
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                </>
               )}
             </Box>
           </Box>

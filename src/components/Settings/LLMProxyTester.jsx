@@ -1,6 +1,4 @@
-// WORKINg CODE __ DO NOT CHANGE!!!!!!!
-
-
+// Updated to work with the unified Python proxy server
 
 import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
@@ -17,14 +15,16 @@ import {
   Paper,
   Divider,
   Alert,
-  TextField
+  TextField,
+  Tabs,
+  Tab
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 
 /**
- * Component for testing the llmProxyHandler edge function
- * Allows testing getting models and chat completions
+ * Component for testing the unified local proxy server
+ * Allows testing both LLM proxy functionality and Python code execution
  */
 const LLMProxyTester = () => {
   // Check if LLM testing is enabled in environment variables
@@ -35,14 +35,17 @@ const LLMProxyTester = () => {
   const userId = currentUser?.user_id;
   const llmProviders = useSelector(state => state.auth.user?.preferences?.llm_providers || []);
   
-  // Component state
+  // Tab state
+  const [activeTab, setActiveTab] = useState(0);
+  
+  // LLM Proxy testing state
   const [selectedProvider, setSelectedProvider] = useState('');
   const [selectedModel, setSelectedModel] = useState('');
   const [models, setModels] = useState([]);
   const [chatMessage, setChatMessage] = useState('');
   const [chatResponse, setChatResponse] = useState('');
   
-  // Loading and error states
+  // Loading and error states for LLM testing
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState(null);
   const [modelsSuccess, setModelsSuccess] = useState(false);
@@ -53,6 +56,34 @@ const LLMProxyTester = () => {
   
   // Check if API key is verified for the selected provider
   const [isApiKeyVerified, setIsApiKeyVerified] = useState(false);
+  
+  // Python code execution testing state
+  const [pythonCode, setPythonCode] = useState(`
+import json
+import sys
+
+# Get input from stdin
+input_data = json.loads(sys.stdin.read())
+
+# Process the input
+result = {
+    "message": f"Hello, {input_data.get('name', 'World')}!",
+    "timestamp": input_data.get('timestamp')
+}
+
+# Output the result as JSON
+print(json.dumps(result))
+  `.trim());
+  
+  const [inputData, setInputData] = useState(JSON.stringify({
+    name: "User",
+    timestamp: new Date().toISOString()
+  }, null, 2));
+  
+  const [executionResult, setExecutionResult] = useState(null);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [executionError, setExecutionError] = useState(null);
+  const [executionSuccess, setExecutionSuccess] = useState(false);
   
   // Effect to check if API key is verified when provider changes
   useEffect(() => {
@@ -246,19 +277,81 @@ const LLMProxyTester = () => {
     }
   };
   
-  return (
-    <Paper sx={{ p: 3, mb: 3 }}>
-      {!isLLMTestEnabled ? (
-        <Alert severity="info">
-          LLM Proxy Tester is disabled. Set VITE_LLM_TEST=true in your .env file to enable it.
-        </Alert>
-      ) : (
-        <>
-          <Typography variant="body2" color="text.secondary" paragraph>
-            Test the LLM Proxy Handler with real API calls to get models and chat completions.
-          </Typography>
-          
-          <Divider sx={{ my: 2 }} />
+  // Handle tab change
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+  };
+  
+  // Handle Python code execution
+  const handleExecuteCode = async () => {
+    setIsExecuting(true);
+    setExecutionError(null);
+    setExecutionSuccess(false);
+    setExecutionResult(null);
+    
+    try {
+      // Parse the input data
+      let parsedInput;
+      try {
+        parsedInput = JSON.parse(inputData);
+      } catch (error) {
+        throw new Error(`Invalid JSON input: ${error.message}`);
+      }
+      
+      // Call the proxy server's execute endpoint
+      const response = await fetch('http://localhost:3500/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          code: pythonCode,
+          input: parsedInput
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Execution failed with no error message');
+      }
+      
+      setExecutionResult(result);
+      setExecutionSuccess(true);
+    } catch (error) {
+      console.error('Error executing Python code:', error);
+      setExecutionError(error.message);
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+  
+  // Try to parse the output as JSON for better display
+  const getParsedOutput = () => {
+    if (!executionResult || !executionResult.output) return null;
+    
+    try {
+      return JSON.parse(executionResult.output);
+    } catch {
+      // If it's not valid JSON, return the raw output
+      return null;
+    }
+  };
+  
+  const parsedOutput = getParsedOutput();
+  
+  // Render LLM Proxy Testing Tab
+  const renderLLMProxyTab = () => (
+    <>
+      <Typography variant="body2" color="text.secondary" paragraph>
+        Test the LLM Proxy functionality with real API calls to get models and chat completions.
+      </Typography>
+      
+      <Divider sx={{ my: 2 }} />
           
           {/* Provider Selection */}
           <Box sx={{ mb: 3 }}>
@@ -395,6 +488,146 @@ const LLMProxyTester = () => {
           )}
         </Box>
       )}
+    </>
+  );
+  
+  // Render Python Code Execution Tab
+  const renderPythonExecutionTab = () => (
+    <>
+      <Typography variant="body2" color="text.secondary" paragraph>
+        Test the Python code execution functionality of the unified proxy server.
+        Enter Python code, provide input data as JSON, and execute it to see the results.
+      </Typography>
+      
+      <Divider sx={{ my: 2 }} />
+      
+      {/* Python Code Input */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="subtitle1" gutterBottom>
+          Python Code
+        </Typography>
+        
+        <TextField
+          label="Python Code"
+          value={pythonCode}
+          onChange={(e) => setPythonCode(e.target.value)}
+          fullWidth
+          multiline
+          rows={10}
+          variant="outlined"
+          sx={{ fontFamily: 'monospace' }}
+        />
+      </Box>
+      
+      {/* Input Data */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="subtitle1" gutterBottom>
+          Input Data (JSON)
+        </Typography>
+        
+        <TextField
+          label="Input Data"
+          value={inputData}
+          onChange={(e) => setInputData(e.target.value)}
+          fullWidth
+          multiline
+          rows={4}
+          variant="outlined"
+          sx={{ fontFamily: 'monospace' }}
+        />
+      </Box>
+      
+      {/* Execute Button */}
+      <Box sx={{ mb: 3 }}>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={handleExecuteCode}
+          disabled={isExecuting}
+          startIcon={isExecuting ? <CircularProgress size={20} color="inherit" /> : null}
+        >
+          {isExecuting ? 'Executing...' : 'Execute Code'}
+        </Button>
+      </Box>
+      
+      {/* Execution Results */}
+      {executionSuccess && (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          Code executed successfully
+        </Alert>
+      )}
+      
+      {executionError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Error: {executionError}
+        </Alert>
+      )}
+      
+      {executionResult && (
+        <Box sx={{ mt: 3 }}>
+          <Typography variant="subtitle1" gutterBottom>
+            Execution Result
+          </Typography>
+          
+          {executionResult.error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              Execution Error: {executionResult.error}
+            </Alert>
+          )}
+          
+          {executionResult.output && (
+            <>
+              <Typography variant="subtitle2" gutterBottom>
+                Output:
+              </Typography>
+              
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 2,
+                  bgcolor: 'background.default',
+                  fontFamily: 'monospace',
+                  whiteSpace: 'pre-wrap',
+                  overflowX: 'auto'
+                }}
+              >
+                {parsedOutput ? (
+                  <pre>{JSON.stringify(parsedOutput, null, 2)}</pre>
+                ) : (
+                  executionResult.output
+                )}
+              </Paper>
+            </>
+          )}
+        </Box>
+      )}
+    </>
+  );
+  
+  return (
+    <Paper sx={{ p: 3, mb: 3 }}>
+      {!isLLMTestEnabled ? (
+        <Alert severity="info">
+          Proxy Tester is disabled. Set VITE_LLM_TEST=true in your .env file to enable it.
+        </Alert>
+      ) : (
+        <>
+          <Typography variant="h6" gutterBottom>
+            Unified Local Proxy Server Tester
+          </Typography>
+          
+          <Tabs
+            value={activeTab}
+            onChange={handleTabChange}
+            sx={{ mb: 2 }}
+            variant="fullWidth"
+          >
+            <Tab label="LLM Proxy Testing" />
+            <Tab label="Python Code Execution" />
+          </Tabs>
+          
+          {activeTab === 0 && renderLLMProxyTab()}
+          {activeTab === 1 && renderPythonExecutionTab()}
         </>
       )}
     </Paper>
