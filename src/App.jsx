@@ -4,7 +4,6 @@ import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material';
 import Layout from './components/Layout/Layout';
 import { LoginForm, RegistrationForm, TestSecureApiCall } from './components/Auth';
 import { SettingsForm } from './components/Settings';
-import Functions from './components/Functions';
 import { Tools } from './components/Tools';
 import LLMChat from './components/Chat/LLMChat';
 import { createLog, LogType, /*toggleLogViewer*/ } from './redux/slices/appSlice';
@@ -215,7 +214,6 @@ function App() {
                       }}
                     />
                   )}
-                  {currentView === 'functions' && <Functions />}
                   {currentView === 'tools' && <Tools />}
                   {currentView === 'chat' && <LLMChat />}
                 </>

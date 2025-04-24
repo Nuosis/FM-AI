@@ -12,7 +12,6 @@ import {
 } from '@mui/icons-material';
 import LLMChat from '../Chat/LLMChat';
 import { SettingsForm } from '../Settings';
-import Functions from '../Functions';
 import DemoFiles from '../DemoFiles';
 import Welcome from '../Welcome/Welcome';
 import { useSelector } from 'react-redux';
@@ -54,7 +53,6 @@ const Main = styled('main', {
 const componentMap = {
   LLMChat: LLMChat,
   SettingsForm: SettingsForm,
-  Functions: Functions,
   DemoFiles: DemoFiles,
   TestSecureApiCall: TestSecureApiCall,
   Welcome: Welcome,

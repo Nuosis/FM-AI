@@ -3,7 +3,6 @@ import appReducer from './slices/appSlice';
 import authReducer from './slices/authSlice';
 import licenseReducer from './slices/licenseSlice';
 import llmReducer from './slices/llmSlice';
-import functionsReducer from './slices/functionsSlice';
 import toolsReducer from './slices/toolsSlice';
 
 export const store = configureStore({
@@ -12,7 +11,6 @@ export const store = configureStore({
     auth: authReducer,
     license: licenseReducer,
     llm: llmReducer,
-    functions: functionsReducer,
     tools: toolsReducer,
   },
 });

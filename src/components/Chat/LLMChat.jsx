@@ -7,16 +7,16 @@ import { createLog, LogType } from '../../redux/slices/appSlice';
 import {
   setTemperature,
   setSystemInstructions,
-  setDefaultProvider,
   selectLlmPreferences,
-  setDefaultStrongModel,
-  setDefaultWeakModel,
   syncLlmWithPreferences,
   selectProviderOptions,
   selectModelOptions,
   selectActiveProvider,
+  selectWeakModel,
+  selectIsLlmReady,
   selectActiveModel,
-  selectIsLlmReady
+  setActiveModelThunk,
+  setActiveProviderThunk
 } from '../../redux/slices/llmSlice';
 import {
   Box,
@@ -54,6 +54,10 @@ const LLMChat = () => {
   const modelOptions = useSelector(selectModelOptions);
   const activeProvider = useSelector(selectActiveProvider);
   const activeModel = useSelector(selectActiveModel);
+  const weakModel = useSelector(selectWeakModel);
+  
+  // Get user preferences from auth state
+  // const userPreferences = useSelector(state => state.auth.user?.preferences || {});
   
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -68,9 +72,16 @@ const LLMChat = () => {
     dispatch(syncLlmWithPreferences());
   }, [llmPreferences]);
   
+  // Set active model to weak model on mount
+  useEffect(() => {
+    if (weakModel) {
+      dispatch(setActiveModelThunk(weakModel));
+    }
+  }, [weakModel, dispatch]);
+  
   // Log LLM preferences when they change
   useEffect(() => {
-    console.log('Provider configuration:', llmPreferences);
+    console.log('llmPreferences:', llmPreferences);
   }, [llmPreferences]);
   
   const scrollToBottom = () => {
@@ -83,34 +94,16 @@ const LLMChat = () => {
 
   const handleProviderChange = (event) => {
     const provider = event.target.value;
-    
-    // Update user preferences only (not state.llm directly)
-    dispatch(setDefaultProvider(provider));
-    
-    // The syncLlmWithPreferences thunk will handle updating the Redux state
-    // after the preferences are updated
+    // Use the thunk to update the active provider in the UI
+    dispatch(setActiveProviderThunk(provider));
+    // The thunk will handle updating the Redux state and syncing with preferences
   };
 
   const handleModelChange = (event) => {
     const model = event.target.value;
     
-    // Update only the Redux state for the model
-    // Determine if this is a strong or weak model based on the provider config
-    const userLlmProviders = llmPreferences.llm_providers || [];
-    const providerConfig = userLlmProviders.find(
-      p => p?.provider?.toLowerCase() === activeProvider?.toLowerCase()
-    );
-    
-    if (providerConfig) {
-      const isStrongModel = model === providerConfig.models?.chat?.strong;
-      const isWeakModel = model === providerConfig.models?.chat?.weak;
-      
-      if (isStrongModel) {
-        dispatch(setDefaultStrongModel(model));
-      } else if (isWeakModel) {
-        dispatch(setDefaultWeakModel(model));
-      }
-    }
+    // Set the active model
+    dispatch(setActiveModelThunk(model));
   };
 
   const handleSubmit = async () => {

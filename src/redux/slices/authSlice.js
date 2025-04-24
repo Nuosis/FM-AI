@@ -52,7 +52,7 @@ export const signInWithEmail = createAsyncThunk(
           } : null,
           address: userData.address,
           conversations: userData.conversations || [],
-          functions: userData.functions || []
+          tools: userData.tools || []
         },
         address: userData.address
       };
@@ -103,7 +103,7 @@ const fetchUserData = async (result) => {
     customer: null,
     address: null,
     conversations: [],
-    functions: []
+    tools: []
   };
   
   // Step 1: Fetch user profile
@@ -236,7 +236,7 @@ const fetchUserData = async (result) => {
         .eq('user_id', result.user.id)
     );
     
-    userData.functions = functionsData || [];
+    userData.tools = functionsData || [];
   } catch {
     // Continue with empty functions
   }
@@ -786,8 +786,8 @@ export const signUpWithEmail = createAsyncThunk(
       // Initialize default LLM preferences
       const llmPreferences = {
         defaultProvider: 'openAI',
-        preferredStrongModel: '',
-        preferredWeakModel: '',
+        defaultStrongModel: '',
+        defaultWeakModel: '',
         apiKeyStorage: 'local'
       };
       
@@ -827,7 +827,7 @@ export const signUpWithEmail = createAsyncThunk(
           customer: null,
           address: address,
           conversations: [],
-          functions: []
+          tools: []
         },
         address: address
       };
@@ -1116,7 +1116,7 @@ export const getSession = createAsyncThunk(
           } : null,
           address: addressSearchResult,
           conversations: conversationsData || [],
-          functions: functionsData || []
+          tools: functionsData || []
         },
         address: addressSearchResult
       };
@@ -1278,7 +1278,7 @@ export const restoreUserFromSession = createAsyncThunk(
           } : null,
           address: userData.address,
           conversations: userData.conversations || [],
-          functions: userData.functions || []
+          tools: userData.tools || []
         },
         address: userData.address
       };

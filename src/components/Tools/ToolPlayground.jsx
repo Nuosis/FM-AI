@@ -52,7 +52,7 @@ const ToolPlayground = ({ tool }) => {
         
         // Get provider and model from preferences
         const provider = llmPreferences.defaultProvider.toLowerCase();
-        const model = llmPreferences.defaultStrongModel || llmPreferences.preferredStrongModel;
+        const model = llmPreferences.defaultStrongModel;
         const baseUrl = llmPreferences.baseUrl;
         
         console.log('Using provider:', provider, 'model:', model, 'baseUrl:', baseUrl);
@@ -121,7 +121,7 @@ const ToolPlayground = ({ tool }) => {
     };
 
     generateInputWithLLM();
-  }, [tool, llmPreferences.defaultProvider, llmPreferences.defaultStrongModel, llmPreferences.preferredStrongModel]);
+  }, [tool, llmPreferences.defaultProvider, llmPreferences.defaultStrongModel]);
 
   const validateJson = (jsonString) => {
     try {
