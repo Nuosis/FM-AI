@@ -54,9 +54,16 @@ export const syncLlmWithPreferences = createAsyncThunk(
     // Create updated state object
     const updatedState = {
       darkMode: llmState.darkMode,
-      defaultProvider: defaultProvider,
       // Initialize activeProvider with defaultProvider if it's not already set
       activeProvider: llmState.activeProvider || defaultProvider,
+      activeModel: llmState.activeModel || weakModel,
+      activeWeakModel: llmState.activeWeakModel || weakModel,
+      activeStrongModel: llmState.activeStrongModel || strongModel,
+      activeEmbeddingModelLarge: llmState.activeEmbeddingModelLarge || defaultEmbeddingModelLarge,
+      activeEmbeddingModelSmall: llmState.activeEmbeddingModelSmall || defaultEmbeddingModelSmall,
+      activeBaseUrl: llmState.activeBaseUrl || baseUrl,
+      // Initialize defaults from state.auth.user.preferences
+      defaultProvider: defaultProvider,
       defaultStrongModel: strongModel,
       defaultWeakModel: weakModel,
       defaultEmbeddingModelLarge: defaultEmbeddingModelLarge,
@@ -156,23 +163,11 @@ export const selectProviderOptions = createSelector(
 
 // Selector for model options for the selected provider
 export const selectModelOptions = createSelector(
-  state => state.auth.user?.preferences?.llm_providers || [],
-  state => {
-    const llmPreferences = state.auth.user?.preferences?.llm_preferences || {};
-    return llmPreferences.activeProvider || llmPreferences.defaultProvider || state.llm.defaultProvider;
-  },
-  (providers, activeProvider) => {
-    const providerConfig = providers.find(p =>
-      p?.provider?.toLowerCase() === activeProvider?.toLowerCase()
-    );
-    
-    if (!providerConfig || !providerConfig.models || !providerConfig.models.chat) {
-      return [];
-    }
-    
+  state => state.llm,
+  (llmState) => {
     return [
-      providerConfig.models.chat.strong,
-      providerConfig.models.chat.weak
+      llmState.activeStrongModel,
+      llmState.activeWeakModel
     ].filter(Boolean);
   }
 );
@@ -181,7 +176,7 @@ export const selectModelOptions = createSelector(
 export const selectActiveProvider = createSelector(
   state => {
     const llmPreferences = state.auth.user?.preferences?.llm_preferences || {};
-    return llmPreferences.activeProvider || llmPreferences.defaultProvider || state.llm.defaultProvider;
+    return state.llm.activeProvider  || llmPreferences.defaultProvider;
   },
   (activeProvider) => activeProvider
 );
@@ -198,16 +193,16 @@ export const selectStrongModel = createSelector(
   (defaultStrongModel) => defaultStrongModel
 );
 
-// Selector for isLlmReady
-export const selectIsLlmReady = createSelector(
-  state => state.llm.isLlmReady,
-  (isLlmReady) => isLlmReady
-);
-
 // Selector for activeModel
 export const selectActiveModel = createSelector(
   state => state.llm.activeModel,
   (activeModel) => activeModel
+);
+
+// Selector for isLlmReady
+export const selectIsLlmReady = createSelector(
+  state => state.llm.isLlmReady,
+  (isLlmReady) => isLlmReady
 );
 
 const getInitialState = () => {
@@ -218,13 +213,13 @@ const getInitialState = () => {
     darkMode: 'system', // 'system', 'dark', 'light'
     defaultProvider: 'openAI', // 'openai', 'anthropic', 'gemini', 'lmStudio', 'ollama'
     activeProvider: '', // Currently active provider being used in the UI
+    activeModel: '', // Currently active model being used
     defaultStrongModel: '',
     defaultWeakModel: '',
     defaultEmbeddingModelLarge: '',
     defaultEmbeddingModelSmall: '',
     apiKeyStorage: 'saved', // 'session', 'local', 'saved'
     isLlmReady: false, // New flag to indicate if LLM state is synced with preferences
-    activeModel: '', // Currently active model being used
   };
 };
 
@@ -323,15 +318,52 @@ export const setActiveModelThunk = createAsyncThunk(
 // Create the setActiveProvider thunk
 export const setActiveProviderThunk = createAsyncThunk(
   'llm/setActiveProviderThunk',
-  async (providerName, { dispatch }) => {
+  async (providerName, { dispatch, getState }) => {
     console.log('[LlmSlice] Setting active provider to:', providerName);
+    const state = getState(); 
+    const userPreferences = state.auth.user?.preferences || {};
     
     // Update the activeProvider in the state
-    dispatch(setActiveProvider(providerName));
+    // dispatch(setActiveProvider(providerName));
     
     // Sync LLM state with user preferences to update models
-    await dispatch(syncLlmWithPreferences());
+    // await dispatch(syncLlmWithPreferences());
+    const llmProviders = userPreferences.llm_providers || [];
+    const providerConfig = llmProviders.find(p =>
+      p?.provider?.toLowerCase() === providerName?.toLowerCase()
+    );
+
+    console.log('[LlmSlice] Provider configuration:', providerConfig);
+
+    // Extract models and other settings
+    let strongModel = '';
+    let weakModel = '';
+    let embeddingModelLarge = '';
+    let embeddingModelSmall = '';
+    let baseUrl = '';
     
+    if (providerConfig) {
+      strongModel = providerConfig.models?.chat?.strong || '';
+      weakModel = providerConfig.models?.chat?.weak || '';
+      embeddingModelLarge = providerConfig.models?.embedding?.large || '';
+      embeddingModelSmall = providerConfig.models?.embedding?.small || '';
+      baseUrl = providerConfig.baseUrl || '';
+    }
+
+    // Create updated state object
+    const updatedState = {
+      activeProvider: providerName,
+      activeModel: weakModel,
+      activeWeakModel: weakModel,
+      activeStrongModel: strongModel,
+      activeEmbeddingModelLarge: embeddingModelLarge,
+      activeEmbeddingModelSmall: embeddingModelSmall,
+      activeBaseUrl: baseUrl
+    };
+
+    // Update the state
+    dispatch(updateState(updatedState));
+
     return providerName;
   }
 );

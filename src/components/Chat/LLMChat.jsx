@@ -12,7 +12,7 @@ import {
   selectProviderOptions,
   selectModelOptions,
   selectActiveProvider,
-  selectWeakModel,
+  //selectWeakModel,
   selectIsLlmReady,
   selectActiveModel,
   setActiveModelThunk,
@@ -54,7 +54,7 @@ const LLMChat = () => {
   const modelOptions = useSelector(selectModelOptions);
   const activeProvider = useSelector(selectActiveProvider);
   const activeModel = useSelector(selectActiveModel);
-  const weakModel = useSelector(selectWeakModel);
+  //const weakModel = useSelector(selectWeakModel);
   
   // Get user preferences from auth state
   // const userPreferences = useSelector(state => state.auth.user?.preferences || {});
@@ -72,17 +72,17 @@ const LLMChat = () => {
     dispatch(syncLlmWithPreferences());
   }, [llmPreferences]);
   
-  // Set active model to weak model on mount
-  useEffect(() => {
-    if (weakModel) {
-      dispatch(setActiveModelThunk(weakModel));
-    }
-  }, [weakModel, dispatch]);
+  // // Set active model to weak model on mount
+  // useEffect(() => {
+  //   if (weakModel) {
+  //     dispatch(setActiveModelThunk(weakModel));
+  //   }
+  // }, [weakModel, dispatch]);
   
-  // Log LLM preferences when they change
-  useEffect(() => {
-    console.log('llmPreferences:', llmPreferences);
-  }, [llmPreferences]);
+  // // Log LLM preferences when they change
+  // useEffect(() => {
+  //   console.log('llmPreferences:', llmPreferences);
+  // }, [llmPreferences]);
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -96,7 +96,7 @@ const LLMChat = () => {
     const provider = event.target.value;
     // Use the thunk to update the active provider in the UI
     dispatch(setActiveProviderThunk(provider));
-    // The thunk will handle updating the Redux state and syncing with preferences
+    // The thunk will handle updating the Redux state
   };
 
   const handleModelChange = (event) => {
