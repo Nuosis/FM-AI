@@ -184,6 +184,13 @@ export const executeToolCode = createAsyncThunk(
         throw new Error('Tool exists but has no code field');
       }
       
+      // Clean up the code by removing @tool() decorator if present
+      let cleanCode = toolData.code;
+      if (cleanCode.includes('@tool()')) {
+        console.log('Removing @tool() decorator from code');
+        cleanCode = cleanCode.replace(/@tool\(\)\s*\n/g, '');
+      }
+      
       console.log('Tool code fetched successfully');
       
       // Check if the local proxy server is running
@@ -204,7 +211,7 @@ export const executeToolCode = createAsyncThunk(
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({
-                code: toolData.code,
+                code: cleanCode,
                 input: input
               })
             });

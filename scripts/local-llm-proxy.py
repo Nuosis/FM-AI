@@ -1,95 +1,58 @@
 #!/usr/bin/env python3
 """
-Unified Local Proxy Server for LLMs and Python Code Execution
+Unified Local Proxy Server for AI Tools
 
 This script provides a unified local proxy server that:
 1. Proxies requests to local LLMs (Ollama, LM Studio, OpenAI-compatible endpoints)
 2. Executes user-supplied Python code securely via a /execute endpoint
+3. Provides a /health endpoint for frontend detection
 
 Usage:
   python local-llm-proxy.py [options]
 
 Options:
-  --port PORT                 Proxy server port (default: 3500)
-  --ollama-port PORT          Ollama port (default: 11434)
-  --lmstudio-port PORT        LM Studio port (default: 1234)
-  --ollama-base-url URL       Custom Ollama base URL
-  --lmstudio-base-url URL     Custom LM Studio base URL
-  --debug                     Enable debug logging
+  --port <number>            Proxy server port (default: 3500)
+  --ollama-port <number>     Ollama port (default: 11434)
+  --lmstudio-port <number>   LM Studio port (default: 1234)
+  --ollama-base-url <url>    Custom Ollama base URL
+  --lmstudio-base-url <url>  Custom LM Studio base URL
+  --debug                    Enable debug logging
 """
 
-import argparse
-import json
-import logging
-import os
+from flask import Flask, request, jsonify, Response
+import requests
 import subprocess
-import sys
 import tempfile
-from urllib.parse import urlparse
+import os
+import argparse
+import sys
+import logging
+import re
+import json
+import ast
+import inspect
 
-try:
-    from flask import Flask, request, jsonify, Response
-    import requests
-except ImportError:
-    print("Required packages not found. Installing flask and requests...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "flask", "requests"])
-    from flask import Flask, request, jsonify, Response
-    import requests
+app = Flask(__name__)
+
+# Default configuration
+PROXY_PORT = 3500
+OLLAMA_PORT = 11434
+LMSTUDIO_PORT = 1234
+OLLAMA_BASE_URL = None
+LMSTUDIO_BASE_URL = None
+DEBUG = False
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger('local-llm-proxy')
 
-# Create Flask app
-app = Flask(__name__)
-
-# Default configuration
-config = {
-    'PROXY_PORT': 3500,
-    'OLLAMA_PORT': 11434,
-    'LMSTUDIO_PORT': 1234,
-    'OLLAMA_BASE_URL': None,
-    'LMSTUDIO_BASE_URL': None,
-    'DEBUG': False
-}
-
-def parse_arguments():
-    """Parse command line arguments and update configuration."""
-    parser = argparse.ArgumentParser(description='Unified Local Proxy Server for LLMs and Python Code Execution')
-    parser.add_argument('--port', type=int, default=config['PROXY_PORT'],
-                        help=f'Proxy server port (default: {config["PROXY_PORT"]})')
-    parser.add_argument('--ollama-port', type=int, default=config['OLLAMA_PORT'],
-                        help=f'Ollama port (default: {config["OLLAMA_PORT"]})')
-    parser.add_argument('--lmstudio-port', type=int, default=config['LMSTUDIO_PORT'],
-                        help=f'LM Studio port (default: {config["LMSTUDIO_PORT"]})')
-    parser.add_argument('--ollama-base-url', type=str,
-                        help='Custom Ollama base URL')
-    parser.add_argument('--lmstudio-base-url', type=str,
-                        help='Custom LM Studio base URL')
-    parser.add_argument('--debug', action='store_true',
-                        help='Enable debug logging')
-    
-    args = parser.parse_args()
-    
-    # Update configuration with command line arguments
-    config['PROXY_PORT'] = args.port
-    config['OLLAMA_PORT'] = args.ollama_port
-    config['LMSTUDIO_PORT'] = args.lmstudio_port
-    config['OLLAMA_BASE_URL'] = args.ollama_base_url
-    config['LMSTUDIO_BASE_URL'] = args.lmstudio_base_url
-    config['DEBUG'] = args.debug
-    
-    if config['DEBUG']:
-        logger.setLevel(logging.DEBUG)
-        logger.debug("Debug logging enabled")
-        logger.debug(f"Configuration: {config}")
-
 @app.after_request
 def add_cors_headers(response):
-    """Add CORS headers to all responses."""
+    """Add CORS headers to all responses"""
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Origin'
@@ -99,189 +62,306 @@ def add_cors_headers(response):
 
 @app.route('/health', methods=['GET'])
 def health():
-    """Health check endpoint."""
+    """Health check endpoint for frontend detection"""
     return 'ok', 200
+
+def extract_function_info(code):
+    """
+    Extract function name and parameters from Python code.
+    Returns a tuple of (function_name, parameters_list, has_tool_decorator)
+    """
+    try:
+        # Parse the code into an AST
+        tree = ast.parse(code)
+        
+        # Look for function definitions
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                # Check if the function has a @tool() decorator
+                has_tool_decorator = False
+                for decorator in node.decorator_list:
+                    if isinstance(decorator, ast.Call) and getattr(decorator.func, 'id', '') == 'tool':
+                        has_tool_decorator = True
+                    elif isinstance(decorator, ast.Name) and decorator.id == 'tool':
+                        has_tool_decorator = True
+                
+                # Get function name
+                function_name = node.name
+                
+                # Get parameters
+                params = []
+                for arg in node.args.args:
+                    if arg.arg != 'self':  # Skip 'self' parameter for methods
+                        params.append(arg.arg)
+                
+                # Return the first function we find (assuming there's only one main function)
+                return function_name, params, has_tool_decorator
+        
+        # If no function definition found
+        return None, [], False
+    except SyntaxError as e:
+        logger.error(f"Syntax error in code: {e}")
+        return None, [], False
+    except Exception as e:
+        logger.error(f"Error parsing code: {e}")
+        return None, [], False
+
+def generate_wrapper_code(tool_module_path, function_name, params, input_data):
+    """
+    Generate a wrapper script that imports the function and calls it with the input data.
+    """
+    # Get the module name from the file path (without .py extension)
+    module_name = os.path.basename(tool_module_path).replace('.py', '')
+    
+    # Create the wrapper code
+    wrapper_code = f"""
+import sys
+import json
+import importlib.util
+
+# Load the module from file
+spec = importlib.util.spec_from_file_location("{module_name}", "{tool_module_path}")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+# Get the function
+func = getattr(module, "{function_name}")
+
+# Prepare arguments
+input_data = {json.dumps(input_data)}
+args = []
+kwargs = {{}}
+
+# Match input data to function parameters
+if isinstance(input_data, dict):
+    # For named parameters
+    kwargs = {{k: v for k, v in input_data.items() if k in {params}}}
+    
+    # For positional parameters (if any)
+    for param in {params}:
+        if param in input_data:
+            args.append(input_data[param])
+            # Remove from kwargs to avoid duplicate
+            kwargs.pop(param, None)
+else:
+    # If input is not a dict, pass it as the first argument
+    args = [input_data]
+
+# Call the function
+try:
+    result = func(*args, **kwargs)
+    print(json.dumps(result))
+except Exception as e:
+    print(json.dumps({{"error": str(e)}}))
+"""
+    return wrapper_code
 
 @app.route('/execute', methods=['POST'])
 def execute():
-    """Execute Python code in a subprocess."""
+    """Execute user-supplied Python code"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No JSON data provided', 'success': False}), 400
+    
+    code = data.get('code')
+    input_data = data.get('input', {})
+    
+    if not code:
+        return jsonify({'error': 'No code provided', 'success': False}), 400
+    
+    logger.info(f"Executing code with input: {input_data}")
+    
+    # Create a temporary directory to work in
+    temp_dir = tempfile.mkdtemp()
+    tool_code_path = os.path.join(temp_dir, "tool_code.py")
+    wrapper_code_path = os.path.join(temp_dir, "wrapper.py")
+    
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No JSON data provided', 'success': False}), 400
-        
-        code = data.get('code')
-        input_data = data.get('input', {})
-        
-        if not code:
-            return jsonify({'error': 'No code provided', 'success': False}), 400
-        
-        logger.debug(f"Executing code: {code[:100]}...")
-        logger.debug(f"Input data: {input_data}")
-        
-        # Create a temporary file for the code
-        with tempfile.NamedTemporaryFile('w', delete=False, suffix='.py') as f:
+        # Save the tool code to a file
+        with open(tool_code_path, 'w') as f:
             f.write(code)
-            code_path = f.name
         
+        # Extract function information
+        function_name, params, has_tool_decorator = extract_function_info(code)
+        
+        if not function_name:
+            return jsonify({
+                'output': '',
+                'error': 'Could not find a valid function definition in the code',
+                'success': False
+            })
+        
+        logger.info(f"Found function: {function_name} with parameters: {params}")
+        
+        # Generate wrapper code
+        wrapper_code = generate_wrapper_code(tool_code_path, function_name, params, input_data)
+        
+        # Save wrapper code to a file
+        with open(wrapper_code_path, 'w') as f:
+            f.write(wrapper_code)
+        
+        # Execute the wrapper code
+        result = subprocess.run(
+            ['python3', wrapper_code_path],
+            capture_output=True,
+            text=True,
+            timeout=10  # 10 second timeout
+        )
+        
+        # Parse the output
+        output = result.stdout.strip()
+        error = result.stderr.strip()
+        
+        # Try to parse the output as JSON
         try:
-            # Run the code in a subprocess with timeout
-            result = subprocess.run(
-                [sys.executable, code_path],
-                input=json.dumps(input_data),
-                capture_output=True,
-                text=True,
-                timeout=10  # 10 second timeout
-            )
-            
-            logger.debug(f"Execution completed with return code: {result.returncode}")
-            if result.stdout:
-                logger.debug(f"Stdout: {result.stdout[:100]}...")
-            if result.stderr:
-                logger.debug(f"Stderr: {result.stderr[:100]}...")
-            
-            return jsonify({
-                'output': result.stdout,
-                'error': result.stderr,
-                'success': result.returncode == 0
-            })
-        except subprocess.TimeoutExpired:
-            return jsonify({
-                'output': '',
-                'error': 'Execution timed out after 10 seconds',
-                'success': False
-            })
-        except Exception as e:
-            return jsonify({
-                'output': '',
-                'error': str(e),
-                'success': False
-            })
-        finally:
-            # Clean up the temporary file
-            try:
-                os.remove(code_path)
-            except Exception as e:
-                logger.error(f"Error removing temporary file: {e}")
-    except Exception as e:
-        logger.error(f"Error in execute endpoint: {e}")
+            if output:
+                parsed_output = json.loads(output)
+                # If the output is a dict with an 'error' key, treat it as an error
+                if isinstance(parsed_output, dict) and 'error' in parsed_output:
+                    error = parsed_output['error']
+                    output = ''
+                else:
+                    # Convert back to string for consistent return format
+                    output = json.dumps(parsed_output)
+        except json.JSONDecodeError:
+            # If output is not valid JSON, keep it as is
+            pass
+        
+        return jsonify({
+            'output': output,
+            'error': error,
+            'success': result.returncode == 0 and not error
+        })
+    except subprocess.TimeoutExpired:
         return jsonify({
             'output': '',
-            'error': f"Server error: {str(e)}",
+            'error': 'Execution timed out after 10 seconds',
             'success': False
-        }), 500
+        })
+    except Exception as e:
+        logger.error(f"Error executing code: {str(e)}")
+        return jsonify({
+            'output': '',
+            'error': str(e),
+            'success': False
+        })
+    finally:
+        # Clean up the temporary files
+        if os.path.exists(tool_code_path):
+            os.remove(tool_code_path)
+        if os.path.exists(wrapper_code_path):
+            os.remove(wrapper_code_path)
+        if os.path.exists(temp_dir):
+            os.rmdir(temp_dir)
 
 def proxy_request(target_url):
-    """Proxy a request to the target URL."""
+    """Proxy a request to a target URL"""
     method = request.method
-    headers = {key: value for key, value in request.headers.items() if key.lower() != 'host'}
+    headers = {key: value for key, value in request.headers if key.lower() != 'host'}
     data = request.get_data()
     
     logger.debug(f"Proxying {method} request to {target_url}")
-    logger.debug(f"Headers: {headers}")
     
     try:
         resp = requests.request(
-            method=method,
-            url=target_url,
-            headers=headers,
-            data=data,
+            method, 
+            target_url, 
+            headers=headers, 
+            data=data, 
             stream=True,
-            timeout=60  # 60 second timeout
+            timeout=30
         )
         
-        # Filter out headers that might cause issues
         excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
-        headers = [(name, value) for name, value in resp.raw.headers.items() 
+        headers = [(name, value) for (name, value) in resp.raw.headers.items() 
                   if name.lower() not in excluded_headers]
-        
-        logger.debug(f"Received response from {target_url} with status code: {resp.status_code}")
         
         return Response(resp.content, resp.status_code, headers)
     except requests.RequestException as e:
-        logger.error(f"Error proxying request to {target_url}: {e}")
+        logger.error(f"Proxy error: {str(e)}")
         return jsonify({
-            'error': f"Failed to connect to target: {str(e)}"
+            'error': f"Failed to proxy request: {str(e)}",
+            'status': 'error'
         }), 502
 
 @app.route('/ollama/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 def proxy_ollama(path):
-    """Proxy requests to Ollama."""
-    base = config['OLLAMA_BASE_URL'] or f'http://localhost:{config["OLLAMA_PORT"]}'
-    target_url = f'{base}/{path}'
-    logger.info(f"Proxying Ollama request to: {target_url}")
-    return proxy_request(target_url)
+    """Proxy requests to Ollama"""
+    base = OLLAMA_BASE_URL or f'http://localhost:{OLLAMA_PORT}'
+    return proxy_request(f'{base}/{path}')
 
 @app.route('/lmstudio/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 def proxy_lmstudio(path):
-    """Proxy requests to LM Studio."""
-    base = config['LMSTUDIO_BASE_URL'] or f'http://localhost:{config["LMSTUDIO_PORT"]}'
-    target_url = f'{base}/{path}'
-    logger.info(f"Proxying LM Studio request to: {target_url}")
-    return proxy_request(target_url)
+    """Proxy requests to LM Studio"""
+    base = LMSTUDIO_BASE_URL or f'http://localhost:{LMSTUDIO_PORT}'
+    return proxy_request(f'{base}/{path}')
 
 @app.route('/v1/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 def proxy_v1(path):
-    """Proxy OpenAI-compatible API requests (typically to LM Studio)."""
-    base = config['LMSTUDIO_BASE_URL'] or f'http://localhost:{config["LMSTUDIO_PORT"]}'
-    target_url = f'{base}/v1/{path}'
-    logger.info(f"Proxying OpenAI-compatible request to: {target_url}")
-    return proxy_request(target_url)
+    """Proxy requests to OpenAI-compatible endpoints (LM Studio)"""
+    base = LMSTUDIO_BASE_URL or f'http://localhost:{LMSTUDIO_PORT}'
+    return proxy_request(f'{base}/v1/{path}')
 
-def print_banner():
-    """Print a banner with server information."""
-    ollama_url = config['OLLAMA_BASE_URL'] or f'http://localhost:{config["OLLAMA_PORT"]}'
-    lmstudio_url = config['LMSTUDIO_BASE_URL'] or f'http://localhost:{config["LMSTUDIO_PORT"]}'
+def parse_arguments():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description='Unified Local Proxy Server for AI Tools')
     
-    banner = f"""
-╔════════════════════════════════════════════════════════════════╗
-║                Unified Local Proxy Server                      ║
-╠════════════════════════════════════════════════════════════════╣
-║                                                                ║
-║  Proxy server running on http://localhost:{config['PROXY_PORT']}                ║
-║                                                                ║
-║  Routes:                                                       ║
-║    - Ollama:    http://localhost:{config['PROXY_PORT']}/ollama/*                ║
-║    - LM Studio: http://localhost:{config['PROXY_PORT']}/lmstudio/*              ║
-║    - OpenAI:    http://localhost:{config['PROXY_PORT']}/v1/*                    ║
-║    - Execute:   http://localhost:{config['PROXY_PORT']}/execute                 ║
-║    - Health:    http://localhost:{config['PROXY_PORT']}/health                  ║
-║                                                                ║
-║  Target Services:                                              ║
-║    - Ollama:    {ollama_url}
-║    - LM Studio: {lmstudio_url}
-║                                                                ║
-║  The proxy will automatically add CORS headers to all responses.║
-║                                                                ║
-║  WARNING: The /execute endpoint runs Python code on your machine.║
-║           Only use with code you trust!                        ║
-║                                                                ║
-║  Press Ctrl+C to stop the server.                              ║
-║                                                                ║
-╚════════════════════════════════════════════════════════════════╝
-"""
-    print(banner)
+    parser.add_argument('--port', type=int, default=PROXY_PORT,
+                        help=f'Proxy server port (default: {PROXY_PORT})')
+    parser.add_argument('--ollama-port', type=int, default=OLLAMA_PORT,
+                        help=f'Ollama port (default: {OLLAMA_PORT})')
+    parser.add_argument('--lmstudio-port', type=int, default=LMSTUDIO_PORT,
+                        help=f'LM Studio port (default: {LMSTUDIO_PORT})')
+    parser.add_argument('--ollama-base-url', type=str,
+                        help='Custom Ollama base URL')
+    parser.add_argument('--lmstudio-base-url', type=str,
+                        help='Custom LM Studio base URL')
+    parser.add_argument('--debug', action='store_true',
+                        help='Enable debug logging')
+    
+    return parser.parse_args()
 
-def main():
-    """Main function to run the proxy server."""
-    # Parse command line arguments
-    parse_arguments()
-    
-    # Print warning about code execution
-    print("\n⚠️  WARNING: This server can execute arbitrary Python code on your machine.")
-    print("⚠️  Only use with code you trust and understand the risks!\n")
-    
-    # Print the banner
-    print_banner()
-    
-    # Run the Flask app
-    app.run(
-        host='localhost',  # Only listen on localhost for security
-        port=config['PROXY_PORT'],
-        debug=config['DEBUG'],
-        use_reloader=False,  # Disable reloader to avoid duplicate processes
-        threaded=True  # Enable threading for concurrent requests
-    )
+def print_startup_message(port):
+    """Print a startup message with ASCII art"""
+    print("\n" + "=" * 80)
+    print("""
+    _    _       _  __ _          _   _    _       _____                      
+   | |  | |     (_)/ _(_)        | | | |  | |     |  __ \                     
+   | |  | |_ __  _| |_ _  ___  __| | | |  | |_ __ | |__) | __ _____  ___   _ 
+   | |  | | '_ \| |  _| |/ _ \/ _` | | |  | | '_ \|  ___/ '__/ _ \ \/ / | | |
+   | |__| | | | | | | | |  __/ (_| | | |__| | |_) | |   | | | (_) >  <| |_| |
+    \____/|_| |_|_|_| |_|\___|\__,_|  \____/| .__/|_|   |_|  \___/_/\_\\__, |
+                                            | |                         __/ |
+                                            |_|                        |___/ 
+    """)
+    print("=" * 80)
+    print(f"\n🚀 Unified Local Proxy Server running at http://localhost:{port}")
+    print("\n🔄 Proxying requests to:")
+    print(f"   - Ollama: {OLLAMA_BASE_URL or f'http://localhost:{OLLAMA_PORT}'}")
+    print(f"   - LM Studio: {LMSTUDIO_BASE_URL or f'http://localhost:{LMSTUDIO_PORT}'}")
+    print("\n⚠️  WARNING: This server executes arbitrary Python code. Only run code you trust.")
+    print("\n💡 Use Ctrl+C to stop the server")
+    print("\n" + "=" * 80 + "\n")
 
 if __name__ == '__main__':
-    main()
+    # Parse command line arguments
+    args = parse_arguments()
+    
+    # Update configuration from arguments
+    PROXY_PORT = args.port
+    OLLAMA_PORT = args.ollama_port
+    LMSTUDIO_PORT = args.lmstudio_port
+    OLLAMA_BASE_URL = args.ollama_base_url
+    LMSTUDIO_BASE_URL = args.lmstudio_base_url
+    DEBUG = args.debug
+    
+    # Set logging level based on debug flag
+    if DEBUG:
+        logger.setLevel(logging.DEBUG)
+        app.logger.setLevel(logging.DEBUG)
+    
+    # Print startup message
+    print_startup_message(PROXY_PORT)
+    
+    # Run the Flask app
+    app.run(host='localhost', port=PROXY_PORT, debug=DEBUG)

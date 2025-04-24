@@ -1,20 +1,32 @@
 # Unified Local Proxy Server
 
-This is a Python implementation of a unified local proxy server that serves two purposes:
-1. Proxying requests to local LLMs (Ollama, LM Studio, OpenAI-compatible endpoints) with CORS support
-2. Executing user-supplied Python code securely on the user's machine via a `/execute` endpoint
+This is a unified local proxy server implemented in Python that serves two purposes:
+
+1. **Proxying requests to local LLMs** (Ollama, LM Studio, OpenAI-compatible endpoints)
+2. **Executing user-supplied Python code** securely
 
 ## Installation
 
-The script requires Python 3 and will automatically install its dependencies (Flask and requests) if they are not already installed.
+No installation is required beyond having Python 3 installed on your system. The script uses Flask, which will be installed automatically if needed.
 
 ## Usage
 
+1. Download the `local-llm-proxy.py` script
+2. Run the script:
+
 ```bash
-python scripts/local-llm-proxy.py [options]
+# MacOS/Linux
+python3 local-llm-proxy.py
+
+# Windows
+python local-llm-proxy.py
 ```
 
-### Command-Line Options
+The server will start on port 3500 by default.
+
+## Command-Line Options
+
+The script supports the following command-line options:
 
 - `--port <number>`: Proxy server port (default: 3500)
 - `--ollama-port <number>`: Ollama port (default: 11434)
@@ -23,52 +35,43 @@ python scripts/local-llm-proxy.py [options]
 - `--lmstudio-base-url <url>`: Custom LM Studio base URL
 - `--debug`: Enable debug logging
 
+Example:
+
+```bash
+python3 local-llm-proxy.py --port 3501 --ollama-port 11435 --debug
+```
+
 ## Endpoints
-
-### LLM Proxy Endpoints
-
-- `/ollama/*` → Proxies to Ollama (default port 11434, or custom base URL)
-- `/lmstudio/*` and `/v1/*` → Proxies to LM Studio (default port 1234, or custom base URL)
-- **CORS:** Adds `Access-Control-Allow-Origin: *` and other necessary headers to all responses.
-- **OPTIONS:** Handles preflight requests for CORS.
-
-### Tool Code Execution Endpoint
-
-- `POST /execute`
-  - Body: `{ "code": "...", "input": {...} }`
-  - Runs the provided Python code in a subprocess (with resource/time limits).
-  - Returns: `{ "output": "...", "error": "...", "success": true/false }`
 
 ### Health Check
 
-- `GET /health` → Returns "ok" for frontend detection.
+- `GET /health`: Returns "ok" for frontend detection
+
+### LLM Proxy Endpoints
+
+- `/ollama/*`: Proxies to Ollama (default port 11434, or custom base URL)
+- `/lmstudio/*`: Proxies to LM Studio (default port 1234, or custom base URL)
+- `/v1/*`: Proxies to LM Studio (default port 1234, or custom base URL)
+
+### Tool Code Execution Endpoint
+
+- `POST /execute`: Executes user-supplied Python code
+  - Body: `{ "code": "...", "input": {...} }`
+  - Returns: `{ "output": "...", "error": "...", "success": true/false }`
 
 ## Security Considerations
 
-- The server only listens on `localhost` for security.
-- The `/execute` endpoint runs Python code on your machine. Only use with code you trust!
-- Code execution is limited to a 10-second timeout.
-- Temporary files are created for code execution and cleaned up afterward.
+- The server only listens on `localhost` to prevent remote access
+- Code execution is limited to a 10-second timeout
+- The server warns users about the risks of executing arbitrary code
+- Temporary files are cleaned up after execution
 
 ## Examples
 
-### Starting the Server
-
-```bash
-# Start with default settings
-python scripts/local-llm-proxy.py
-
-# Start with custom ports
-python scripts/local-llm-proxy.py --port 4000 --ollama-port 12000 --lmstudio-port 2000
-
-# Start with custom base URLs
-python scripts/local-llm-proxy.py --ollama-base-url http://remote-ollama:11434 --lmstudio-base-url http://remote-lmstudio:1234
-```
-
-### Using the Execute Endpoint
+### Executing Python Code
 
 ```javascript
-// Example JavaScript code to call the execute endpoint
+// JavaScript example
 fetch('http://localhost:3500/execute', {
   method: 'POST',
   headers: {
@@ -76,31 +79,48 @@ fetch('http://localhost:3500/execute', {
   },
   body: JSON.stringify({
     code: `
-import sys
 import json
+import sys
 
 # Get input from stdin
-input_data = json.loads(sys.stdin.read())
+input_data = sys.stdin.read()
+print(f"Received input: {input_data}")
 
-# Process the input
-result = {
-    "message": f"Hello, {input_data.get('name', 'World')}!",
-    "timestamp": input_data.get('timestamp')
-}
-
-# Output the result as JSON
+# Return a result
+result = {"message": "Hello from Python!"}
 print(json.dumps(result))
     `,
-    input: {
-      name: "User",
-      timestamp: Date.now()
-    }
+    input: {"name": "User"}
   })
 })
 .then(response => response.json())
 .then(data => console.log(data));
 ```
 
-## Migration from Node.js Proxy
+### Proxying to Ollama
 
-This Python script replaces the previous Node.js `local-llm-proxy.cjs` script, providing all the same functionality plus the ability to execute Python code. The command-line options and endpoints are compatible with the previous version, so existing integrations should continue to work.
+```javascript
+// JavaScript example
+fetch('http://localhost:3500/ollama/api/generate', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    model: "llama2",
+    prompt: "Hello, how are you?"
+  })
+})
+.then(response => response.json())
+.then(data => console.log(data));
+```
+
+## Troubleshooting
+
+- If the server fails to start, check if port 3500 is already in use
+- If LLM proxying fails, ensure Ollama or LM Studio is running
+- If code execution fails, check the error message for details
+
+## License
+
+This software is provided as-is under the MIT License.
