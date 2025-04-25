@@ -42,6 +42,23 @@ import time
 import jwt
 from functools import wraps
 from datetime import datetime, timedelta
+import supabase
+
+# Supabase client for API key management
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+supabase_client = None
+
+# Initialize Supabase client if credentials are available
+if SUPABASE_URL and SUPABASE_SERVICE_KEY:
+    try:
+        from supabase import create_client
+        supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        print("Supabase client initialized successfully")
+    except ImportError:
+        print("Warning: supabase-py package not installed. Run 'pip install supabase' to enable Supabase integration.")
+    except Exception as e:
+        print(f"Error initializing Supabase client: {str(e)}")
 
 # Import the Data Store API
 try:
@@ -60,9 +77,6 @@ OLLAMA_PORT = 11434
 LMSTUDIO_PORT = 1234
 OLLAMA_BASE_URL = None
 LMSTUDIO_BASE_URL = None
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 JWT_SECRET = os.environ.get("JWT_SECRET")
 ENABLE_AUTH = False
 DEBUG = False
@@ -71,15 +85,15 @@ DEBUG = False
 PROVIDER_CONFIG = {
     "openai": {
         "endpoint": "https://api.openai.com/v1",
-        "key": OPENAI_API_KEY,
+        "key": None,  # Will be fetched from Supabase or request
     },
     "anthropic": {
         "endpoint": "https://api.anthropic.com/v1",
-        "key": ANTHROPIC_API_KEY,
+        "key": None,  # Will be fetched from Supabase or request
     },
     "gemini": {
         "endpoint": "https://generativelanguage.googleapis.com/v1",
-        "key": GEMINI_API_KEY,
+        "key": None,  # Will be fetched from Supabase or request
     },
     "lmstudio": {
         "endpoint": None,  # Will be set based on command line args
@@ -106,6 +120,29 @@ logger = logging.getLogger('local-llm-proxy')
 #
 # UTILITY FUNCTIONS
 #
+
+# Function to get API key from Supabase key_store table
+def get_api_key_from_supabase(user_id, provider):
+    """
+    Fetch API key for a specific provider from Supabase based on user_id
+    Returns the API key if found, None otherwise
+    """
+    if not supabase_client:
+        logger.warning("Supabase client not initialized, cannot fetch API keys")
+        return None
+        
+    try:
+        # Query the key_store table for the user's API key
+        response = supabase_client.table('key_store').select('api_key').eq('user_id', user_id).eq('provider', provider).execute()
+        
+        if response.data and len(response.data) > 0:
+            return response.data[0]['api_key']
+        else:
+            logger.warning(f"No API key found for user {user_id} and provider {provider}")
+            return None
+    except Exception as e:
+        logger.error(f"Error fetching API key from Supabase: {str(e)}")
+        return None
 
 # Authentication decorator
 def jwt_required(f):
@@ -221,11 +258,11 @@ def proxy_llm_request(provider, req_type, body, api_key=None):
     req_body = {}
     headers = {'Content-Type': 'application/json'}
     
-    # Use provided API key if available, otherwise use configured key
-    if api_key:
-        provider_key = api_key
-    else:
-        provider_key = config['key']
+    # Use provided API key - no fallback to environment variables
+    if not api_key and provider not in ["lmstudio", "ollama"]:
+        raise ValueError(f"No API key provided for {provider}")
+        
+    provider_key = api_key
     
     # Configure request based on provider and request type
     if provider == "openai":
@@ -480,6 +517,16 @@ except Exception as e:
 """
     return wrapper_code
 
+@app.route('/health', methods=['GET'])
+def health():
+    """Health check endpoint for the proxy server"""
+    return jsonify({
+        "status": "healthy",
+        "service": "llm-proxy",
+        "version": "1.0.0",
+        "timestamp": datetime.now().isoformat()
+    })
+
 @app.route('/execute', methods=['POST'])
 @jwt_required
 def execute():
@@ -611,12 +658,38 @@ def llm_proxy():
     if validation_error:
         return jsonify({'error': validation_error}), 400
     
-    # Get API key (from request if provided)
+    # Get API key priority:
+    # 1. From request body (if provided, for testing only)
+    # 2. From Supabase based on user_id (if available, recommended for production)
     api_key = None
+    
+    # 1. Check if API key is provided in the request (for testing only)
     if 'api_key' in body:
         api_key = body['api_key']
         # Remove api_key from the body that will be forwarded
         rest_body = {k: v for k, v in rest_body.items() if k != 'api_key'}
+        logger.debug(f"Using API key provided in request for provider {provider}")
+    
+    # 2. If no API key in request and we have a user_id, try to fetch from Supabase
+    elif user_id:
+        logger.info(f"Fetching API key from Supabase for user {user_id} and provider {provider}")
+        api_key = get_api_key_from_supabase(user_id, provider)
+        if api_key:
+            logger.info(f"Successfully retrieved API key from Supabase for user {user_id} and provider {provider}")
+        else:
+            logger.warning(f"No API key found in Supabase for user {user_id} and provider {provider}")
+    
+    # For local providers (ollama, lmstudio), no API key is needed
+    if provider in ["ollama", "lmstudio"]:
+        logger.debug(f"No API key needed for local provider {provider}")
+    elif not api_key and not PROVIDER_CONFIG[provider]['key']:
+        logger.warning(f"No API key available for provider {provider}")
+        # Only return an error if the provider requires an API key
+        if provider not in ["ollama", "lmstudio"]:
+            return jsonify({
+                'error': f'No API key available for {provider}',
+                'message': 'Please add your API key in Supabase or provide it in the request for testing'
+            }), 400
     
     try:
         # Proxy the request to the appropriate provider
@@ -699,26 +772,37 @@ def parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description='Unified Local Proxy Server for AI Tools')
     
+    # Server configuration
     parser.add_argument('--port', type=int, default=PROXY_PORT,
                         help=f'Proxy server port (default: {PROXY_PORT})')
+    parser.add_argument('--host', type=str, default="0.0.0.0",
+                        help='Host to bind to (default: 0.0.0.0)')
+    
+    # Local LLM providers configuration
     parser.add_argument('--ollama-port', type=int, default=OLLAMA_PORT,
                         help=f'Ollama port (default: {OLLAMA_PORT})')
     parser.add_argument('--lmstudio-port', type=int, default=LMSTUDIO_PORT,
                         help=f'LM Studio port (default: {LMSTUDIO_PORT})')
     parser.add_argument('--ollama-base-url', type=str,
-                        help='Custom Ollama base URL')
+                        help='Custom Ollama base URL (e.g., http://ollama:11434)')
     parser.add_argument('--lmstudio-base-url', type=str,
-                        help='Custom LM Studio base URL')
-    parser.add_argument('--openai-api-key', type=str,
-                        help='OpenAI API key')
-    parser.add_argument('--anthropic-api-key', type=str,
-                        help='Anthropic API key')
-    parser.add_argument('--gemini-api-key', type=str,
-                        help='Gemini API key')
+                        help='Custom LM Studio base URL (e.g., http://lmstudio:1234)')
+    
+    # No API key arguments - keys are fetched from Supabase only
+    
+    # Authentication and security
     parser.add_argument('--jwt-secret', type=str,
                         help='Secret for JWT verification')
     parser.add_argument('--enable-auth', action='store_true',
                         help='Enable JWT authentication')
+    
+    # Supabase configuration for API key management
+    parser.add_argument('--supabase-url', type=str,
+                        help='Supabase URL for API key management')
+    parser.add_argument('--supabase-key', type=str,
+                        help='Supabase service role key for API key management')
+    
+    # Logging and debugging
     parser.add_argument('--debug', action='store_true',
                         help='Enable debug logging')
     
@@ -771,6 +855,7 @@ if __name__ == '__main__':
     
     # Update configuration from arguments
     PROXY_PORT = args.port
+    HOST = args.host
     OLLAMA_PORT = args.ollama_port
     LMSTUDIO_PORT = args.lmstudio_port
     OLLAMA_BASE_URL = args.ollama_base_url
@@ -778,15 +863,21 @@ if __name__ == '__main__':
     DEBUG = args.debug
     ENABLE_AUTH = args.enable_auth
     
-    # Update API keys if provided
-    if args.openai_api_key:
-        PROVIDER_CONFIG['openai']['key'] = args.openai_api_key
-    if args.anthropic_api_key:
-        PROVIDER_CONFIG['anthropic']['key'] = args.anthropic_api_key
-    if args.gemini_api_key:
-        PROVIDER_CONFIG['gemini']['key'] = args.gemini_api_key
+    # Update JWT secret if provided
     if args.jwt_secret:
         JWT_SECRET = args.jwt_secret
+        
+    # Initialize Supabase client if credentials are provided
+    if args.supabase_url and args.supabase_key:
+        try:
+            from supabase import create_client
+            # Use the module-level supabase_client variable
+            supabase_client = create_client(args.supabase_url, args.supabase_key)
+            logger.info("Supabase client initialized successfully from command line arguments")
+        except ImportError:
+            logger.warning("supabase-py package not installed. Run 'pip install supabase' to enable Supabase integration.")
+        except Exception as e:
+            logger.error(f"Error initializing Supabase client: {str(e)}")
     
     # Set endpoints for local providers
     PROVIDER_CONFIG['ollama']['endpoint'] = OLLAMA_BASE_URL or f'http://localhost:{OLLAMA_PORT}/api'
@@ -809,4 +900,4 @@ if __name__ == '__main__':
     print_startup_message(PROXY_PORT)
     
     # Run the Flask app
-    app.run(host='localhost', port=PROXY_PORT, debug=DEBUG)
+    app.run(host=HOST, port=PROXY_PORT, debug=DEBUG)

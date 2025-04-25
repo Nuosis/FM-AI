@@ -14,8 +14,8 @@ import logging
 from typing import Dict, List, Any, Optional
 from flask import Blueprint, request, jsonify
 
-# Update import to use relative import since we're now in the data_store directory
-from . import create_data_store, create_data_store_from_url
+# Use absolute import
+from factory import create_data_store, create_data_store_from_url
 
 # Configure logging
 logging.basicConfig(

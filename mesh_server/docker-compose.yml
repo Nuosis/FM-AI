@@ -3,39 +3,67 @@ version: '3'
 services:
   # LLM Proxy + Tool Execution Container
   proxy:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "3500:3500"
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - JWT_SECRET=${JWT_SECRET}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - HOST=${HOST:-0.0.0.0}
     volumes:
       - proxy_data:/app/data
-    depends_on:
-      - data_store
-      - docling
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3500/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
 
   # Data Store Container
   data_store:
-    build: ./data_store
+    build:
+      context: ./data_store
+      dockerfile: Dockerfile
     ports:
       - "3550:3550"
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - HOST=${HOST:-0.0.0.0}
     volumes:
       - data_store_data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3550/api/data-store/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
 
   # Docling RAG Container
   docling:
-    build: ./docling
+    build:
+      context: ./docling
+      dockerfile: Dockerfile
     ports:
       - "3600:3600"
     environment:
       - LLM_PROXY_URL=http://proxy:3500
+      - HOST=${HOST:-0.0.0.0}
     volumes:
       - docling_temp:/app/temp
-    depends_on:
-      - proxy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3600/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
 
 volumes:
   proxy_data:

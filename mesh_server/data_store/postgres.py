@@ -9,7 +9,7 @@ import psycopg2
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
-from .base import DataStoreService
+from base import DataStoreService
 
 logger = logging.getLogger('data-store-service')
 

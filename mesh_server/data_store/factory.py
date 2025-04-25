@@ -6,11 +6,11 @@ import logging
 from typing import Dict, Any, Optional
 from urllib.parse import urlparse
 
-from .base import DataStoreService
-from .supabase import SupabaseDataStore
-from .postgres import PostgresDataStore
-from .filemaker import FileMakerDataStore
-from .lancedb import LanceDBDataStore
+from base import DataStoreService
+from supabase import SupabaseDataStore
+from postgres import PostgresDataStore
+from filemaker import FileMakerDataStore
+from lancedb import LanceDBDataStore
 
 logger = logging.getLogger('data-store-service')
 

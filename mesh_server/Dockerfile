@@ -12,18 +12,17 @@ RUN uv pip install --system --no-cache-dir -r requirements.txt
 # Copy the rest of the application
 COPY . .
 
-# Make sure the utils directory is recognized as a package
-RUN touch utils/__init__.py
-
-# Create directory for temporary files
-RUN mkdir -p /app/temp
-VOLUME /app/temp
+# Create directory for data
+RUN mkdir -p /app/data
+VOLUME /app/data
 
 # Expose the port the app runs on
-EXPOSE 3600
+EXPOSE 3500
 
 # Environment variables
-ENV LLM_PROXY_URL=http://proxy:3500
+ENV JWT_SECRET=""
+ENV SUPABASE_URL=""
+ENV SUPABASE_SERVICE_ROLE_KEY=""
 
 # Command to run the application
-CMD ["python", "api.py", "--port", "3600", "--host", "0.0.0.0"]
+CMD ["python", "llm-proxy.py", "--port", "3500", "--host", "0.0.0.0"]

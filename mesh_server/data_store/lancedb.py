@@ -12,7 +12,7 @@ from typing import Dict, List, Any, Optional
 import lancedb
 import pyarrow as pa
 
-from .base import DataStoreService
+from base import DataStoreService
 
 logger = logging.getLogger('data-store-service')
 
