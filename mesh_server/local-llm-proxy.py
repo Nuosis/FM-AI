@@ -45,12 +45,12 @@ from datetime import datetime, timedelta
 
 # Import the Data Store API
 try:
-    from data_store_api import data_store_api
+    from data_store import data_store_api
 except ImportError:
-    # If the data_store_api module is not found, create a placeholder
+    # If the data_store module is not found, create a placeholder
     from flask import Blueprint
     data_store_api = Blueprint('data_store_api', __name__)
-    print("Warning: data_store_api module not found. Data Store API will not be available.")
+    print("Warning: data_store module not found. Data Store API will not be available.")
 
 app = Flask(__name__)
 

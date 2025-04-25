@@ -1,0 +1,43 @@
+version: '3'
+
+services:
+  # LLM Proxy + Tool Execution Container
+  proxy:
+    build: .
+    ports:
+      - "3500:3500"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+    volumes:
+      - proxy_data:/app/data
+    depends_on:
+      - data_store
+      - docling
+
+  # Data Store Container
+  data_store:
+    build: ./data_store
+    ports:
+      - "3550:3550"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+    volumes:
+      - data_store_data:/app/data
+
+  # Docling RAG Container
+  docling:
+    build: ./docling
+    ports:
+      - "3600:3600"
+    environment:
+      - LLM_PROXY_URL=http://proxy:3500
+    volumes:
+      - docling_temp:/app/temp
+    depends_on:
+      - proxy
+
+volumes:
+  proxy_data:
+  data_store_data:
+  docling_temp:

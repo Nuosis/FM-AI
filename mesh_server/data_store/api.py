@@ -14,7 +14,8 @@ import logging
 from typing import Dict, List, Any, Optional
 from flask import Blueprint, request, jsonify
 
-from data_store import create_data_store, create_data_store_from_url
+# Update import to use relative import since we're now in the data_store directory
+from . import create_data_store, create_data_store_from_url
 
 # Configure logging
 logging.basicConfig(
@@ -105,10 +106,10 @@ def create_record():
             return jsonify({'error': 'No JSON data provided'}), 400
             
         embedding = data.get('embedding')
-        metadata = data.get('metadata')
+        metadata = data.get('metadata', {})
         
-        if not embedding or not metadata:
-            return jsonify({'error': 'Embedding and metadata are required'}), 400
+        if not embedding:
+            return jsonify({'error': 'Embedding is required'}), 400
             
         record = current_data_store.create_record(embedding, metadata)
         
@@ -201,7 +202,7 @@ def search_records():
             
         records = current_data_store.search_records(query_embedding, metadata_filter, limit)
         
-        return jsonify({'records': records, 'count': len(records)})
+        return jsonify(records)
     except Exception as e:
         logger.error(f"Error searching records: {str(e)}")
         return jsonify({'error': f'Error searching records: {str(e)}'}), 500

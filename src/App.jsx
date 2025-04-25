@@ -1,17 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material';
+import { ThemeProvider, createTheme, CssBaseline, Box, Typography, CircularProgress, Paper, LinearProgress } from '@mui/material';
 import Layout from './components/Layout/Layout';
 import { LoginForm, RegistrationForm, TestSecureApiCall } from './components/Auth';
 import { SettingsForm } from './components/Settings';
 import { Tools } from './components/Tools';
 import LLMChat from './components/Chat/LLMChat';
 import DataStore from './components/DataStore';
-import { createLog, LogType, /*toggleLogViewer*/ } from './redux/slices/appSlice';
-import { fetchOrgLicenses } from './redux/slices/licenseSlice';
-import { fetchDataSources } from './redux/slices/dataStoreSlice';
-import { logoutSuccess, setSession, restoreUserFromSession } from './redux/slices/authSlice';
-import supabase from './utils/supabase';
+import { createLog, LogType, initializeApp, selectInitialization } from './redux/slices/appSlice';
 import UnderRepair from './components/UnderRepair';
 import Welcome from './components/Welcome/Welcome';
 
@@ -66,110 +62,32 @@ function App() {
   const auth = useSelector(state => state.auth);
   const { isAuthenticated } = auth;
   const [currentView, setCurrentView] = useState(() => (isAuthenticated ? 'chat' : 'welcome'));
-  const [sessionChecked, setSessionChecked] = useState(false);
+  const initialization = useSelector(selectInitialization);
   
-  // Check session on app startup
+  // Centralized app initialization
   useEffect(() => {
-    const checkSession = async () => {
-      try {
-        // Get current session directly from Supabase
-        const { data, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          throw error;
-        }
-        
-        // If no session, ensure Redux state reflects logged out state
-        if (!data.session) {
-          dispatch(logoutSuccess());
-          dispatch(createLog('No active session found on startup', LogType.INFO));
-        } else {
-          // If session exists, update Redux state with session
-          dispatch(setSession(data.session));
-          dispatch(createLog('Active session restored on startup', LogType.INFO));
-        }
-      } catch (error) {
-        console.error('Session check failed:', error);
-        dispatch(logoutSuccess());
-        dispatch(createLog(`Session check error: ${error.message}`, LogType.ERROR));
-      } finally {
-        setSessionChecked(true);
-      }
-    };
-    
-    checkSession();
+    dispatch(createLog('App starting up', LogType.INFO));
+    dispatch(initializeApp())
+      .unwrap()
+      .then(result => {
+        dispatch(createLog(`App initialization completed. Authenticated: ${result.authenticated}`, LogType.INFO));
+      })
+      .catch(error => {
+        dispatch(createLog(`App initialization failed: ${error.message}`, LogType.ERROR));
+      });
   }, [dispatch]);
   
-  // Effect to restore user state if session exists but user is null
-  useEffect(() => {
-    if (auth.session && !auth.user && sessionChecked) {
-      dispatch(createLog('Session exists but user state is null, restoring user state', LogType.INFO));
-      dispatch(restoreUserFromSession())
-        .unwrap()
-        .then(() => {
-          dispatch(createLog('User state restored successfully', LogType.INFO));
-        })
-        .catch(error => {
-          dispatch(createLog(`Failed to restore user state: ${error}`, LogType.ERROR));
-        });
-    }
-  }, [auth.session, auth.user, sessionChecked, dispatch]);
-  
-  useEffect(() => {
-    // Log auth state changes
-    dispatch(createLog(`Current auth state: ${JSON.stringify(auth, null, 2)}`, LogType.DEBUG));
-  }, [auth, dispatch]);
-
   // Effect to update currentView when authentication state changes
   useEffect(() => {
     if (isAuthenticated) {
       setCurrentView('chat');
     }
   }, [isAuthenticated]);
-
-  const licenseStatus = useSelector(state => state.license.status);
-  const dataStoreStatus = useSelector(state => state.dataStore.isDataStoreReady);
-
-  // Effect for license fetching
+  
+  // Log auth state changes (keeping this for debugging purposes)
   useEffect(() => {
-
-    if (isAuthenticated && licenseStatus === 'idle') {
-      dispatch(fetchOrgLicenses())
-        .unwrap()
-        .then(result => {
-          dispatch(createLog(
-            `Licenses fetched successfully. Active license: ${result.activeLicenseId}`, 
-            LogType.INFO
-          ));
-        })
-        // .catch(error => {
-          // dispatch(createLog(
-          //   `Failed to fetch licenses: ${error.message}`, 
-          //   LogType.ERROR
-          // ));
-        // });
-    }
-  }, [dispatch, isAuthenticated, licenseStatus]);
-
-  // Effect for data store initialization
-  useEffect(() => {
-    if (isAuthenticated && !dataStoreStatus) {
-      dispatch(fetchDataSources())
-        .unwrap()
-        .then(() => {
-          dispatch(createLog(
-            'Data Store initialized successfully',
-            LogType.INFO
-          ));
-        })
-        .catch(error => {
-          dispatch(createLog(
-            `Failed to initialize Data Store: ${error.message}`,
-            LogType.ERROR
-          ));
-        });
-    }
-  }, [dispatch, isAuthenticated, dataStoreStatus]);
+    dispatch(createLog(`Current auth state: ${JSON.stringify(auth, null, 2)}`, LogType.DEBUG));
+  }, [auth, dispatch]);
 
   const handleViewChange = (view) => {
     try {
@@ -185,7 +103,7 @@ function App() {
       <CssBaseline />
       <Box sx={{ minHeight: '100vh', display: 'flex' }}>
         { isRepair ? <UnderRepair /> :
-          sessionChecked ? (
+          initialization.status === 'succeeded' || initialization.status === 'failed' ? (
             <Layout
               currentView={currentView}
               onViewChange={handleViewChange}
@@ -239,14 +157,76 @@ function App() {
                   )}
                   {currentView === 'tools' && <Tools />}
                   {currentView === 'chat' && <LLMChat />}
-                  {currentView === 'datastore' && <DataStore />}
+                  {currentView === 'datastore' && <DataStore onViewChange={handleViewChange} />}
                 </>
               )}
             </Box>
             </Layout>
           ) : (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-              <p>Loading...</p>
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                height: '100vh',
+                width: '100%',
+                backgroundColor: 'background.default'
+              }}
+            >
+              <Paper
+                elevation={4}
+                sx={{
+                  padding: 4,
+                  borderRadius: 2,
+                  maxWidth: 400,
+                  width: '90%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 3,
+                  mx: 'auto' // Center horizontally
+                }}
+              >
+                <Typography variant="h5" component="h1" gutterBottom>
+                  Initializing Application
+                </Typography>
+                
+                <CircularProgress size={60} thickness={4} />
+                
+                <Box sx={{ width: '100%', mt: 2, textAlign: 'center' }}>
+                  <Typography variant="body1" gutterBottom sx={{ mb: 1 }}>
+                    {initialization.status === 'loading' ? 'Loading components and services...' : 'Preparing your environment...'}
+                  </Typography>
+                  
+                  <LinearProgress
+                    variant="indeterminate"
+                    sx={{
+                      height: 8,
+                      borderRadius: 4,
+                      mb: 2
+                    }}
+                  />
+                </Box>
+                
+                {initialization.error && (
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 2,
+                      bgcolor: 'error.light',
+                      color: 'error.contrastText',
+                      width: '100%',
+                      borderRadius: 1,
+                      textAlign: 'center'
+                    }}
+                  >
+                    <Typography variant="body2" component="div" align="center">
+                      <strong>Error:</strong> {initialization.error}
+                    </Typography>
+                  </Paper>
+                )}
+              </Paper>
             </Box>
           )
         }

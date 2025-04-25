@@ -383,9 +383,6 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
 
   return (
     <Box sx={{ mt: 2 }}>
-      <Typography variant="h6" gutterBottom>
-        Data Store Configuration
-      </Typography>
       <Typography variant="body2" color="text.secondary" paragraph>
         Configure data sources for vector storage and retrieval. You can add multiple data sources.
       </Typography>
@@ -427,6 +424,7 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                           <MenuItem value="supabase">Supabase</MenuItem>
                           <MenuItem value="postgres">Local PostgreSQL</MenuItem>
                           <MenuItem value="filemaker">FileMaker</MenuItem>
+                          <MenuItem value="lancedb">LanceDB</MenuItem>
                         </Select>
                       </FormControl>
                     </Grid>
@@ -587,6 +585,7 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                     <MenuItem value="supabase">Supabase</MenuItem>
                     <MenuItem value="postgres">Local PostgreSQL</MenuItem>
                     <MenuItem value="filemaker">FileMaker</MenuItem>
+                    <MenuItem value="lancedb">LanceDB</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -600,7 +599,8 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                   placeholder={
                     newSource.type === 'supabase' ? 'https://your-project.supabase.co' :
                     newSource.type === 'postgres' ? 'postgresql://username:password@localhost:5432/database' :
-                    'https://your-filemaker-server.com/fmi/data/v1/databases/your-database'
+                    newSource.type === 'filemaker' ? 'https://your-filemaker-server.com/fmi/data/v1/databases/your-database' :
+                    '/path/to/your/lancedb/database.lance'
                   }
                 />
               </Grid>

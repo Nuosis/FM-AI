@@ -19,6 +19,8 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import Settings from '@mui/icons-material/Settings';
+import Storage from '@mui/icons-material/Storage';
 import {
   selectActiveDataSource,
   selectIsDataStoreReady,
@@ -57,7 +59,7 @@ TabPanel.propTypes = {
 /**
  * DataStore component for managing vector records
  */
-const DataStore = () => {
+const DataStore = ({ onViewChange }) => {
   const dispatch = useDispatch();
   const activeDataSource = useSelector(selectActiveDataSource);
   const isDataStoreReady = useSelector(selectIsDataStoreReady);
@@ -248,6 +250,14 @@ const DataStore = () => {
     return `[${displayValues.join(', ')}${hasMore ? ', ...' : ''}]`;
   };
 
+  // Function to navigate to settings
+  const handleGoToSettings = () => {
+    // Use the onViewChange prop to navigate to settings
+    if (onViewChange) {
+      onViewChange('settings');
+    }
+  };
+
   return (
     <Box sx={{ width: '100%', p: 3 }}>
       <Typography variant="h4" gutterBottom>
@@ -255,22 +265,75 @@ const DataStore = () => {
       </Typography>
       
       {!isDataStoreReady ? (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          Data Store is not configured. Please go to Settings to configure a data source.
-        </Alert>
+        <Paper
+          elevation={3}
+          sx={{
+            p: 4,
+            textAlign: 'center',
+            borderRadius: 2,
+            backgroundColor: 'rgba(25, 118, 210, 0.05)',
+            border: '1px solid rgba(25, 118, 210, 0.2)'
+          }}
+        >
+          <Storage sx={{ fontSize: 60, color: 'primary.main', mb: 2, opacity: 0.8 }} />
+          <Typography variant="h5" gutterBottom color="primary">
+            Data Store Not Configured
+          </Typography>
+          <Typography variant="body1" paragraph sx={{ mb: 3 }}>
+            You need to configure at least one data source before you can use the Data Store feature.
+          </Typography>
+          <Button
+            variant="contained"
+            color="primary"
+            size="large"
+            onClick={handleGoToSettings}
+            startIcon={<Settings />}
+          >
+            Go to Settings
+          </Button>
+        </Paper>
       ) : (
         <>
           <Paper sx={{ mb: 3, p: 2 }}>
             <Typography variant="subtitle1" gutterBottom>
-              Active Data Source: <Chip label={activeDataSource || 'None'} color="primary" size="small" />
+              Active Data Source: <Chip label={activeDataSource ? activeDataSource.name : 'None'} color="primary" size="small" />
             </Typography>
           </Paper>
 
           <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            <Tabs value={tabValue} onChange={handleTabChange} aria-label="data store tabs">
-              <Tab label="Records" id="data-store-tab-0" aria-controls="data-store-tabpanel-0" />
-              <Tab label="Search" id="data-store-tab-1" aria-controls="data-store-tabpanel-1" />
-              <Tab label="Create" id="data-store-tab-2" aria-controls="data-store-tabpanel-2" />
+            <Tabs
+              value={tabValue}
+              onChange={handleTabChange}
+              aria-label="data store tabs"
+              sx={{
+                '& .MuiTab-root': {
+                  '&:focus': {
+                    outline: 'none'
+                  },
+                  '&.Mui-focusVisible': {
+                    outline: 'none'
+                  }
+                }
+              }}
+            >
+              <Tab
+                label="Records"
+                id="data-store-tab-0"
+                aria-controls="data-store-tabpanel-0"
+                sx={{ '&:focus': { outline: 'none' } }}
+              />
+              <Tab
+                label="Search"
+                id="data-store-tab-1"
+                aria-controls="data-store-tabpanel-1"
+                sx={{ '&:focus': { outline: 'none' } }}
+              />
+              <Tab
+                label="Create"
+                id="data-store-tab-2"
+                aria-controls="data-store-tabpanel-2"
+                sx={{ '&:focus': { outline: 'none' } }}
+              />
             </Tabs>
           </Box>
 
@@ -451,6 +514,11 @@ const DataStore = () => {
       )}
     </Box>
   );
+};
+
+// Add prop types
+DataStore.propTypes = {
+  onViewChange: PropTypes.func
 };
 
 export default DataStore;

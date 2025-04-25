@@ -351,11 +351,16 @@ const dataStoreSlice = createSlice({
       .addCase(fetchDataSources.fulfilled, (state, action) => {
         state.isLoading = false;
         // Extract data from the response
-        if (action.payload && action.payload.data && action.payload.data.preference_value) {
-          state.items = action.payload.data.preference_value;
+        console.log('fetchDataSources.fulfilled payload:', action.payload);
+        
+        // The supabaseService.executeQuery returns the data directly, not a response object with a data property
+        if (action.payload && action.payload.preference_value) {
+          state.items = action.payload.preference_value;
+          console.log('Setting dataStore.items to:', action.payload.preference_value);
         } else {
           // Fallback to empty array if no data
           state.items = [];
+          console.log('No preference_value found, setting dataStore.items to empty array');
         }
       })
       .addCase(fetchDataSources.rejected, (state, action) => {

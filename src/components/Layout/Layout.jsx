@@ -14,6 +14,7 @@ import LLMChat from '../Chat/LLMChat';
 import { SettingsForm } from '../Settings';
 import DemoFiles from '../DemoFiles';
 import Welcome from '../Welcome/Welcome';
+import DataStore from '../DataStore';
 import { useSelector } from 'react-redux';
 import LogViewer from '../LogViewer/LogViewer';
 import { selectShowLogViewer } from '../../redux/slices/appSlice';
@@ -56,7 +57,8 @@ const componentMap = {
   DemoFiles: DemoFiles,
   TestSecureApiCall: TestSecureApiCall,
   Welcome: Welcome,
-  Tools: Tools
+  Tools: Tools,
+  DataStore: DataStore
 };
 
 const Layout = ({ children, onViewChange, currentView }) => {
@@ -188,14 +190,33 @@ const Layout = ({ children, onViewChange, currentView }) => {
                   alignItems: 'center',
                   height: '100%',
                   flexDirection: 'column',
-                  gap: 2
+                  gap: 3,
+                  padding: 4
                 }}>
-                  <Typography variant="h6" color="text.secondary">
-                    Component &quot;{currentComponent}&quot; is not yet available
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    This feature is under development
-                  </Typography>
+                  <Box
+                    sx={{
+                      backgroundColor: 'rgba(25, 118, 210, 0.05)',
+                      borderRadius: 4,
+                      padding: 5,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      border: '1px solid rgba(25, 118, 210, 0.2)',
+                      maxWidth: '600px',
+                      width: '100%'
+                    }}
+                  >
+                    <SmartToy sx={{ fontSize: 80, color: 'primary.main', mb: 3, opacity: 0.8 }} />
+                    <Typography variant="h4" color="primary" gutterBottom align="center">
+                      Coming Soon
+                    </Typography>
+                    <Typography variant="h6" color="text.secondary" align="center" gutterBottom>
+                      Component &quot;{currentComponent}&quot; is not yet available
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary" align="center" sx={{ mt: 2 }}>
+                      This feature is under development and will be available in a future update.
+                    </Typography>
+                  </Box>
                 </Box>
               )
             ) : children

@@ -289,12 +289,17 @@ const toolsSlice = createSlice({
       })
       .addCase(fetchTools.fulfilled, (state, action) => {
         state.isLoading = false;
-        // Extract data from the response
-        if (action.payload && action.payload.data) {
-          state.items = action.payload.data;
+        console.log('fetchTools.fulfilled payload:', action.payload);
+        
+        // The supabaseService.executeQuery returns the data directly, not a response object with a data property
+        // So action.payload is already the array of tools
+        if (Array.isArray(action.payload)) {
+          state.items = action.payload;
+          console.log('Setting tools.items to array of length:', action.payload.length);
         } else {
-          // Fallback to the payload itself if no data property exists
-          state.items = Array.isArray(action.payload) ? action.payload : [];
+          // Fallback to empty array if no data
+          state.items = [];
+          console.log('No tools array found, setting tools.items to empty array');
         }
       })
       .addCase(fetchTools.rejected, (state, action) => {

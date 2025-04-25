@@ -10,6 +10,7 @@ from .base import DataStoreService
 from .supabase import SupabaseDataStore
 from .postgres import PostgresDataStore
 from .filemaker import FileMakerDataStore
+from .lancedb import LanceDBDataStore
 
 logger = logging.getLogger('data-store-service')
 
@@ -23,7 +24,7 @@ def create_data_store(
     Factory function to create a data store service based on the type
     
     Args:
-        data_source_type: Type of data source ('supabase', 'postgres', 'filemaker')
+        data_source_type: Type of data source ('supabase', 'postgres', 'filemaker', 'lancedb')
         url: URL of the data source
         credentials: Optional credentials for the data source
         table_name: Name of the table to use for vector records
@@ -47,6 +48,11 @@ def create_data_store(
         elif data_source_type == 'filemaker':
             logger.info(f"Creating FileMaker data store with URL: {url}, table: {table_name}")
             data_store = FileMakerDataStore(url, credentials)
+            data_store.table_name = table_name
+            return data_store
+        elif data_source_type == 'lancedb':
+            logger.info(f"Creating LanceDB data store with URL: {url}, table: {table_name}")
+            data_store = LanceDBDataStore(url, credentials)
             data_store.table_name = table_name
             return data_store
         else:
@@ -89,6 +95,11 @@ def create_data_store_from_url(
         elif 'fmi/data' in parsed_url.path or 'filemaker' in parsed_url.netloc:
             logger.info(f"Detected FileMaker data store from URL: {url}, table: {table_name}")
             data_store = FileMakerDataStore(url, credentials)
+            data_store.table_name = table_name
+            return data_store
+        elif parsed_url.scheme == 'file' or url.endswith('.lance'):
+            logger.info(f"Detected LanceDB data store from URL: {url}, table: {table_name}")
+            data_store = LanceDBDataStore(url, credentials)
             data_store.table_name = table_name
             return data_store
         else:
