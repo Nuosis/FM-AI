@@ -16,7 +16,8 @@ import {
   Settings,
   Login as LoginIcon,
   Logout as LogoutIcon,
-  Home
+  Home,
+  Storage
 } from '@mui/icons-material';
 import { menuItems } from '../../constants/menuItems';
 import {
@@ -116,6 +117,7 @@ const Sidebar = ({ width = 240, onViewChange, currentView, isAuthenticated }) =>
                   case 'SmartToy': return <SmartToy />;
                   case 'QuestionAnswer': return <QuestionAnswer />;
                   case 'FileDownload': return <FileDownload />;
+                  case 'Storage': return <Storage />;
                   default: return null;
                 }
               })();

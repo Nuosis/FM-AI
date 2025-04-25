@@ -32,12 +32,12 @@ export const menuItems = [
     component: "Tools"
   },
   {
-    name: 'RAG',
-    path: 'rag',
-    view: 'rag',
-    iconType: 'ManageSearch',
-    enabled: false,
-    component: "RAG"
+    name: 'Data Store',
+    path: 'datastore',
+    view: 'datastore',
+    iconType: 'Storage',
+    enabled: true,
+    component: "DataStore"
   },
   {
     name: 'Demo Files',

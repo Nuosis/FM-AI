@@ -208,7 +208,7 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
       // Always check the database for verification status, even if no API key in local storage
       if (!isAuthMock) {
         console.log('[LLMProviderSettings] Checking API key verification in database');
-        // Query the llm_api_keys table to check if the API key is verified
+        // Query the key_store table to check if the API key is verified
         // Use lowercase for provider name to ensure consistent matching
         const providerLower = config.provider.toLowerCase();
         console.log('[LLMProviderSettings] Provider:', providerLower);
@@ -217,7 +217,7 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
         // Only select the verified field, never the api_key field for security
         console.log('[LLMProviderSettings] Checking for any API keys');
         supabase
-          .from('llm_api_keys')
+          .from('key_store')
           .select('provider,verified')
           .then(({ data, error }) => {
             if (error) {
@@ -500,7 +500,7 @@ const LLMProviderSettings = ({ onSuccess, onError }) => {
     try {
       // Delete the API key from the database
       const { error } = await supabase
-        .from('llm_api_keys')
+        .from('key_store')
         .delete()
         .eq('user_id', userId)
         .eq('provider', formData.provider.toLowerCase());

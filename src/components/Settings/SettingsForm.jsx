@@ -20,6 +20,7 @@ import ProfileForm from './ProfileForm';
 import PasswordForm from './PasswordForm';
 import PreferencesForm from './PreferencesForm';
 import LLMProviderSettings from './LLMProviderSettings';
+import DataStoreSettings from './DataStoreSettings';
 import LLMProxyTester from './LLMProxyTester';
 import ToolTesting from './ToolTesting';
 
@@ -197,6 +198,27 @@ const SettingsForm = () => {
           </AccordionSummary>
           <AccordionDetails>
             <LLMProviderSettings
+              onSuccess={handleSuccess}
+              onError={handleError}
+            />
+          </AccordionDetails>
+        </Accordion>
+
+        {/* Data Store Settings */}
+        <Accordion
+          expanded={expandedPanel === 'data-store'}
+          onChange={handleAccordionChange('data-store')}
+          sx={{ mt: 2 }}
+        >
+          <AccordionSummary
+            expandIcon={<ExpandMoreIcon />}
+            aria-controls="data-store-content"
+            id="data-store-header"
+          >
+            <Typography variant="h6">Data Store Configuration</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <DataStoreSettings
               onSuccess={handleSuccess}
               onError={handleError}
             />

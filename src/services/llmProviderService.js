@@ -375,7 +375,7 @@ const llmProviderService = {
         // Save API key for LM Studio (not needed for Ollama)
         if (isLMStudio && apiKey) {
           const { error: saveError } = await supabase
-            .from('llm_api_keys')
+            .from('key_store')
             .upsert({
               user_id: userId,
               provider: providerLower,
@@ -498,9 +498,9 @@ const llmProviderService = {
       } else {
         // For other providers, use the existing edge function approach
         
-        // Step 1: Save the API key to the llm_api_keys table
+        // Step 1: Save the API key to the key_store table
         const { error: saveError } = await supabase
-          .from('llm_api_keys')
+          .from('key_store')
           .upsert({
             user_id: userId,
             provider: providerLower,

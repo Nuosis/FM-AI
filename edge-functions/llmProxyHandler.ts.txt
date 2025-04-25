@@ -215,11 +215,11 @@ async function proxyRequest(provider: string, type: string, body: any, headers: 
   return { status: resp.status, data };
 }
 
-// Function to get API key from llm_api_keys table
+// Function to get API key from key_store table
 async function getApiKeyFromDatabase(userId: string, provider: string): Promise<string | null> {
   try {
     const { data, error } = await supabase
-      .from('llm_api_keys')
+      .from('key_store')
       .select('api_key')
       .eq('user_id', userId)
       .eq('provider', provider)

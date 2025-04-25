@@ -289,8 +289,13 @@ const toolsSlice = createSlice({
       })
       .addCase(fetchTools.fulfilled, (state, action) => {
         state.isLoading = false;
-        // The response is already an array of tools, not an object with .data
-        state.items = Array.isArray(action.payload) ? action.payload : [];
+        // Extract data from the response
+        if (action.payload && action.payload.data) {
+          state.items = action.payload.data;
+        } else {
+          // Fallback to the payload itself if no data property exists
+          state.items = Array.isArray(action.payload) ? action.payload : [];
+        }
       })
       .addCase(fetchTools.rejected, (state, action) => {
         state.isLoading = false;

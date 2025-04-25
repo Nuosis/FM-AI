@@ -6,8 +6,10 @@ import { LoginForm, RegistrationForm, TestSecureApiCall } from './components/Aut
 import { SettingsForm } from './components/Settings';
 import { Tools } from './components/Tools';
 import LLMChat from './components/Chat/LLMChat';
+import DataStore from './components/DataStore';
 import { createLog, LogType, /*toggleLogViewer*/ } from './redux/slices/appSlice';
 import { fetchOrgLicenses } from './redux/slices/licenseSlice';
+import { fetchDataSources } from './redux/slices/dataStoreSlice';
 import { logoutSuccess, setSession, restoreUserFromSession } from './redux/slices/authSlice';
 import supabase from './utils/supabase';
 import UnderRepair from './components/UnderRepair';
@@ -126,6 +128,7 @@ function App() {
   }, [isAuthenticated]);
 
   const licenseStatus = useSelector(state => state.license.status);
+  const dataStoreStatus = useSelector(state => state.dataStore.isDataStoreReady);
 
   // Effect for license fetching
   useEffect(() => {
@@ -147,6 +150,26 @@ function App() {
         // });
     }
   }, [dispatch, isAuthenticated, licenseStatus]);
+
+  // Effect for data store initialization
+  useEffect(() => {
+    if (isAuthenticated && !dataStoreStatus) {
+      dispatch(fetchDataSources())
+        .unwrap()
+        .then(() => {
+          dispatch(createLog(
+            'Data Store initialized successfully',
+            LogType.INFO
+          ));
+        })
+        .catch(error => {
+          dispatch(createLog(
+            `Failed to initialize Data Store: ${error.message}`,
+            LogType.ERROR
+          ));
+        });
+    }
+  }, [dispatch, isAuthenticated, dataStoreStatus]);
 
   const handleViewChange = (view) => {
     try {
@@ -216,6 +239,7 @@ function App() {
                   )}
                   {currentView === 'tools' && <Tools />}
                   {currentView === 'chat' && <LLMChat />}
+                  {currentView === 'datastore' && <DataStore />}
                 </>
               )}
             </Box>

@@ -7,6 +7,7 @@ This script provides a unified local proxy server that:
 2. Executes user-supplied Python code securely via a /execute endpoint
 3. Provides a /health endpoint for frontend detection
 4. Supports authentication, input validation, and rate limiting
+5. Provides a Data Store API for vector storage and retrieval
 
 Usage:
   python local-llm-proxy.py [options]
@@ -41,6 +42,15 @@ import time
 import jwt
 from functools import wraps
 from datetime import datetime, timedelta
+
+# Import the Data Store API
+try:
+    from data_store_api import data_store_api
+except ImportError:
+    # If the data_store_api module is not found, create a placeholder
+    from flask import Blueprint
+    data_store_api = Blueprint('data_store_api', __name__)
+    print("Warning: data_store_api module not found. Data Store API will not be available.")
 
 app = Flask(__name__)
 
@@ -734,6 +744,7 @@ def print_startup_message(port):
     print("   - /health - Health check endpoint")
     print("   - /llm - Unified LLM proxy endpoint (chat, embeddings, models)")
     print("   - /execute - Python code execution endpoint")
+    print("   - /datastore/* - Data Store API endpoints")
     print("   - /ollama/<path> - Direct Ollama proxy")
     print("   - /lmstudio/<path> - Direct LM Studio proxy")
     print("   - /v1/<path> - OpenAI-compatible endpoint proxy")
@@ -790,6 +801,9 @@ if __name__ == '__main__':
     if ENABLE_AUTH and not JWT_SECRET:
         logger.warning("JWT authentication is enabled but no secret is provided. Using an insecure default secret.")
         JWT_SECRET = "insecure-default-secret"
+    
+    # Register the Data Store API blueprint
+    app.register_blueprint(data_store_api, url_prefix='/datastore')
     
     # Print startup message
     print_startup_message(PROXY_PORT)

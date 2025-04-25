@@ -178,7 +178,7 @@ const fetchUserData = async (result) => {
       // Check if llm_storage preference exists with apiKeyStorage set to 'local'
       const llmStorage = userData.preferences.llm_storage;
       if (llmStorage && llmStorage.apiKeyStorage === 'local') {
-        // Get API keys from local storage and store them in llm_api_keys table
+        // Get API keys from local storage and store them in key_store table
         await syncLocalApiKeysToDatabase(result.user.id);
       }
     }
@@ -439,7 +439,7 @@ const updateUserMetadataIfNeeded = async (result, profile) => {
 };
 
 /**
- * Sync API keys from local storage to the llm_api_keys table
+ * Sync API keys from local storage to the key_store table
  * @param {string} userId - The user ID
  * @returns {Promise<void>}
  */
@@ -457,7 +457,7 @@ const syncLocalApiKeysToDatabase = async (userId) => {
         // Check if this API key already exists in the database
         const existingKey = await supabaseService.executeQuery(supabase =>
           supabase
-            .from('llm_api_keys')
+            .from('key_store')
             .select('*')
             .eq('user_id', userId)
             .eq('provider', provider)
@@ -468,7 +468,7 @@ const syncLocalApiKeysToDatabase = async (userId) => {
           // Update existing key
           await supabaseService.executeQuery(supabase =>
             supabase
-              .from('llm_api_keys')
+              .from('key_store')
               .update({ api_key: apiKey, updated_at: new Date() })
               .eq('id', existingKey.id)
           );
@@ -476,7 +476,7 @@ const syncLocalApiKeysToDatabase = async (userId) => {
           // Insert new key
           await supabaseService.executeQuery(supabase =>
             supabase
-              .from('llm_api_keys')
+              .from('key_store')
               .insert({
                 user_id: userId,
                 provider: provider,
@@ -856,7 +856,7 @@ export const signOut = createAsyncThunk(
           // Delete all API keys for this user
           await supabaseService.executeQuery(supabase =>
             supabase
-              .from('llm_api_keys')
+              .from('key_store')
               .delete()
               .eq('user_id', userId)
           );
@@ -978,7 +978,7 @@ export const getSession = createAsyncThunk(
       // Check if llm_storage preference exists with apiKeyStorage set to 'local'
       const llmStorage = preferences.llm_storage;
       if (llmStorage && llmStorage.apiKeyStorage === 'local') {
-        // Get API keys from local storage and store them in llm_api_keys table
+        // Get API keys from local storage and store them in key_store table
         await syncLocalApiKeysToDatabase(data.session.user.id);
       }
 

@@ -227,7 +227,7 @@ Our application uses a hierarchical data model with Organizations as the top-lev
 
 ---
 
-### Table: llm_api_keys (public)
+### Table: key_store (public)
 - **id**: uuid, primary key, default: gen_random_uuid()
 - **user_id**: uuid, not null, references users(id)
 - **provider**: text, not null
@@ -238,6 +238,19 @@ Our application uses a hierarchical data model with Organizations as the top-lev
 
 **Relationships:**
 - user_id → users(id)
+
+---
+
+### Table: vector_store (public)
+- **id**: uuid, primary key, default: gen_random_uuid()
+- **user_id**: uuid, not null, references users(id)
+- **source_id**: text, not null
+- **embedding**: vector(1536)
+- **metadata**: jsonb
+- **created_at**: timestamp with time zone, default: now()
+
+**Relationships:**
+- None
 
 ### 12. Conversations
 
@@ -393,6 +406,14 @@ erDiagram
       string subject
       timestamp created_at
       timestamp updated_at
+    }
+    
+    VECTOR_STORE {
+      UUID id PK
+      string source_id
+      vector embedding
+      jsonb metadata
+      timestamp created_at
     }
     
     ORGANIZATIONS ||--o{ USERS : "has"

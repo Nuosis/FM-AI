@@ -112,9 +112,9 @@ print(json.dumps(result))
           return;
         }
         
-        // Query the llm_api_keys table to check if the API key is verified
+        // Query the key_store table to check if the API key is verified
         const { data, error } = await supabase
-          .from('llm_api_keys')
+          .from('key_store')
           .select('verified')
           .eq('user_id', userId)
           .eq('provider', selectedProvider.toLowerCase())
