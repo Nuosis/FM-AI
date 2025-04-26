@@ -32,12 +32,12 @@ export const menuItems = [
     component: "Tools"
   },
   {
-    name: 'Data Store',
-    path: 'datastore',
-    view: 'datastore',
-    iconType: 'Storage',
+    name: 'Knowledge',
+    path: 'knowledge',
+    view: 'knowledge',
+    iconType: 'ManageSearch',
     enabled: true,
-    component: "DataStore"
+    component: "KnowledgeList"
   },
   {
     name: 'Demo Files',

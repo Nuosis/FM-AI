@@ -14,7 +14,6 @@ import LLMChat from '../Chat/LLMChat';
 import { SettingsForm } from '../Settings';
 import DemoFiles from '../DemoFiles';
 import Welcome from '../Welcome/Welcome';
-import DataStore from '../DataStore';
 import { useSelector } from 'react-redux';
 import LogViewer from '../LogViewer/LogViewer';
 import { selectShowLogViewer } from '../../redux/slices/appSlice';
@@ -58,7 +57,6 @@ const componentMap = {
   TestSecureApiCall: TestSecureApiCall,
   Welcome: Welcome,
   Tools: Tools,
-  DataStore: DataStore
 };
 
 const Layout = ({ children, onViewChange, currentView }) => {
