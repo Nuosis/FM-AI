@@ -36,7 +36,7 @@ export const menuItems = [
     path: 'knowledge',
     view: 'knowledge',
     iconType: 'ManageSearch',
-    enabled: true,
+    enabled: false,
     component: "KnowledgeList"
   },
   {

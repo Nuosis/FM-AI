@@ -14,11 +14,12 @@
 
 ### 1. Knowledge Management
 - User can create, rename, and delete Knowledge entities.
-- Each Knowledge is linked to a specific data store backend (user selects backend and configures connection).
+- Each Knowledge is linked to a specific data store backend (user selects backend and configures connection - available in state.dataStore.items).
 - Knowledge can only be deleted if all sources are removed.
+- deleting knowdledge does NOT delete the data store
 
 ### 2. Source Management
-- User defines a Knowledge By naming it, selecting a data source, and then uploading one or more sources (files/URLs).
+- User defines a Knowledge By selecting a data store, selecting a data source(s), and then uploading sources (files/URLs) to data store (not the backend).
 - On upload:
   - File is sent to the docling service (`/docling/process`).
   - Docling returns processed chunks.
@@ -42,8 +43,8 @@
 ### Frontend
 - **KnowledgeList**: List, create, rename, delete Knowledge entities.
 - **KnowledgeDetail**: View sources for a selected Knowledge, upload new sources, delete sources.
-- **SourceUpload**: Handles file upload, docling integration, and vectorization.
-- **KnowledgeChat**: New chat component for querying a Knowledge (semantic search, RAG verification).
+- **SourceUpload**: Handles file upload, docling integration, and vectorization. After chunking, source vectors and metadata are uploaded to the data store selected by the user (which may be Supabase, Postgres, LanceDB, etc.), not necessarily Supabase. The selected data store is determined by the `store_id` associated with the Knowledge entity. mesh_server is responsible for routing the vector and metadata upload to the correct backend, using `/records` or the appropriate API for the selected data store.
+- **KnowledgeChat**: New chat component for querying a Knowledge (semantic search, RAG verification) via the data_store service `/search` in mesh_server.
 - **DataStoreSelector**: UI for selecting/configuring data store backend when creating Knowledge.
 
 ### Backend (mesh_server)
