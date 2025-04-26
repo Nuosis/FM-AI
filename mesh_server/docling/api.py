@@ -453,7 +453,7 @@ def cleanup_temp_files(file_id):
 
 # Create a Flask app for standalone usage
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
 app.register_blueprint(docling_api, url_prefix='/docling')
 
 if __name__ == '__main__':

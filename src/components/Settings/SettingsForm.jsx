@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 // import JwtDebugger from '../Auth/JwtDebugger'; // Adjust the import path as necessary
 import { useSelector } from 'react-redux';
 import { createLog, LogType } from '../../redux/slices/appSlice';
+import axios from 'axios';
 import {
   Box,
   Typography,
@@ -11,7 +12,9 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-
+  Paper,
+  Chip,
+  Stack
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
@@ -37,6 +40,81 @@ const SettingsForm = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [expandedPanel, setExpandedPanel] = useState('profile');
+  const [serviceStatus, setServiceStatus] = useState({
+    llm: { status: 'unknown', message: 'Checking...' },
+    dataStore: { status: 'unknown', message: 'Checking...' },
+    docling: { status: 'unknown', message: 'Checking...' }
+  });
+  
+  // Check health of mesh_server services
+  useEffect(() => {
+    const checkServiceHealth = async () => {
+      // Check LLM Proxy health
+      try {
+        const llmResponse = await axios.get('http://localhost:3500/health', { timeout: 2000 });
+        if (llmResponse.status === 200 && llmResponse.data.status === 'healthy') {
+          setServiceStatus(prev => ({
+            ...prev,
+            llm: { status: 'connected', message: 'Connected' }
+          }));
+        } else {
+          setServiceStatus(prev => ({
+            ...prev,
+            llm: { status: 'error', message: 'Error' }
+          }));
+        }
+      } catch {
+        setServiceStatus(prev => ({
+          ...prev,
+          llm: { status: 'disconnected', message: 'Not connected' }
+        }));
+      }
+
+      // Check Data Store health
+      try {
+        const dataStoreResponse = await axios.get('http://localhost:3550/api/data-store/health', { timeout: 2000 });
+        if (dataStoreResponse.status === 200) {
+          setServiceStatus(prev => ({
+            ...prev,
+            dataStore: { status: 'connected', message: 'Connected' }
+          }));
+        } else {
+          setServiceStatus(prev => ({
+            ...prev,
+            dataStore: { status: 'error', message: 'Error' }
+          }));
+        }
+      } catch {
+        setServiceStatus(prev => ({
+          ...prev,
+          dataStore: { status: 'disconnected', message: 'Not connected' }
+        }));
+      }
+
+      // Check Docling health
+      try {
+        const doclingResponse = await axios.get('http://localhost:3600/docling/health', { timeout: 2000 });
+        if (doclingResponse.status === 200) {
+          setServiceStatus(prev => ({
+            ...prev,
+            docling: { status: 'connected', message: 'Connected' }
+          }));
+        } else {
+          setServiceStatus(prev => ({
+            ...prev,
+            docling: { status: 'error', message: 'Error' }
+          }));
+        }
+      } catch {
+        setServiceStatus(prev => ({
+          ...prev,
+          docling: { status: 'disconnected', message: 'Not connected' }
+        }));
+      }
+    };
+
+    checkServiceHealth();
+  }, []);
   
   const handleAccordionChange = (panel) => (event, isExpanded) => {
     setExpandedPanel(isExpanded ? panel : false);
@@ -74,6 +152,42 @@ const SettingsForm = () => {
   return (
     <>
       <Box sx={{ p: 3 }}>
+        {/* Service Status Header */}
+        <Paper
+          elevation={0}
+          sx={{
+            p: 1,
+            mb: 2,
+            backgroundColor: 'rgba(0, 0, 0, 0.03)',
+            borderRadius: 1,
+            display: 'flex',
+            justifyContent: 'flex-end'
+          }}
+        >
+          <Stack direction="row" spacing={1}>
+            <Chip
+              size="small"
+              label={`LLM: ${serviceStatus.llm.message}`}
+              color={serviceStatus.llm.status === 'connected' ? 'success' :
+                    serviceStatus.llm.status === 'disconnected' ? 'error' : 'default'}
+              variant="outlined"
+            />
+            <Chip
+              size="small"
+              label={`Data Store: ${serviceStatus.dataStore.message}`}
+              color={serviceStatus.dataStore.status === 'connected' ? 'success' :
+                    serviceStatus.dataStore.status === 'disconnected' ? 'error' : 'default'}
+              variant="outlined"
+            />
+            <Chip
+              size="small"
+              label={`Docling: ${serviceStatus.docling.message}`}
+              color={serviceStatus.docling.status === 'connected' ? 'success' :
+                    serviceStatus.docling.status === 'disconnected' ? 'error' : 'default'}
+              variant="outlined"
+            />
+          </Stack>
+        </Paper>
         {/* Spinner overlay for the entire form */}
         {isLoading && (
           <Box

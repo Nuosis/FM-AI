@@ -9,6 +9,7 @@ It creates a Flask application and registers the data_store_api blueprint.
 from flask import Flask
 import os, sys
 import logging
+from flask_cors import CORS
 print("CWD:", os.getcwd())
 print("sys.path:", sys.path)
 
@@ -24,6 +25,7 @@ logger = logging.getLogger('data-store-service')
 
 # Create the Flask application
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Register the data_store_api blueprint
 app.register_blueprint(data_store_api, url_prefix="/api/data-store")

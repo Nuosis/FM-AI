@@ -43,6 +43,7 @@ import jwt
 from functools import wraps
 from datetime import datetime, timedelta
 import supabase
+from flask_cors import CORS
 
 # Supabase client for API key management
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -70,6 +71,7 @@ except ImportError:
     print("Warning: data_store module not found. Data Store API will not be available.")
 
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Default configuration
 PROXY_PORT = 3500
