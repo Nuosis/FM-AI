@@ -6,6 +6,7 @@ import { LoginForm, RegistrationForm, TestSecureApiCall } from './components/Aut
 import { SettingsForm } from './components/Settings';
 import { Tools } from './components/Tools';
 import LLMChat from './components/Chat/LLMChat';
+import { KnowledgeList } from './components/Knowledge';
 import { createLog, LogType, initializeApp, selectInitialization } from './redux/slices/appSlice';
 import UnderRepair from './components/UnderRepair';
 import Welcome from './components/Welcome/Welcome';
@@ -156,7 +157,7 @@ function App() {
                   )}
                   {currentView === 'tools' && <Tools />}
                   {currentView === 'chat' && <LLMChat />}
-                  {currentView === 'knowledge' && null}
+                  {currentView === 'knowledge' && <KnowledgeList />}
                 </>
               )}
             </Box>

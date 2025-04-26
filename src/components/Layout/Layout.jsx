@@ -22,6 +22,7 @@ import Bottombar from '../Sidebar/Bottombar';
 import { menuItems } from '../../constants/menuItems';
 import { TestSecureApiCall } from '../Auth';
 import { Tools } from '../Tools';
+import { KnowledgeList } from '../Knowledge';
 
 const DRAWER_WIDTH = 240;
 
@@ -57,6 +58,7 @@ const componentMap = {
   TestSecureApiCall: TestSecureApiCall,
   Welcome: Welcome,
   Tools: Tools,
+  KnowledgeList: KnowledgeList,
 };
 
 const Layout = ({ children, onViewChange, currentView }) => {

@@ -205,6 +205,18 @@ export const selectIsLlmReady = createSelector(
   (isLlmReady) => isLlmReady
 );
 
+// Selector for active embedding model
+export const selectActiveEmbeddingModel = createSelector(
+  state => state.llm.activeEmbeddingModelLarge || state.llm.defaultEmbeddingModelLarge,
+  (embeddingModel) => {
+    if (!embeddingModel) return null;
+    return {
+      id: embeddingModel,
+      name: embeddingModel
+    };
+  }
+);
+
 const getInitialState = () => {
   // Default state - no longer reading from localStorage
   return {

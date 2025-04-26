@@ -5,6 +5,7 @@ import licenseReducer from './slices/licenseSlice';
 import llmReducer from './slices/llmSlice';
 import toolsReducer from './slices/toolsSlice';
 import dataStoreReducer from './slices/dataStoreSlice';
+import knowledgeReducer from './slices/knowledgeSlice';
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +15,7 @@ export const store = configureStore({
     llm: llmReducer,
     tools: toolsReducer,
     dataStore: dataStoreReducer,
+    knowledge: knowledgeReducer,
   },
 });
 
