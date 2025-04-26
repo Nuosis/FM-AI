@@ -3,7 +3,7 @@ import { writeToLog, readLogs, clearLogs as clearLogFile } from '../../utils/log
 import axios from 'axios';
 import supabase from '../../utils/supabase';
 import { setSession, logoutSuccess, restoreUserFromSession } from '../slices/authSlice';
-import { fetchDataSources } from '../slices/dataStoreSlice';
+import { fetchDataStores } from '../slices/dataStoreSlice';
 import { syncLlmWithPreferences } from '../slices/llmSlice';
 import { fetchTools } from '../slices/toolsSlice';
 import { fetchOrgLicenses } from '../slices/licenseSlice';
@@ -181,7 +181,7 @@ export const initializeApp = createAsyncThunk(
       try {
         // Initialize data store
         dispatch(createLog('Initializing Data Store...', LogType.INFO));
-        await dispatch(fetchDataSources()).unwrap();
+        await dispatch(fetchDataStores()).unwrap();
         dispatch(createLog('Data Store initialized successfully', LogType.INFO));
         
         // Sync LLM with preferences

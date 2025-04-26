@@ -22,9 +22,9 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import Settings from '@mui/icons-material/Settings';
 import Storage from '@mui/icons-material/Storage';
 import {
-  selectActiveDataSource,
+  selectActiveDataStore,
   selectIsDataStoreReady,
-  fetchDataSources
+  fetchDataStores
 } from '../../redux/slices/dataStoreSlice';
 
 /**
@@ -61,7 +61,7 @@ TabPanel.propTypes = {
  */
 const DataStore = ({ onViewChange }) => {
   const dispatch = useDispatch();
-  const activeDataSource = useSelector(selectActiveDataSource);
+  const activeDataStore = useSelector(selectActiveDataStore);
   const isDataStoreReady = useSelector(selectIsDataStoreReady);
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -77,15 +77,15 @@ const DataStore = ({ onViewChange }) => {
 
   // Initialize data store when component mounts
   useEffect(() => {
-    dispatch(fetchDataSources());
+    dispatch(fetchDataStores());
   }, [dispatch]);
 
   // Load records when component mounts or active data source changes
   useEffect(() => {
-    if (isDataStoreReady && activeDataSource) {
+    if (isDataStoreReady && activeDataStore) {
       fetchRecords();
     }
-  }, [isDataStoreReady, activeDataSource]);
+  }, [isDataStoreReady, activeDataStore]);
 
   // Handle tab change
   const handleTabChange = (event, newValue) => {
@@ -280,7 +280,7 @@ const DataStore = ({ onViewChange }) => {
             Data Store Not Configured
           </Typography>
           <Typography variant="body1" paragraph sx={{ mb: 3 }}>
-            You need to configure at least one data source before you can use the Data Store feature.
+            You need to configure at least one data store before you can use the Data Store feature.
           </Typography>
           <Button
             variant="contained"
@@ -296,7 +296,7 @@ const DataStore = ({ onViewChange }) => {
         <>
           <Paper sx={{ mb: 3, p: 2 }}>
             <Typography variant="subtitle1" gutterBottom>
-              Active Data Source: <Chip label={activeDataSource ? activeDataSource.name : 'None'} color="primary" size="small" />
+              Active Data Store: <Chip label={activeDataStore ? activeDataStore.name : 'None'} color="primary" size="small" />
             </Typography>
           </Paper>
 

@@ -5,7 +5,7 @@ import { updateUserPreferences } from '../slices/authSlice';
 /**
  * Supabase realtime subscription for data_store changes
  */
-export const subscribeToDataSources = () => (dispatch) => {
+export const subscribeToDataStores = () => (dispatch) => {
   const channel = supabaseService.executeQuery(supabase => {
     return supabase.channel('data-store-changes')
       .on(
@@ -16,15 +16,15 @@ export const subscribeToDataSources = () => (dispatch) => {
             case 'INSERT':
             case 'UPDATE':
               if (payload.new && payload.new.preference_value) {
-                dispatch({ type: 'dataStore/setDataSources', payload: payload.new.preference_value });
+                dispatch({ type: 'dataStore/setDataStores', payload: payload.new.preference_value });
               }
-              break;
-            default:
-              break;
-          }
+            break;
+          default:
+            break;
         }
-      )
-      .subscribe();
+      }
+    )
+    .subscribe();
   });
 
   // Return unsubscribe function
@@ -33,11 +33,11 @@ export const subscribeToDataSources = () => (dispatch) => {
   };
 };
 
-export const fetchDataSources = createAsyncThunk(
-  'dataStore/fetchDataSources',
+export const fetchDataStores = createAsyncThunk(
+  'dataStore/fetchDataStores',
   async (_, { rejectWithValue, getState }) => {
     try {
-      console.log('Fetching data sources...');
+      console.log('Fetching data stores...');
       const state = getState();
       const userId = state.auth.user?.user_id;
       
@@ -54,39 +54,39 @@ export const fetchDataSources = createAsyncThunk(
           .single()
       );
 
-      console.log('Data sources response:', response);
+      console.log('Data stores response:', response);
       
-      // Return the data sources
+      // Return the data stores
       return response;
     } catch (error) {
-      console.error('Data sources API error:', {
+      console.error('Data stores API error:', {
         message: error.message
       });
-      return rejectWithValue(error.message || 'Failed to fetch data sources');
+      return rejectWithValue(error.message || 'Failed to fetch data stores');
     }
   }
 );
 
-export const saveDataSource = createAsyncThunk(
-  'dataStore/saveDataSource',
-  async (dataSourceData, { rejectWithValue, getState, dispatch }) => {
+export const saveDataStore = createAsyncThunk(
+  'dataStore/saveDataStore',
+  async (dataStoreData, { rejectWithValue, getState, dispatch }) => {
     try {
-      console.log('Saving data source with data:', dataSourceData);
+      console.log('Saving data store with data:', dataStoreData);
       const state = getState();
       const userId = state.auth.user?.user_id;
-      const currentDataSources = state.dataStore.items || [];
+      const currentDataStores = state.dataStore.items || [];
       
       if (!userId) {
         return rejectWithValue('User not authenticated');
       }
       
       // Generate a source_id if not provided
-      if (!dataSourceData.source_id) {
-        dataSourceData.source_id = `ds_${Date.now()}`;
+      if (!dataStoreData.source_id) {
+        dataStoreData.source_id = `ds_${Date.now()}`;
       }
       
-      // Add the new data source to the list
-      const updatedDataSources = [...currentDataSources, dataSourceData];
+      // Add the new data store to the list
+      const updatedDataStores = [...currentDataStores, dataStoreData];
       
       // Save to Supabase
       await supabaseService.executeQuery(supabase =>
@@ -95,40 +95,40 @@ export const saveDataSource = createAsyncThunk(
           .upsert({
             user_id: userId,
             preference_key: 'data_store',
-            preference_value: updatedDataSources
+            preference_value: updatedDataStores
           }, {
             onConflict: 'user_id,preference_key'
           })
       );
       
       // Store credentials in key_store if provided
-      if (dataSourceData.username || dataSourceData.password || dataSourceData.accessToken) {
+      if (dataStoreData.username || dataStoreData.password || dataStoreData.accessToken) {
         try {
           // Determine if using username/password or access token
-          if (dataSourceData.accessToken) {
+          if (dataStoreData.accessToken) {
             // Store access token
             await supabaseService.executeQuery(supabase =>
               supabase
                 .from('key_store')
                 .upsert({
                   user_id: userId,
-                  provider: `data_store.${dataSourceData.source_id}`,
-                  api_key: dataSourceData.accessToken,
+                  provider: `data_store.${dataStoreData.source_id}`,
+                  api_key: dataStoreData.accessToken,
                   verified: true
                 }, {
                   onConflict: 'user_id,provider'
                 })
             );
-          } else if (dataSourceData.username || dataSourceData.password) {
+          } else if (dataStoreData.username || dataStoreData.password) {
             // Store username/password
             await supabaseService.executeQuery(supabase =>
               supabase
                 .from('key_store')
                 .upsert({
                   user_id: userId,
-                  provider: `data_store.${dataSourceData.source_id}`,
-                  username: dataSourceData.username,
-                  password: dataSourceData.password,
+                  provider: `data_store.${dataStoreData.source_id}`,
+                  username: dataStoreData.username,
+                  password: dataStoreData.password,
                   verified: true
                 }, {
                   onConflict: 'user_id,provider'
@@ -144,42 +144,42 @@ export const saveDataSource = createAsyncThunk(
       // Update Redux state
       dispatch(updateUserPreferences({
         key: 'data_store',
-        value: updatedDataSources
+        value: updatedDataStores
       }));
       
-      return { data: dataSourceData };
+      return { data: dataStoreData };
     } catch (error) {
-      console.error('Save data source error:', {
+      console.error('Save data store error:', {
         message: error.message
       });
-      return rejectWithValue(error.message || 'Failed to save data source');
+      return rejectWithValue(error.message || 'Failed to save data store');
     }
   }
 );
 
-export const updateDataSource = createAsyncThunk(
-  'dataStore/updateDataSource',
-  async (dataSourceData, { rejectWithValue, getState, dispatch }) => {
+export const updateDataStore = createAsyncThunk(
+  'dataStore/updateDataStore',
+  async (dataStoreData, { rejectWithValue, getState, dispatch }) => {
     try {
-      console.log('Updating data source with data:', dataSourceData);
+      console.log('Updating data store with data:', dataStoreData);
       const state = getState();
       const userId = state.auth.user?.user_id;
-      const currentDataSources = state.dataStore.items || [];
+      const currentDataStores = state.dataStore.items || [];
       
       if (!userId) {
         return rejectWithValue('User not authenticated');
       }
       
-      // Find the data source to update
-      const index = currentDataSources.findIndex(ds => ds.source_id === dataSourceData.source_id);
+      // Find the data store to update
+      const index = currentDataStores.findIndex(ds => ds.source_id === dataStoreData.source_id);
       
       if (index === -1) {
-        return rejectWithValue('Data source not found');
+        return rejectWithValue('Data store not found');
       }
       
-      // Update the data source in the list
-      const updatedDataSources = [...currentDataSources];
-      updatedDataSources[index] = dataSourceData;
+      // Update the data store in the list
+      const updatedDataStores = [...currentDataStores];
+      updatedDataStores[index] = dataStoreData;
       
       // Save to Supabase
       await supabaseService.executeQuery(supabase =>
@@ -188,40 +188,40 @@ export const updateDataSource = createAsyncThunk(
           .upsert({
             user_id: userId,
             preference_key: 'data_store',
-            preference_value: updatedDataSources
+            preference_value: updatedDataStores
           }, {
             onConflict: 'user_id,preference_key'
           })
       );
       
       // Update credentials in key_store if provided
-      if (dataSourceData.username || dataSourceData.password || dataSourceData.accessToken) {
+      if (dataStoreData.username || dataStoreData.password || dataStoreData.accessToken) {
         try {
           // Determine if using username/password or access token
-          if (dataSourceData.accessToken) {
+          if (dataStoreData.accessToken) {
             // Store access token
             await supabaseService.executeQuery(supabase =>
               supabase
                 .from('key_store')
                 .upsert({
                   user_id: userId,
-                  provider: `data_store.${dataSourceData.source_id}`,
-                  api_key: dataSourceData.accessToken,
+                  provider: `data_store.${dataStoreData.source_id}`,
+                  api_key: dataStoreData.accessToken,
                   verified: true
                 }, {
                   onConflict: 'user_id,provider'
                 })
             );
-          } else if (dataSourceData.username || dataSourceData.password) {
+          } else if (dataStoreData.username || dataStoreData.password) {
             // Store username/password
             await supabaseService.executeQuery(supabase =>
               supabase
                 .from('key_store')
                 .upsert({
                   user_id: userId,
-                  provider: `data_store.${dataSourceData.source_id}`,
-                  username: dataSourceData.username,
-                  password: dataSourceData.password,
+                  provider: `data_store.${dataStoreData.source_id}`,
+                  username: dataStoreData.username,
+                  password: dataStoreData.password,
                   verified: true
                 }, {
                   onConflict: 'user_id,provider'
@@ -237,41 +237,41 @@ export const updateDataSource = createAsyncThunk(
       // Update Redux state
       dispatch(updateUserPreferences({
         key: 'data_store',
-        value: updatedDataSources
+        value: updatedDataStores
       }));
       
-      return { data: dataSourceData };
+      return { data: dataStoreData };
     } catch (error) {
-      console.error('Update data source error:', {
+      console.error('Update data store error:', {
         message: error.message
       });
-      return rejectWithValue(error.message || 'Failed to update data source');
+      return rejectWithValue(error.message || 'Failed to update data store');
     }
   }
 );
 
-export const deleteDataSource = createAsyncThunk(
-  'dataStore/deleteDataSource',
-  async (sourceId, { rejectWithValue, getState, dispatch }) => {
+export const deleteDataStore = createAsyncThunk(
+  'dataStore/deleteDataStore',
+  async (storeId, { rejectWithValue, getState, dispatch }) => {
     try {
-      console.log('Deleting data source with ID:', sourceId);
+      console.log('Deleting data store with ID:', storeId);
       const state = getState();
       const userId = state.auth.user?.user_id;
-      const currentDataSources = state.dataStore.items || [];
+      const currentDataStores = state.dataStore.items || [];
       
       if (!userId) {
         return rejectWithValue('User not authenticated');
       }
       
-      // Find the data source to delete
-      const dataSource = currentDataSources.find(ds => ds.source_id === sourceId);
+      // Find the data store to delete
+      const dataStore = currentDataStores.find(ds => ds.source_id === storeId);
       
-      if (!dataSource) {
-        return rejectWithValue('Data source not found');
+      if (!dataStore) {
+        return rejectWithValue('Data store not found');
       }
       
-      // Remove the data source from the list
-      const updatedDataSources = currentDataSources.filter(ds => ds.source_id !== sourceId);
+      // Remove the data store from the list
+      const updatedDataStores = currentDataStores.filter(ds => ds.source_id !== storeId);
       
       // Save to Supabase
       await supabaseService.executeQuery(supabase =>
@@ -280,7 +280,7 @@ export const deleteDataSource = createAsyncThunk(
           .upsert({
             user_id: userId,
             preference_key: 'data_store',
-            preference_value: updatedDataSources
+            preference_value: updatedDataStores
           }, {
             onConflict: 'user_id,preference_key'
           })
@@ -292,28 +292,28 @@ export const deleteDataSource = createAsyncThunk(
           .from('key_store')
           .delete()
           .eq('user_id', userId)
-          .eq('provider', `data_store.${sourceId}`)
+          .eq('provider', `data_store.${storeId}`)
       );
       
       // Update Redux state
       dispatch(updateUserPreferences({
         key: 'data_store',
-        value: updatedDataSources
+        value: updatedDataStores
       }));
       
-      return { sourceId };
+      return { storeId };
     } catch (error) {
-      console.error('Delete data source error:', {
+      console.error('Delete data store error:', {
         message: error.message
       });
-      return rejectWithValue(error.message || 'Failed to delete data source');
+      return rejectWithValue(error.message || 'Failed to delete data store');
     }
   }
 );
 
 const initialState = {
   items: [],
-  activeDataSource: null,
+  activeDataStore: null,
   isLoading: false,
   error: null
 };
@@ -322,36 +322,36 @@ const dataStoreSlice = createSlice({
   name: 'dataStore',
   initialState,
   reducers: {
-    setDataSources: (state, action) => {
+    setDataStores: (state, action) => {
       state.items = action.payload;
     },
-    addDataSource: (state, action) => {
+    addDataStore: (state, action) => {
       state.items.push(action.payload);
     },
-    updateDataSourceById: (state, action) => {
+    updateDataStoreById: (state, action) => {
       const index = state.items.findIndex(ds => ds.source_id === action.payload.source_id);
       if (index !== -1) {
         state.items[index] = action.payload;
       }
     },
-    removeDataSourceById: (state, action) => {
+    removeDataStoreById: (state, action) => {
       state.items = state.items.filter(ds => ds.source_id !== action.payload);
     },
-    setActiveDataSource: (state, action) => {
-      state.activeDataSource = action.payload;
+    setActiveDataStore: (state, action) => {
+      state.activeDataStore = action.payload;
     }
   },
   extraReducers: (builder) => {
     builder
-      // fetchDataSources
-      .addCase(fetchDataSources.pending, (state) => {
+      // fetchDataStores
+      .addCase(fetchDataStores.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
-      .addCase(fetchDataSources.fulfilled, (state, action) => {
+      .addCase(fetchDataStores.fulfilled, (state, action) => {
         state.isLoading = false;
         // Extract data from the response
-        console.log('fetchDataSources.fulfilled payload:', action.payload);
+        console.log('fetchDataStores.fulfilled payload:', action.payload);
         
         // The supabaseService.executeQuery returns the data directly, not a response object with a data property
         if (action.payload && action.payload.preference_value) {
@@ -363,49 +363,49 @@ const dataStoreSlice = createSlice({
           console.log('No preference_value found, setting dataStore.items to empty array');
         }
       })
-      .addCase(fetchDataSources.rejected, (state, action) => {
+      .addCase(fetchDataStores.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
       })
       
-      // saveDataSource
-      .addCase(saveDataSource.pending, (state) => {
+      // saveDataStore
+      .addCase(saveDataStore.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
-      .addCase(saveDataSource.fulfilled, (state) => {
+      .addCase(saveDataStore.fulfilled, (state) => {
         state.isLoading = false;
-        // The data source is already added to the items array in the thunk
+        // The data store is already added to the items array in the thunk
       })
-      .addCase(saveDataSource.rejected, (state, action) => {
+      .addCase(saveDataStore.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
       })
       
-      // updateDataSource
-      .addCase(updateDataSource.pending, (state) => {
+      // updateDataStore
+      .addCase(updateDataStore.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
-      .addCase(updateDataSource.fulfilled, (state) => {
+      .addCase(updateDataStore.fulfilled, (state) => {
         state.isLoading = false;
-        // The data source is already updated in the items array in the thunk
+        // The data store is already updated in the items array in the thunk
       })
-      .addCase(updateDataSource.rejected, (state, action) => {
+      .addCase(updateDataStore.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
       })
       
-      // deleteDataSource
-      .addCase(deleteDataSource.pending, (state) => {
+      // deleteDataStore
+      .addCase(deleteDataStore.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
-      .addCase(deleteDataSource.fulfilled, (state) => {
+      .addCase(deleteDataStore.fulfilled, (state) => {
         state.isLoading = false;
-        // The data source is already removed from the items array in the thunk
+        // The data store is already removed from the items array in the thunk
       })
-      .addCase(deleteDataSource.rejected, (state, action) => {
+      .addCase(deleteDataStore.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
       });
@@ -414,24 +414,24 @@ const dataStoreSlice = createSlice({
 
 // Export actions
 export const {
-  setDataSources,
-  addDataSource,
-  updateDataSourceById,
-  removeDataSourceById,
-  setActiveDataSource
+  setDataStores,
+  addDataStore,
+  updateDataStoreById,
+  removeDataStoreById,
+  setActiveDataStore
 } = dataStoreSlice.actions;
 
 // Export selectors
-export const selectDataSources = (state) => state.dataStore.items;
-export const selectActiveDataSource = (state) => {
-  const activeId = state.dataStore.activeDataSource;
+export const selectDataStores = (state) => state.dataStore.items;
+export const selectActiveDataStore = (state) => {
+  const activeId = state.dataStore.activeDataStore;
   if (activeId) {
     return state.dataStore.items.find(ds => ds.source_id === activeId);
   }
   return state.dataStore.items[0] || null;
 };
-export const selectDataSourcesLoading = (state) => state.dataStore.isLoading;
-export const selectDataSourcesError = (state) => state.dataStore.error;
+export const selectDataStoresLoading = (state) => state.dataStore.isLoading;
+export const selectDataStoresError = (state) => state.dataStore.error;
 export const selectIsDataStoreReady = (state) => state.dataStore.items.length > 0;
 
 // Export reducer

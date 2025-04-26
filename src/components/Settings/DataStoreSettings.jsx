@@ -24,11 +24,11 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
-import { fetchDataSources } from '../../redux/slices/dataStoreSlice';
+import { fetchDataStores } from '../../redux/slices/dataStoreSlice';
 
 /**
- * DataStoreSettings component for configuring data sources
- * Allows users to add, edit, and delete data sources
+ * DataStoreSettings component for configuring data stores
+ * Allows users to add, edit, and delete data stores
  * @param {Object} props - Component props
  * @param {Function} props.onSuccess - Callback for success notifications
  * @param {Function} props.onError - Callback for error notifications
@@ -37,10 +37,10 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
   const dispatch = useDispatch();
   const user = useSelector(state => state.auth.user);
   const [loading, setLoading] = useState(false);
-  const [dataSources, setDataSources] = useState([]);
-  // Remove default data source state as it's not needed for data_store
-  const [editingSource, setEditingSource] = useState(null);
-  const [newSource, setNewSource] = useState({
+  const [dataStores, setDataStores] = useState([]);
+  // Remove default data store state as it's not needed for data_store
+  const [editingStore, setEditingStore] = useState(null);
+  const [newStore, setNewStore] = useState({
     name: '',
     type: 'supabase',
     url: '',
@@ -52,21 +52,21 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [error, setError] = useState('');
 
-  // Load data sources from user preferences
+  // Load data stores from user preferences
   useEffect(() => {
     if (user?.preferences) {
       // Prioritize data_store if available, otherwise fall back to data_store_credentials
-      const dataSources = user.preferences.data_store || user.preferences.data_store_credentials || [];
+      const dataStores = user.preferences.data_store || user.preferences.data_store_credentials || [];
       // No need for data_store_preferences as we're not using default indicators
       
-      setDataSources(dataSources);
-      // No longer setting default data source
+      setDataStores(dataStores);
+      // No longer setting default data store
     }
   }, [user]);
 
-  // Handle form submission for adding a new data source
-  const handleAddSource = async () => {
-    if (!newSource.name || !newSource.url) {
+  // Handle form submission for adding a new data store
+  const handleAddStore = async () => {
+    if (!newStore.name || !newStore.url) {
       setError('Name and URL are required');
       return;
     }
@@ -74,57 +74,55 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
     setLoading(true);
     try {
       // Check if name already exists
-      if (dataSources.some(ds => ds.name.toLowerCase() === newSource.name.toLowerCase())) {
-        setError('A data source with this name already exists');
+      if (dataStores.some(ds => ds.name.toLowerCase() === newStore.name.toLowerCase())) {
+        setError('A data store with this name already exists');
         setLoading(false);
         return;
       }
 
-      // Generate a source_id for the new data source
-      const source_id = `ds_${Date.now()}`;
+      // Generate a store_id for the new data store
+      const store_id = `ds_${Date.now()}`;
 
       // Create the data store configuration object
       const dataStoreConfig = {
-        name: newSource.name,
-        source_id: source_id,
-        type: newSource.type,
-        url: newSource.url,
-        table: newSource.tableName
+        name: newStore.name,
+        store_id: store_id,
+        type: newStore.type,
+        url: newStore.url,
+        table: newStore.tableName
       };
 
-      // Add the new data source to the list
-      const updatedSources = [...dataSources, dataStoreConfig];
+      // Add the new data store to the list
+      const updatedStores = [...dataStores, dataStoreConfig];
       
-      // Update data sources in Redux state
-
       // Store credentials in key_store if provided
-      if (newSource.username || newSource.password || newSource.accessToken) {
+      if (newStore.username || newStore.password || newStore.accessToken) {
         try {
           // Determine if using username/password or access token
-          if (newSource.accessToken) {
+          if (newStore.accessToken) {
             // Store access token
             await supabaseService.executeQuery(supabase =>
               supabase
                 .from('key_store')
                 .upsert({
                   user_id: user.user_id,
-                  provider: `data_store.${source_id}`,
-                  api_key: newSource.accessToken,
+                  provider: `data_store.${store_id}`,
+                  api_key: newStore.accessToken,
                   verified: true
                 }, {
                   onConflict: 'user_id,provider'
                 })
             );
-          } else if (newSource.username || newSource.password) {
+          } else if (newStore.username || newStore.password) {
             // Store username/password
             await supabaseService.executeQuery(supabase =>
               supabase
                 .from('key_store')
                 .upsert({
                   user_id: user.user_id,
-                  provider: `data_store.${source_id}`,
-                  username: newSource.username,
-                  password: newSource.password,
+                  provider: `data_store.${store_id}`,
+                  username: newStore.username,
+                  password: newStore.password,
                   verified: true
                 }, {
                   onConflict: 'user_id,provider'
@@ -146,7 +144,7 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
             .upsert({
               user_id: user.user_id,
               preference_key: 'data_store',
-              preference_value: updatedSources
+              preference_value: updatedStores
             }, {
               onConflict: 'user_id,preference_key'
             })
@@ -155,19 +153,19 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
         // Update Redux state
         dispatch(updateUserPreferences({
           key: 'data_store',
-          value: updatedSources
+          value: updatedStores
         }));
         
         // Update local state
-        setDataSources(updatedSources);
+        setDataStores(updatedStores);
       } catch (dbError) {
         console.error('Error saving data store to database:', dbError);
         // Continue with local state update even if database update fails
-        setDataSources(updatedSources);
+        setDataStores(updatedStores);
       }
       
       // Reset form
-      setNewSource({
+      setNewStore({
         name: '',
         type: 'supabase',
         url: '',
@@ -180,74 +178,72 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
       setError('');
       
       // Sync with Redux state
-      dispatch(fetchDataSources());
+      dispatch(fetchDataStores());
       
-      onSuccess('Data source added successfully');
+      onSuccess('Data store added successfully');
     } catch (err) {
-      console.error('Error adding data source:', err);
-      onError('Failed to add data source: ' + err.message);
+      console.error('Error adding data store:', err);
+      onError('Failed to add data store: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle form submission for editing a data source
-  const handleEditSource = async () => {
-    if (!editingSource.name || !editingSource.url) {
+  // Handle form submission for editing a data store
+  const handleEditStore = async () => {
+    if (!editingStore.name || !editingStore.url) {
       setError('Name and URL are required');
       return;
     }
 
     setLoading(true);
     try {
-      // Find the original data source to get its source_id
-      const originalSource = dataSources.find(ds => ds.name === editingSource.originalName);
-      const source_id = originalSource?.source_id || `ds_${Date.now()}`;
+      // Find the original data store to get its store_id
+      const originalStore = dataStores.find(ds => ds.name === editingStore.originalName);
+      const store_id = originalStore?.store_id || `ds_${Date.now()}`;
 
       // Create the updated data store configuration
       const updatedConfig = {
-        name: editingSource.name,
-        source_id: source_id,
-        type: editingSource.type,
-        url: editingSource.url,
-        table: editingSource.tableName
+        name: editingStore.name,
+        store_id: store_id,
+        type: editingStore.type,
+        url: editingStore.url,
+        table: editingStore.tableName
       };
 
-      // Update the data source in the list
-      const updatedSources = dataSources.map(ds =>
-        ds.name === editingSource.originalName ? updatedConfig : ds
+      // Update the data store in the list
+      const updatedStores = dataStores.map(ds =>
+        ds.name === editingStore.originalName ? updatedConfig : ds
       );
       
-      // Update data sources in Redux state
-
       // Update credentials in key_store if provided
-      if (editingSource.username || editingSource.password || editingSource.accessToken) {
+      if (editingStore.username || editingStore.password || editingStore.accessToken) {
         try {
           // Determine if using username/password or access token
-          if (editingSource.accessToken) {
+          if (editingStore.accessToken) {
             // Store access token
             await supabaseService.executeQuery(supabase =>
               supabase
                 .from('key_store')
                 .upsert({
                   user_id: user.user_id,
-                  provider: `data_store.${source_id}`,
-                  api_key: editingSource.accessToken,
+                  provider: `data_store.${store_id}`,
+                  api_key: editingStore.accessToken,
                   verified: true
                 }, {
                   onConflict: 'user_id,provider'
                 })
             );
-          } else if (editingSource.username || editingSource.password) {
+          } else if (editingStore.username || editingStore.password) {
             // Store username/password
             await supabaseService.executeQuery(supabase =>
               supabase
                 .from('key_store')
                 .upsert({
                   user_id: user.user_id,
-                  provider: `data_store.${source_id}`,
-                  username: editingSource.username,
-                  password: editingSource.password,
+                  provider: `data_store.${store_id}`,
+                  username: editingStore.username,
+                  password: editingStore.password,
                   verified: true
                 }, {
                   onConflict: 'user_id,provider'
@@ -260,8 +256,6 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
         }
       }
       
-      // No longer updating default data source
-      
       // Update user preferences in the database
       try {
         // Save to Supabase
@@ -271,7 +265,7 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
             .upsert({
               user_id: user.user_id,
               preference_key: 'data_store',
-              preference_value: updatedSources
+              preference_value: updatedStores
             }, {
               onConflict: 'user_id,preference_key'
             })
@@ -280,55 +274,53 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
         // Update Redux state
         dispatch(updateUserPreferences({
           key: 'data_store',
-          value: updatedSources
+          value: updatedStores
         }));
         
         // Update local state
-        setDataSources(updatedSources);
+        setDataStores(updatedStores);
       } catch (dbError) {
         console.error('Error saving data store to database:', dbError);
         // Continue with local state update even if database update fails
-        setDataSources(updatedSources);
+        setDataStores(updatedStores);
       }
       
       // Reset form
-      setEditingSource(null);
+      setEditingStore(null);
       setError('');
       
       // Sync with Redux state
-      dispatch(fetchDataSources());
+      dispatch(fetchDataStores());
       
-      onSuccess('Data source updated successfully');
+      onSuccess('Data store updated successfully');
     } catch (err) {
-      console.error('Error updating data source:', err);
-      onError('Failed to update data source: ' + err.message);
+      console.error('Error updating data store:', err);
+      onError('Failed to update data store: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle deleting a data source
-  const handleDeleteSource = async (name) => {
+  // Handle deleting a data store
+  const handleDeleteStore = async (name) => {
     setLoading(true);
     try {
-      // Find the data source to get its source_id
-      const dataSource = dataSources.find(ds => ds.name === name);
-      const source_id = dataSource?.source_id;
+      // Find the data store to get its store_id
+      const dataStore = dataStores.find(ds => ds.name === name);
+      const store_id = dataStore?.store_id;
 
-      // Remove the data source from the list
-      const updatedSources = dataSources.filter(ds => ds.name !== name);
+      // Remove the data store from the list
+      const updatedStores = dataStores.filter(ds => ds.name !== name);
       
-      // Update data sources in Redux state
-
-      // Delete credentials from key_store if source_id exists
-      if (source_id) {
+      // Delete credentials from key_store if store_id exists
+      if (store_id) {
         try {
           await supabaseService.executeQuery(supabase =>
             supabase
               .from('key_store')
               .delete()
               .eq('user_id', user.user_id)
-              .eq('provider', `data_store.${source_id}`)
+              .eq('provider', `data_store.${store_id}`)
           );
         } catch (credError) {
           console.error('Error deleting credentials:', credError);
@@ -336,8 +328,6 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
         }
       }
       
-      // No longer updating default data source
-      
       // Update user preferences in the database
       try {
         // Save to Supabase
@@ -347,7 +337,7 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
             .upsert({
               user_id: user.user_id,
               preference_key: 'data_store',
-              preference_value: updatedSources
+              preference_value: updatedStores
             }, {
               onConflict: 'user_id,preference_key'
             })
@@ -356,24 +346,24 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
         // Update Redux state
         dispatch(updateUserPreferences({
           key: 'data_store',
-          value: updatedSources
+          value: updatedStores
         }));
         
         // Update local state
-        setDataSources(updatedSources);
+        setDataStores(updatedStores);
       } catch (dbError) {
         console.error('Error saving data store to database:', dbError);
         // Continue with local state update even if database update fails
-        setDataSources(updatedSources);
+        setDataStores(updatedStores);
       }
       
       // Sync with Redux state
-      dispatch(fetchDataSources());
+      dispatch(fetchDataStores());
       
-      onSuccess('Data source deleted successfully');
+      onSuccess('Data store deleted successfully');
     } catch (err) {
-      console.error('Error deleting data source:', err);
-      onError('Failed to delete data source: ' + err.message);
+      console.error('Error deleting data store:', err);
+      onError('Failed to delete data store: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -384,32 +374,32 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
   return (
     <Box sx={{ mt: 2 }}>
       <Typography variant="body2" color="text.secondary" paragraph>
-        Configure data sources for vector storage and retrieval. You can add multiple data sources.
+        Configure data stores for vector storage and retrieval. You can add multiple data stores.
       </Typography>
 
-      {/* Data Sources List */}
+      {/* Data Stores List */}
       <Paper sx={{ p: 2, mb: 3 }}>
         <Typography variant="subtitle1" gutterBottom>
-          Data Sources
+          Data Stores
         </Typography>
         
-        {dataSources.length === 0 ? (
+        {dataStores.length === 0 ? (
           <Alert severity="info" sx={{ mb: 2 }}>
-            No data sources configured. Add a data source to get started.
+            No data stores configured. Add a data store to get started.
           </Alert>
         ) : (
           <Box sx={{ mb: 2 }}>
-            {dataSources.map((source) => (
-              <Box key={source.name} sx={{ mb: 2, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
-                {editingSource && editingSource.originalName === source.name ? (
+            {dataStores.map((store) => (
+              <Box key={store.name} sx={{ mb: 2, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+                {editingStore && editingStore.originalName === store.name ? (
                   // Edit form
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
                       <TextField
                         fullWidth
                         label="Name"
-                        value={editingSource.name}
-                        onChange={(e) => setEditingSource({ ...editingSource, name: e.target.value })}
+                        value={editingStore.name}
+                        onChange={(e) => setEditingStore({ ...editingStore, name: e.target.value })}
                         size="small"
                       />
                     </Grid>
@@ -417,9 +407,9 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                       <FormControl fullWidth size="small">
                         <InputLabel>Type</InputLabel>
                         <Select
-                          value={editingSource.type}
+                          value={editingStore.type}
                           label="Type"
-                          onChange={(e) => setEditingSource({ ...editingSource, type: e.target.value })}
+                          onChange={(e) => setEditingStore({ ...editingStore, type: e.target.value })}
                         >
                           <MenuItem value="supabase">Supabase</MenuItem>
                           <MenuItem value="postgres">Local PostgreSQL</MenuItem>
@@ -432,8 +422,8 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                       <TextField
                         fullWidth
                         label="URL"
-                        value={editingSource.url}
-                        onChange={(e) => setEditingSource({ ...editingSource, url: e.target.value })}
+                        value={editingStore.url}
+                        onChange={(e) => setEditingStore({ ...editingStore, url: e.target.value })}
                         size="small"
                       />
                     </Grid>
@@ -441,8 +431,8 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                       <TextField
                         fullWidth
                         label="Table Name"
-                        value={editingSource.tableName || 'vector_records'}
-                        onChange={(e) => setEditingSource({ ...editingSource, tableName: e.target.value })}
+                        value={editingStore.tableName || 'vector_records'}
+                        onChange={(e) => setEditingStore({ ...editingStore, tableName: e.target.value })}
                         size="small"
                       />
                     </Grid>
@@ -459,8 +449,8 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                             <TextField
                               fullWidth
                               label="Username"
-                              value={editingSource.username || ''}
-                              onChange={(e) => setEditingSource({ ...editingSource, username: e.target.value })}
+                              value={editingStore.username || ''}
+                              onChange={(e) => setEditingStore({ ...editingStore, username: e.target.value })}
                               size="small"
                             />
                           </Grid>
@@ -469,8 +459,8 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                               fullWidth
                               label="Password"
                               type="password"
-                              value={editingSource.password || ''}
-                              onChange={(e) => setEditingSource({ ...editingSource, password: e.target.value })}
+                              value={editingStore.password || ''}
+                              onChange={(e) => setEditingStore({ ...editingStore, password: e.target.value })}
                               size="small"
                             />
                           </Grid>
@@ -484,8 +474,8 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                               fullWidth
                               label="Access Token"
                               type="password"
-                              value={editingSource.accessToken || ''}
-                              onChange={(e) => setEditingSource({ ...editingSource, accessToken: e.target.value })}
+                              value={editingStore.accessToken || ''}
+                              onChange={(e) => setEditingStore({ ...editingStore, accessToken: e.target.value })}
                               size="small"
                             />
                           </Grid>
@@ -498,7 +488,7 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                           startIcon={<SaveIcon />}
                           variant="contained"
                           size="small"
-                          onClick={handleEditSource}
+                          onClick={handleEditStore}
                           disabled={loading}
                         >
                           Save
@@ -508,7 +498,7 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                           variant="outlined"
                           size="small"
                           onClick={() => {
-                            setEditingSource(null);
+                            setEditingStore(null);
                             setError('');
                           }}
                           disabled={loading}
@@ -523,29 +513,29 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                   <Grid container alignItems="center">
                     <Grid item xs={12} sm={6}>
                       <Typography variant="subtitle2">
-                        {source.name}
+                        {store.name}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Type: {source.type}
+                        Type: {store.type}
                       </Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ wordBreak: 'break-all' }}>
-                        URL: {source.url}
+                        URL: {store.url}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Table: {source.tableName || 'vector_records'}
+                        Table: {store.tableName || 'vector_records'}
                       </Typography>
                     </Grid>
                     <Grid item xs={12} sm={6} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
                       <IconButton
                         size="small"
-                        onClick={() => setEditingSource({ ...source, originalName: source.name })}
+                        onClick={() => setEditingStore({ ...store, originalName: store.name })}
                         disabled={loading}
                       >
                         <EditIcon fontSize="small" />
                       </IconButton>
                       <IconButton
                         size="small"
-                        onClick={() => handleDeleteSource(source.name)}
+                        onClick={() => handleDeleteStore(store.name)}
                         disabled={loading}
                       >
                         <DeleteIcon fontSize="small" />
@@ -558,19 +548,19 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
           </Box>
         )}
 
-        {/* Add New Data Source Form */}
+        {/* Add New Data Store Form */}
         {showAddForm ? (
           <Box sx={{ mt: 2, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
             <Typography variant="subtitle2" gutterBottom>
-              Add New Data Source
+              Add New Data Store
             </Typography>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   label="Name"
-                  value={newSource.name}
-                  onChange={(e) => setNewSource({ ...newSource, name: e.target.value })}
+                  value={newStore.name}
+                  onChange={(e) => setNewStore({ ...newStore, name: e.target.value })}
                   size="small"
                 />
               </Grid>
@@ -578,9 +568,9 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                 <FormControl fullWidth size="small">
                   <InputLabel>Type</InputLabel>
                   <Select
-                    value={newSource.type}
+                    value={newStore.type}
                     label="Type"
-                    onChange={(e) => setNewSource({ ...newSource, type: e.target.value })}
+                    onChange={(e) => setNewStore({ ...newStore, type: e.target.value })}
                   >
                     <MenuItem value="supabase">Supabase</MenuItem>
                     <MenuItem value="postgres">Local PostgreSQL</MenuItem>
@@ -593,13 +583,13 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                 <TextField
                   fullWidth
                   label="URL"
-                  value={newSource.url}
-                  onChange={(e) => setNewSource({ ...newSource, url: e.target.value })}
+                  value={newStore.url}
+                  onChange={(e) => setNewStore({ ...newStore, url: e.target.value })}
                   size="small"
                   placeholder={
-                    newSource.type === 'supabase' ? 'https://your-project.supabase.co' :
-                    newSource.type === 'postgres' ? 'postgresql://username:password@localhost:5432/database' :
-                    newSource.type === 'filemaker' ? 'https://your-filemaker-server.com/fmi/data/v1/databases/your-database' :
+                    newStore.type === 'supabase' ? 'https://your-project.supabase.co' :
+                    newStore.type === 'postgres' ? 'postgresql://username:password@localhost:5432/database' :
+                    newStore.type === 'filemaker' ? 'https://your-filemaker-server.com/fmi/data/v1/databases/your-database' :
                     '/path/to/your/lancedb/database.lance'
                   }
                 />
@@ -608,8 +598,8 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                 <TextField
                   fullWidth
                   label="Table Name"
-                  value={newSource.tableName}
-                  onChange={(e) => setNewSource({ ...newSource, tableName: e.target.value })}
+                  value={newStore.tableName}
+                  onChange={(e) => setNewStore({ ...newStore, tableName: e.target.value })}
                   size="small"
                   placeholder="vector_records"
                 />
@@ -627,8 +617,8 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                       <TextField
                         fullWidth
                         label="Username"
-                        value={newSource.username}
-                        onChange={(e) => setNewSource({ ...newSource, username: e.target.value })}
+                        value={newStore.username}
+                        onChange={(e) => setNewStore({ ...newStore, username: e.target.value })}
                         size="small"
                       />
                     </Grid>
@@ -637,8 +627,8 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                         fullWidth
                         label="Password"
                         type="password"
-                        value={newSource.password}
-                        onChange={(e) => setNewSource({ ...newSource, password: e.target.value })}
+                        value={newStore.password}
+                        onChange={(e) => setNewStore({ ...newStore, password: e.target.value })}
                         size="small"
                       />
                     </Grid>
@@ -652,8 +642,8 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                         fullWidth
                         label="Access Token"
                         type="password"
-                        value={newSource.accessToken}
-                        onChange={(e) => setNewSource({ ...newSource, accessToken: e.target.value })}
+                        value={newStore.accessToken}
+                        onChange={(e) => setNewStore({ ...newStore, accessToken: e.target.value })}
                         size="small"
                       />
                     </Grid>
@@ -666,7 +656,7 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                     startIcon={<SaveIcon />}
                     variant="contained"
                     size="small"
-                    onClick={handleAddSource}
+                    onClick={handleAddStore}
                     disabled={loading}
                   >
                     Add
@@ -677,7 +667,7 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
                     size="small"
                     onClick={() => {
                       setShowAddForm(false);
-                      setNewSource({
+                      setNewStore({
                         name: '',
                         type: 'supabase',
                         url: '',
@@ -709,7 +699,7 @@ const DataStoreSettings = ({ onSuccess, onError }) => {
             onClick={() => setShowAddForm(true)}
             disabled={loading}
           >
-            Add Data Source
+            Add Data Store
           </Button>
         )}
 

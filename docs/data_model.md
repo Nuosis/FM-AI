@@ -244,7 +244,8 @@ Our application uses a hierarchical data model with Organizations as the top-lev
 ### Table: vector_store (public)
 - **id**: uuid, primary key, default: gen_random_uuid()
 - **user_id**: uuid, not null, references users(id)
-- **source_id**: text, not null
+- **store_id**: text, not null
+- **data_id**: text, not null
 - **embedding**: vector(1536)
 - **metadata**: jsonb
 - **created_at**: timestamp with time zone, default: now()

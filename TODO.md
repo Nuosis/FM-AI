@@ -4,26 +4,33 @@
 !!!
 - Mask API Keys [done]
 
-CHAT
-- Refactor Chat as modal dialog
+### CHAT
+- Refactor Chat to use llm-proxy
 
-FUNCTIONS
-- Functions private/public
-- Expose public functions in unauthenticated state
-- Create routes for each function
+### Tools
+- Tools private/public [done]
+- Expose public tools in unauthenticated state 
+- Create routes for each tools (https://fmai/tool/<id> returns code)
 - Expose temperature [done]
 - Expose prompt [done]
+- Refactor tools to user llm-proxy and dockerized toolExecution
 
-COMMUNITY
+### DATA STORE
+- sources 
+- stores
+- process
+- chat to test query against store
+
+### COMMUNITY
 - Profile
 - Chat (M2M) [done]
 - Announcements
 
-GETTING STARTED
+### GETTING STARTED
 - Explainer 
 - On boarding/setting up
 
-BUGS
+### BUGS
 - API to log bug on GitHub
 
 ### Future
