@@ -116,13 +116,44 @@ const apiService = {
   
   // LLM provider calls
   async callLLMProvider(provider, type, model, data, options = {}) {
-    return this.callEdgeFunction('llmProxyHandler', {
-      provider: provider.toLowerCase(),
-      type,
-      model,
-      ...data,
-      options
-    });
+    try {
+      const response = await fetch('http://localhost:3500/llm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': await this.getAuthHeader()
+        },
+        body: JSON.stringify({
+          provider: provider.toLowerCase(),
+          type,
+          model,
+          ...data,
+          options
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error ${response.status}`);
+      }
+      
+      return response.json();
+    } catch (error) {
+      console.error(`LLM proxy error (${provider}/${type}):`, error);
+      throw error;
+    }
+  },
+  
+  // Helper method to get auth header
+  async getAuthHeader() {
+    const { data: authData } = await supabase.auth.getSession();
+    const token = authData?.session?.access_token;
+    
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+    
+    return `Bearer ${token}`;
   },
   
   // Local service calls (proxy server)

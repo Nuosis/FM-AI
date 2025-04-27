@@ -117,9 +117,14 @@ const ToolChat = () => {
         throw new Error('Authentication required');
       }
 
-      // Call the Supabase Edge Function
-      const { data, error: functionError } = await supabase.functions.invoke('llmProxyHandler', {
-        body: {
+      // Call the mesh_server
+      const response = await fetch('http://localhost:3500/llm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
           provider: selectedProvider.toLowerCase(),
           type: 'chat',
           model: selectedModel,
@@ -133,15 +138,15 @@ const ToolChat = () => {
             temperature: 0.7,
             max_tokens: 2000
           }
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
-        }
+        })
       });
 
-      if (functionError) {
-        throw new Error(functionError.message || 'Failed to get response from edge function');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error ${response.status}`);
       }
+      
+      const data = await response.json();
 
       // Remove the thinking message
       setMessages(prev => prev.filter(m => !m.isLoading));

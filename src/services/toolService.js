@@ -1,4 +1,5 @@
 import apiService from './apiService';
+import supabase from '../utils/supabase';
 
 /**
  * Tool Service
@@ -150,14 +151,53 @@ const toolService = {
       } catch (proxyError) {
         console.error('Proxy server error:', proxyError);
         
-        // Try using the edge function as a fallback
+        // Try using the mesh_server directly as a fallback
         try {
-          console.log('Attempting to execute via edge function');
-          const response = await apiService.callEdgeFunction('pythonExecuteHandler', { id, input });
-          return response;
-        } catch (edgeFunctionError) {
-          console.error('Edge function error:', edgeFunctionError);
-          throw new Error(`Failed to execute tool: ${edgeFunctionError.message}`);
+          console.log('Attempting to execute via mesh_server directly');
+          
+          // Fetch the tool code from the database
+          const toolData = await this.getToolById(id);
+          
+          if (!toolData || !toolData.code) {
+            throw new Error(`Tool not found or has no code: ${id}`);
+          }
+          
+          // Clean up the code by removing @tool() decorator if present
+          let cleanCode = toolData.code;
+          if (cleanCode.includes('@tool()')) {
+            cleanCode = cleanCode.replace(/@tool\(\).*?\n/g, '');
+          }
+          
+          // Get auth token
+          const { data: authData } = await supabase.auth.getSession();
+          const token = authData?.session?.access_token;
+          
+          if (!token) {
+            throw new Error('Authentication required');
+          }
+          
+          // Execute the code using the mesh_server's /execute endpoint directly
+          const response = await fetch('http://localhost:3500/execute', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              code: cleanCode,
+              input: input
+            })
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `HTTP error ${response.status}`);
+          }
+          
+          return await response.json();
+        } catch (meshServerError) {
+          console.error('Mesh server error:', meshServerError);
+          throw new Error(`Failed to execute tool: ${meshServerError.message}`);
         }
       }
     } catch (error) {

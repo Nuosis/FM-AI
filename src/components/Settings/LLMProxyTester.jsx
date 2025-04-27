@@ -173,21 +173,26 @@ print(json.dumps(result))
         throw new Error('Authentication required');
       }
 
-      // Call the Supabase Edge Function
-      const { data, error } = await supabase.functions.invoke('llmProxyHandler', {
-        body: {
+      // Call the mesh_server
+      const response = await fetch('http://localhost:3500/llm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
           provider: selectedProvider.toLowerCase(),
           type: 'models',
           baseUrl: null
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
-        }
+        })
       });
       
-      if (error) {
-        throw new Error(error.message || 'Failed to get models');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error ${response.status}`);
       }
+      
+      const data = await response.json();
       
       // Parse the response if it's a string
       const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
@@ -239,9 +244,14 @@ print(json.dumps(result))
       // Use default message if none provided
       const message = chatMessage.trim() || 'Hello, who are you?';
       
-      // Call the Supabase Edge Function
-      const { data, error } = await supabase.functions.invoke('llmProxyHandler', {
-        body: {
+      // Call the mesh_server
+      const response = await fetch('http://localhost:3500/llm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
           provider: selectedProvider.toLowerCase(),
           type: 'chat',
           model: selectedModel,
@@ -254,15 +264,15 @@ print(json.dumps(result))
             temperature: 0.7,
             max_tokens: 500
           }
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
-        }
+        })
       });
       
-      if (error) {
-        throw new Error(error.message || 'Failed to get chat completion');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error ${response.status}`);
       }
+      
+      const data = await response.json();
       
       // Parse the response if it's a string
       const parsedData = typeof data === 'string' ? JSON.parse(data) : data;

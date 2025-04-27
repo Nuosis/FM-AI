@@ -25,4 +25,4 @@ ENV SUPABASE_URL=""
 ENV SUPABASE_SERVICE_ROLE_KEY=""
 
 # Command to run the application
-CMD ["python", "llm-proxy.py", "--port", "3500", "--host", "0.0.0.0"]
+CMD ["python", "llm-proxy.py", "--port", "3500", "--host", "0.0.0.0", "--enable-auth"]

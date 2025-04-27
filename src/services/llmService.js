@@ -1,4 +1,5 @@
 import apiService from './apiService';
+import supabase from '../utils/supabase';
 
 /**
  * LLM Service
@@ -85,12 +86,39 @@ const llmService = {
         throw new Error(`Failed to connect to ${provider}: ${error.message}`);
       }
     } else {
-      // For cloud providers, use the edge function
-      return apiService.callEdgeFunction('llmProxyHandler', {
-        provider: provider.toLowerCase(),
-        type: 'models',
-        baseUrl: baseUrl || null
-      });
+      // For cloud providers, use the mesh_server
+      try {
+        // Get auth token
+        const { data: authData } = await supabase.auth.getSession();
+        const token = authData?.session?.access_token;
+        
+        if (!token) {
+          throw new Error('Authentication required');
+        }
+        
+        // Call the mesh_server
+        const response = await fetch('http://localhost:3500/llm', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            provider: provider.toLowerCase(),
+            type: 'models',
+            baseUrl: baseUrl || null
+          })
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `HTTP error ${response.status}`);
+        }
+        
+        return await response.json();
+      } catch (error) {
+        throw new Error(`Failed to connect to ${provider}: ${error.message}`);
+      }
     }
   },
   

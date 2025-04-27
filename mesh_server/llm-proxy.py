@@ -890,7 +890,7 @@ def llm_proxy():
     # Get client IP for rate limiting
     client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
     user_id = getattr(request, 'user_id', None)
-    
+
     # Use user_id for rate limiting if available, otherwise use IP
     rate_limit_id = user_id if user_id else client_ip
     
@@ -909,6 +909,9 @@ def llm_proxy():
     
     # Extract provider and validate input
     provider = body.get('provider', '').lower()
+
+    logger.info(f"User {user_id} and provider {provider}")
+
     rest_body = {k: v for k, v in body.items() if k != 'provider'}
     
     validation_error = validate_llm_input(provider, rest_body)

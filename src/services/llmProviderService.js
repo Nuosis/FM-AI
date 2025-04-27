@@ -522,14 +522,27 @@ const llmProviderService = {
           throw new Error('Authentication required');
         }
         
-        // Step 3: Call the llmProxyHandler edge function to verify the key and get models
-        const { data: stringResponseData, error } = await supabase.functions.invoke('llmProxyHandler', {
-          body: {
+        // Step 3: Call the mesh_server to verify the key and get models
+        const response = await fetch('http://localhost:3500/llm', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
             provider: providerLower,
             type: 'models',
             baseUrl: baseUrl || null
-          }
+          })
         });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `HTTP error ${response.status}`);
+        }
+        
+        const stringResponseData = await response.json();
+        const error = null;
         
         if (error) {
           throw new Error(error.message || 'Failed to verify API key');
@@ -654,9 +667,14 @@ const llmProviderService = {
         throw new Error('Authentication required');
       }
 
-      // Call the Supabase Edge Function with auth header
-      const { data, error } = await supabase.functions.invoke('llmProxyHandler', {
-        body: {
+      // Call the mesh_server with auth header
+      const response = await fetch('http://localhost:3500/llm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
           provider: providerLower,
           type: 'chat',
           model,
@@ -666,11 +684,16 @@ const llmProviderService = {
             temperature: 0.7,
             max_tokens: 500
           }
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
-        }
+        })
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const error = null;
 
       if (error) throw error;
 
