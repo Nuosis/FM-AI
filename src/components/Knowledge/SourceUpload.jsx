@@ -8,8 +8,6 @@ import {
   TextField,
   Paper,
   CircularProgress,
-  Alert,
-  Divider,
   Grid,
   IconButton,
   Tooltip
@@ -33,7 +31,7 @@ const SourceUpload = ({ knowledgeId, storeId, onSuccess, onError }) => {
   const dispatch = useDispatch();
   const embeddingModel = useSelector(selectActiveEmbeddingModel);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [setError] = useState('');
   const [uploadType, setUploadType] = useState('file'); // 'file' or 'url'
   const [file, setFile] = useState(null);
   const [url, setUrl] = useState('');

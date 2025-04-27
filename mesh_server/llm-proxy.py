@@ -70,6 +70,9 @@ except ImportError:
     data_store_api = Blueprint('data_store_api', __name__)
     print("Warning: data_store module not found. Data Store API will not be available.")
 
+# Configuration for Data Store
+DATA_STORE_URL = os.environ.get('DATA_STORE_URL', 'http://data-store:3550')
+
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
@@ -129,17 +132,62 @@ def get_api_key_from_supabase(user_id, provider):
     Fetch API key for a specific provider from Supabase based on user_id
     Returns the API key if found, None otherwise
     """
+    logger.debug(f"get_api_key_from_supabase called with user_id={user_id}, provider={provider}")
+    
     if not supabase_client:
+        logger.debug("supabase_client is not initialized")
         logger.warning("Supabase client not initialized, cannot fetch API keys")
         return None
         
     try:
         # Query the key_store table for the user's API key
+        logger.debug(f"Querying key_store table for user_id={user_id}, provider={provider}")
         response = supabase_client.table('key_store').select('api_key').eq('user_id', user_id).eq('provider', provider).execute()
         
-        if response.data and len(response.data) > 0:
-            return response.data[0]['api_key']
+        logger.debug(f"Raw response type: {type(response)}")
+        logger.debug(f"Raw response: {response}")
+        
+        # Handle case where response might be a string
+        if isinstance(response, str):
+            logger.debug(f"Response is a string, attempting to parse as JSON")
+            try:
+                response_data = json.loads(response)
+                logger.debug(f"Parsed JSON type: {type(response_data)}")
+                logger.debug(f"Parsed JSON: {response_data}")
+                if isinstance(response_data, dict) and 'data' in response_data:
+                    response = type('obj', (object,), {'data': response_data['data']})
+                    logger.debug(f"Created response object with data: {response.data}")
+                else:
+                    logger.debug(f"Unexpected response format after parsing")
+                    logger.warning(f"Unexpected response format from Supabase: {response}")
+                    return None
+            except json.JSONDecodeError:
+                logger.debug(f"Failed to parse response as JSON")
+                logger.warning(f"Failed to parse response as JSON: {response}")
+                return None
+        
+        # Now safely access response.data
+        logger.debug(f"Checking if response has data attribute: {hasattr(response, 'data')}")
+        if hasattr(response, 'data'):
+            logger.debug(f"response.data type: {type(response.data)}")
+            logger.debug(f"response.data: {response.data}")
+        
+        if hasattr(response, 'data') and response.data and len(response.data) > 0:
+            logger.debug(f"response.data[0] type: {type(response.data[0])}")
+            logger.debug(f"response.data[0]: {response.data[0]}")
+            
+            if isinstance(response.data[0], dict) and 'api_key' in response.data[0]:
+                api_key = response.data[0]['api_key']
+                # Mask the API key in logs for security
+                masked_key = f"{api_key[:4]}{'*' * (len(api_key) - 8)}{api_key[-4:]}" if len(api_key) > 8 else "****"
+                logger.debug(f"Found API key: {masked_key}")
+                return api_key
+            else:
+                logger.debug(f"Response data does not contain api_key")
+                logger.warning(f"Response data does not contain api_key: {response.data}")
+                return None
         else:
+            logger.debug(f"No API key found for user {user_id} and provider {provider}")
             logger.warning(f"No API key found for user {user_id} and provider {provider}")
             return None
     except Exception as e:
@@ -172,6 +220,132 @@ def jwt_required(f):
             
         return f(*args, **kwargs)
     return decorated
+
+# Function to create a service-to-service JWT token
+def create_service_token(user_id=None):
+    """
+    Create a service-to-service JWT token
+    
+    Args:
+        user_id: Optional user_id to include in the token for user-scoped operations
+        
+    Returns:
+        JWT token string
+    """
+    if not JWT_SECRET:
+        logger.error("JWT_SECRET environment variable not set")
+        raise ValueError("JWT_SECRET not configured")
+        
+    payload = {
+        'is_service': True,
+        'service_name': 'llm-proxy',
+        'exp': datetime.utcnow() + timedelta(hours=1)  # Token expires in 1 hour
+    }
+    
+    # Include user_id if provided
+    if user_id:
+        payload['user_id'] = user_id
+        
+    # Create the JWT token
+    token = jwt.encode(payload, JWT_SECRET, algorithm='HS256')
+    
+    return token
+
+# Function to get authentication headers for service-to-service calls
+def get_auth_headers(user_id=None):
+    """
+    Get headers with Authorization for service-to-service calls
+    
+    This function:
+    1. Tries to forward the existing Authorization header if available
+    2. Falls back to creating a service token if no Authorization header is available
+    
+    Args:
+        user_id: Optional user_id to include in the service token
+        
+    Returns:
+        Dictionary with headers including the Authorization header
+    """
+    headers = {'Content-Type': 'application/json'}
+    
+    # Try to forward the existing Authorization header
+    auth_header = request.headers.get('Authorization') if request else None
+    if auth_header:
+        headers['Authorization'] = auth_header
+        return headers
+        
+    # If no Authorization header is available, create a service token
+    try:
+        token = create_service_token(user_id)
+        headers['Authorization'] = f'Bearer {token}'
+    except Exception as e:
+        logger.error(f"Error creating service token: {str(e)}")
+        # Continue without Authorization header
+        
+    return headers
+
+# Function to create a service-to-service JWT token
+def create_service_token(user_id=None):
+    """
+    Create a service-to-service JWT token
+    
+    Args:
+        user_id: Optional user_id to include in the token for user-scoped operations
+        
+    Returns:
+        JWT token string
+    """
+    if not JWT_SECRET:
+        logger.error("JWT_SECRET environment variable not set")
+        raise ValueError("JWT_SECRET not configured")
+        
+    payload = {
+        'is_service': True,
+        'service_name': 'llm-proxy',
+        'exp': datetime.utcnow() + timedelta(hours=1)  # Token expires in 1 hour
+    }
+    
+    # Include user_id if provided
+    if user_id:
+        payload['user_id'] = user_id
+        
+    # Create the JWT token
+    token = jwt.encode(payload, JWT_SECRET, algorithm='HS256')
+    
+    return token
+
+# Function to get authentication headers for service-to-service calls
+def get_auth_headers(user_id=None):
+    """
+    Get headers with Authorization for service-to-service calls
+    
+    This function:
+    1. Tries to forward the existing Authorization header if available
+    2. Falls back to creating a service token if no Authorization header is available
+    
+    Args:
+        user_id: Optional user_id to include in the service token
+        
+    Returns:
+        Dictionary with headers including the Authorization header
+    """
+    headers = {'Content-Type': 'application/json'}
+    
+    # Try to forward the existing Authorization header
+    auth_header = request.headers.get('Authorization') if request else None
+    if auth_header:
+        headers['Authorization'] = auth_header
+        return headers
+        
+    # If no Authorization header is available, create a service token
+    try:
+        token = create_service_token(user_id)
+        headers['Authorization'] = f'Bearer {token}'
+    except Exception as e:
+        logger.error(f"Error creating service token: {str(e)}")
+        # Continue without Authorization header
+        
+    return headers
 
 # Rate limiting function
 def rate_limit(identifier):
@@ -212,8 +386,8 @@ def validate_llm_input(provider, body):
     if not body:
         return "Missing request body"
         
-    if 'type' not in body or body['type'] not in ["chat", "embeddings", "models"]:
-        return "Invalid type (must be 'chat', 'embeddings', or 'models')"
+    if 'type' not in body or body['type'] not in ["chat", "embeddings", "models", "tokenize"]:
+        return "Invalid type (must be 'chat', 'embeddings', 'models', or 'tokenize')"
         
     if body['type'] == "chat" and 'messages' not in body:
         return "Missing 'messages' for chat request"
@@ -223,6 +397,12 @@ def validate_llm_input(provider, body):
         
     if (body['type'] == "chat" or body['type'] == "embeddings") and 'model' not in body:
         return "Missing 'model' parameter"
+        
+    if body['type'] == "tokenize" and 'text' not in body:
+        return "Missing 'text' for tokenize request"
+        
+    if body['type'] == "tokenize" and 'model' not in body:
+        return "Missing 'model' parameter for tokenize request"
         
     return None
 
@@ -282,6 +462,39 @@ def proxy_llm_request(provider, req_type, body, api_key=None):
                 "input": body.get('input'),
                 **(body.get('options', {}))
             }
+        elif req_type == "tokenize":
+            url += "/tokenize"
+            req_body = {
+                "model": body.get('model'),
+                "text": body.get('text'),
+                **(body.get('options', {}))
+            }
+            # For OpenAI, we'll use their tiktoken library on the proxy side
+            # This is a special case that doesn't actually call the OpenAI API
+            # but uses their tokenizer locally
+            try:
+                import tiktoken
+                encoding = tiktoken.encoding_for_model(body.get('model', 'gpt-4.1'))
+                tokens = encoding.encode(body.get('text', ''))
+                # Return early with the tokenization result
+                return {
+                    "status": 200,
+                    "data": {
+                        "tokens": tokens,
+                        "token_count": len(tokens)
+                    }
+                }
+            except ImportError:
+                logger.warning("tiktoken not installed, falling back to approximate tokenization")
+                # Simple fallback if tiktoken is not available
+                tokens = body.get('text', '').split()
+                return {
+                    "status": 200,
+                    "data": {
+                        "tokens": tokens,
+                        "token_count": len(tokens)
+                    }
+                }
         elif req_type == "models":
             url += "/models"
             method = "GET"
@@ -303,6 +516,17 @@ def proxy_llm_request(provider, req_type, body, api_key=None):
                 "model": body.get('model'),
                 "input": body.get('input'),
                 **(body.get('options', {}))
+            }
+        elif req_type == "tokenize":
+            # For Anthropic, we'll use a simple tokenization approach
+            # as they don't have a public tokenization endpoint
+            tokens = body.get('text', '').split()
+            return {
+                "status": 200,
+                "data": {
+                    "tokens": tokens,
+                    "token_count": len(tokens)
+                }
             }
         elif req_type == "models":
             url += "/models"
@@ -332,6 +556,17 @@ def proxy_llm_request(provider, req_type, body, api_key=None):
                 "content": {"parts": [{"text": body.get('input')}]},
                 **(body.get('options', {}))
             }
+        elif req_type == "tokenize":
+            # For Gemini, we'll use a simple tokenization approach
+            # as they don't have a public tokenization endpoint
+            tokens = body.get('text', '').split()
+            return {
+                "status": 200,
+                "data": {
+                    "tokens": tokens,
+                    "token_count": len(tokens)
+                }
+            }
         elif req_type == "models":
             url += f"/models?key={provider_key}"
             method = "GET"
@@ -351,6 +586,16 @@ def proxy_llm_request(provider, req_type, body, api_key=None):
                 "input": body.get('input'),
                 **(body.get('options', {}))
             }
+        elif req_type == "tokenize":
+            # For LM Studio, we'll use a simple tokenization approach
+            tokens = body.get('text', '').split()
+            return {
+                "status": 200,
+                "data": {
+                    "tokens": tokens,
+                    "token_count": len(tokens)
+                }
+            }
         elif req_type == "models":
             url += "/models"
             method = "GET"
@@ -369,6 +614,16 @@ def proxy_llm_request(provider, req_type, body, api_key=None):
                 "model": body.get('model'),
                 "input": body.get('input'),
                 **(body.get('options', {}))
+            }
+        elif req_type == "tokenize":
+            # For Ollama, we'll use a simple tokenization approach
+            tokens = body.get('text', '').split()
+            return {
+                "status": 200,
+                "data": {
+                    "tokens": tokens,
+                    "token_count": len(tokens)
+                }
             }
         elif req_type == "models":
             url += "/tags"
@@ -396,8 +651,8 @@ def proxy_llm_request(provider, req_type, body, api_key=None):
         logger.error(f"Request error: {str(e)}")
         return {"status": 500, "data": {"error": {"message": str(e)}}}
 
-# Generic proxy request
-def proxy_request(target_url):
+# Generic proxy request for endpoints
+def proxy_endpoint_request(target_url):
     """Proxy a request to a target URL"""
     method = request.method
     headers = {key: value for key, value in request.headers if key.lower() != 'host'}
@@ -620,13 +875,13 @@ def execute():
             'success': False
         })
     finally:
-        # Clean up the temporary files
-        if os.path.exists(tool_code_path):
-            os.remove(tool_code_path)
-        if os.path.exists(wrapper_code_path):
-            os.remove(wrapper_code_path)
+        # Clean up the temporary directory and all its contents
+        import shutil
         if os.path.exists(temp_dir):
-            os.rmdir(temp_dir)
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception as e:
+                logger.error(f"Error cleaning up temporary directory: {str(e)}")
 
 @app.route('/llm', methods=['POST'])
 @jwt_required
@@ -661,37 +916,31 @@ def llm_proxy():
         return jsonify({'error': validation_error}), 400
     
     # Get API key priority:
-    # 1. From request body (if provided, for testing only)
-    # 2. From Supabase based on user_id (if available, recommended for production)
+    # 1. From Supabase based on user_id
     api_key = None
-    
-    # 1. Check if API key is provided in the request (for testing only)
-    if 'api_key' in body:
-        api_key = body['api_key']
-        # Remove api_key from the body that will be forwarded
-        rest_body = {k: v for k, v in rest_body.items() if k != 'api_key'}
-        logger.debug(f"Using API key provided in request for provider {provider}")
-    
-    # 2. If no API key in request and we have a user_id, try to fetch from Supabase
-    elif user_id:
-        logger.info(f"Fetching API key from Supabase for user {user_id} and provider {provider}")
-        api_key = get_api_key_from_supabase(user_id, provider)
-        if api_key:
-            logger.info(f"Successfully retrieved API key from Supabase for user {user_id} and provider {provider}")
-        else:
-            logger.warning(f"No API key found in Supabase for user {user_id} and provider {provider}")
     
     # For local providers (ollama, lmstudio), no API key is needed
     if provider in ["ollama", "lmstudio"]:
         logger.debug(f"No API key needed for local provider {provider}")
     elif not api_key and not PROVIDER_CONFIG[provider]['key']:
-        logger.warning(f"No API key available for provider {provider}")
-        # Only return an error if the provider requires an API key
-        if provider not in ["ollama", "lmstudio"]:
+        if user_id:
+            logger.info(f"Fetching API key from Supabase for user {user_id} and provider {provider}")
+            api_key = get_api_key_from_supabase(user_id, provider)
+            if api_key:
+                logger.info(f"Successfully retrieved API key from Supabase for user {user_id} and provider {provider}")
+            else:
+                logger.warning(f"No API key found in Supabase for user {user_id} and provider {provider}")
+        else:
+            logger.warning("No user_id found in request, cannot fetch API key from Supabase")
             return jsonify({
-                'error': f'No API key available for {provider}',
-                'message': 'Please add your API key in Supabase or provide it in the request for testing'
+                'error': f'user_id required but not found in request',
+                'message': 'Please provide a user_id in the request for testing'
             }), 400
+        logger.warning(f"No API key returned for provider {provider}")
+        return jsonify({
+            'error': f'No API key returned for {provider}',
+            'message': 'Please verify your API key is set for the provider'
+        }), 400
     
     try:
         # Proxy the request to the appropriate provider
@@ -717,58 +966,65 @@ def llm_proxy():
             'model': rest_body.get('model')
         }), 500
 
-
-
-def proxy_request(target_url):
-    """Proxy a request to a target URL"""
-    method = request.method
-    headers = {key: value for key, value in request.headers if key.lower() != 'host'}
-    data = request.get_data()
-    
-    logger.debug(f"Proxying {method} request to {target_url}")
-    
-    try:
-        resp = requests.request(
-            method,
-            target_url,
-            headers=headers,
-            data=data,
-            stream=True,
-            timeout=30
-        )
-        
-        excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
-        headers = [(name, value) for (name, value) in resp.raw.headers.items()
-                  if name.lower() not in excluded_headers]
-        
-        return Response(resp.content, resp.status_code, headers)
-    except requests.RequestException as e:
-        logger.error(f"Proxy error: {str(e)}")
-        return jsonify({
-            'error': f"Failed to proxy request: {str(e)}",
-            'status': 'error'
-        }), 502
-
 @app.route('/ollama/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 @jwt_required
 def proxy_ollama(path):
     """Proxy requests to Ollama"""
     base = OLLAMA_BASE_URL or f'http://localhost:{OLLAMA_PORT}'
-    return proxy_request(f'{base}/{path}')
+    return proxy_endpoint_request(f'{base}/{path}')
 
 @app.route('/lmstudio/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 @jwt_required
 def proxy_lmstudio(path):
     """Proxy requests to LM Studio"""
     base = LMSTUDIO_BASE_URL or f'http://localhost:{LMSTUDIO_PORT}'
-    return proxy_request(f'{base}/{path}')
+    return proxy_endpoint_request(f'{base}/{path}')
 
 @app.route('/v1/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 @jwt_required
 def proxy_v1(path):
     """Proxy requests to OpenAI-compatible endpoints (LM Studio)"""
     base = LMSTUDIO_BASE_URL or f'http://localhost:{LMSTUDIO_PORT}'
-    return proxy_request(f'{base}/v1/{path}')
+    return proxy_endpoint_request(f'{base}/v1/{path}')
+
+# Function to call the Data Store API
+def call_data_store_api(endpoint, method='GET', data=None, user_id=None):
+    """
+    Call the Data Store API with proper authentication
+    
+    Args:
+        endpoint: API endpoint path (without leading slash)
+        method: HTTP method (GET, POST, PUT, DELETE)
+        data: Optional data to send in the request body
+        user_id: Optional user_id for authentication
+        
+    Returns:
+        Response object or None if failed
+    """
+    try:
+        # Get authentication headers
+        headers = get_auth_headers(user_id)
+        
+        # Build the URL
+        url = f"{DATA_STORE_URL}/api/data-store/{endpoint}"
+        
+        # Send the request
+        if method == 'GET':
+            response = requests.get(url, headers=headers)
+        elif method == 'POST':
+            response = requests.post(url, json=data, headers=headers)
+        elif method == 'PUT':
+            response = requests.put(url, json=data, headers=headers)
+        elif method == 'DELETE':
+            response = requests.delete(url, headers=headers)
+        else:
+            logger.error(f"Unsupported HTTP method: {method}")
+            return None
+            
+        return response
+    except Exception as e:
+        logger.error(f"Error calling Data Store API: {str(e)}")
+        return None
 
 def parse_arguments():
     """Parse command line arguments"""

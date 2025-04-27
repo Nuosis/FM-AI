@@ -25,7 +25,6 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
 import { createLog, LogType } from '../../redux/slices/appSlice';
@@ -57,13 +56,10 @@ const KnowledgeList = () => {
   const dataStores = useSelector(selectDataStores);
   
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [newKnowledge, setNewKnowledge] = useState({
-    name: '',
     store_id: ''
   });
-  const [editingKnowledge, setEditingKnowledge] = useState(null);
   const [knowledgeToDelete, setKnowledgeToDelete] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
 
@@ -80,51 +76,37 @@ const KnowledgeList = () => {
 
   // Handle creating a new knowledge
   const handleCreateKnowledge = async () => {
-    if (!newKnowledge.name || !newKnowledge.store_id) {
-      dispatch(createLog('Knowledge name and data store are required', LogType.ERROR));
+    if (!newKnowledge.store_id) {
+      dispatch(createLog('Data store is required', LogType.ERROR));
       return;
     }
 
     try {
+      // Find the data store to get its name
+      const dataStore = dataStores.find(ds => ds.store_id === newKnowledge.store_id);
+      if (!dataStore) {
+        dispatch(createLog('Selected data store not found', LogType.ERROR));
+        return;
+      }
+
       await dispatch(createKnowledge({
         knowledge_id: `k_${Date.now()}`,
-        name: newKnowledge.name,
+        name: dataStore.name, // Use the data store name
         store_id: newKnowledge.store_id,
         sources: []
       })).unwrap();
 
       setCreateDialogOpen(false);
       setNewKnowledge({
-        name: '',
         store_id: ''
       });
       
-      dispatch(createLog(`Knowledge "${newKnowledge.name}" created successfully`, LogType.INFO));
+      dispatch(createLog(`Knowledge "${dataStore.name}" created successfully`, LogType.INFO));
     } catch (error) {
       dispatch(createLog(`Failed to create knowledge: ${error.message}`, LogType.ERROR));
     }
   };
 
-  // Handle updating a knowledge
-  const handleUpdateKnowledge = async () => {
-    if (!editingKnowledge.name) {
-      dispatch(createLog('Knowledge name is required', LogType.ERROR));
-      return;
-    }
-
-    try {
-      await dispatch(updateKnowledge({
-        ...editingKnowledge
-      })).unwrap();
-
-      setEditDialogOpen(false);
-      setEditingKnowledge(null);
-      
-      dispatch(createLog(`Knowledge "${editingKnowledge.name}" updated successfully`, LogType.INFO));
-    } catch (error) {
-      dispatch(createLog(`Failed to update knowledge: ${error.message}`, LogType.ERROR));
-    }
-  };
 
   // Handle deleting a knowledge
   const handleDeleteKnowledge = async () => {
@@ -147,11 +129,6 @@ const KnowledgeList = () => {
     dispatch(setActiveKnowledge(knowledge.knowledge_id));
   };
 
-  // Open edit dialog
-  const openEditDialog = (knowledge) => {
-    setEditingKnowledge({ ...knowledge });
-    setEditDialogOpen(true);
-  };
 
   // Open delete dialog
   const openDeleteDialog = (knowledge) => {
@@ -186,9 +163,9 @@ const KnowledgeList = () => {
       )}
 
       {/* Main Content */}
-      <Box sx={{ display: 'flex', flexGrow: 1 }}>
+      <Box sx={{ display: 'flex', flexGrow: 1, height: 'calc(100vh - 200px)' }}>
         {/* Knowledge List */}
-        <Paper sx={{ p: 2, width: 300, mr: 2, overflow: 'auto' }}>
+        <Paper sx={{ p: 2, width: 300, mr: 2, overflow: 'auto', height: '100%' }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="subtitle1">
               Knowledge Entities
@@ -231,11 +208,6 @@ const KnowledgeList = () => {
                       }
                     />
                     <ListItemSecondaryAction>
-                      <Tooltip title="Edit">
-                        <IconButton edge="end" onClick={() => openEditDialog(knowledge)} sx={{ mr: 1 }}>
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
                       <Tooltip title="Delete">
                         <IconButton
                           edge="end"
@@ -255,10 +227,21 @@ const KnowledgeList = () => {
         </Paper>
 
         {/* Knowledge Detail */}
-        <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
+        <Box sx={{ flexGrow: 1, overflow: 'auto', height: '100%' }}>
           {activeKnowledge ? (
             <Box>
-              <Tabs value={activeTab} onChange={handleTabChange} sx={{ mb: 2 }}>
+              <Tabs
+                value={activeTab}
+                onChange={handleTabChange}
+                sx={{
+                  mb: 2,
+                  '& .MuiTab-root': {
+                    '&:focus': {
+                      outline: 'none'
+                    }
+                  }
+                }}
+              >
                 <Tab label="Sources" />
                 <Tab label="Chat" />
               </Tabs>
@@ -300,13 +283,9 @@ const KnowledgeList = () => {
       >
         <DialogTitle>Create Knowledge</DialogTitle>
         <DialogContent>
-          <TextField
-            fullWidth
-            label="Name"
-            value={newKnowledge.name}
-            onChange={(e) => setNewKnowledge({ ...newKnowledge, name: e.target.value })}
-            margin="normal"
-          />
+          <Typography variant="body2" color="text.secondary" paragraph sx={{ mt: 2 }}>
+            Select a data store. The Knowledge entity will use the data store's name.
+          </Typography>
           <DataStoreSelector
             value={newKnowledge.store_id}
             onChange={(storeId) => setNewKnowledge({ ...newKnowledge, store_id: storeId })}
@@ -320,49 +299,13 @@ const KnowledgeList = () => {
             onClick={handleCreateKnowledge}
             variant="contained"
             startIcon={<SaveIcon />}
-            disabled={!newKnowledge.name || !newKnowledge.store_id}
+            disabled={!newKnowledge.store_id}
           >
             Create
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Edit Knowledge Dialog */}
-      <Dialog
-        open={editDialogOpen}
-        onClose={() => setEditDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Edit Knowledge</DialogTitle>
-        <DialogContent>
-          {editingKnowledge && (
-            <TextField
-              fullWidth
-              label="Name"
-              value={editingKnowledge.name}
-              onChange={(e) => setEditingKnowledge({ ...editingKnowledge, name: e.target.value })}
-              margin="normal"
-            />
-          )}
-          <Alert severity="info" sx={{ mt: 2 }}>
-            The data store cannot be changed after creation.
-          </Alert>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditDialogOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleUpdateKnowledge}
-            variant="contained"
-            startIcon={<SaveIcon />}
-            disabled={!editingKnowledge?.name}
-          >
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Delete Knowledge Dialog */}
       <Dialog

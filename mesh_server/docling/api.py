@@ -22,6 +22,7 @@ from werkzeug.utils import secure_filename
 from docling.document_converter import DocumentConverter
 from docling.chunking import HybridChunker
 from utils.sitemap import get_sitemap_urls
+from utils.auth import get_auth_headers, forward_auth_header
 
 # Configure logging
 logging.basicConfig(
@@ -36,14 +37,16 @@ docling_api = Blueprint('docling_api', __name__)
 # Initialize the document converter
 converter = DocumentConverter()
 
-# Configuration for LLM proxy
+# Configuration for services
 LLM_PROXY_URL = os.environ.get('LLM_PROXY_URL', 'http://proxy:3500')
+DATA_STORE_URL = os.environ.get('DATA_STORE_URL', 'http://data-store:3550')
 
 # Custom tokenizer that uses the local-llm-proxy
 class ProxyTokenizer:
-    def __init__(self, max_length=8191, user_id=None):
+    def __init__(self, max_length=8191, user_id=None, model="gpt-4.1"):
         self.max_length = max_length
         self.user_id = user_id
+        self.model = model
         
     def tokenize(self, text):
         try:
@@ -51,7 +54,9 @@ class ProxyTokenizer:
             payload = {
                 "provider": "openai",
                 "type": "tokenize",
-                "text": text
+                "model": self.model,
+                "text": text,
+                "user_id": self.user_id
             }
             
             # Add user_id if available
@@ -59,9 +64,13 @@ class ProxyTokenizer:
                 payload["user_id"] = self.user_id
                 
             # Use the local-llm-proxy to tokenize the text
+            # Forward the Authorization header if available
+            headers = get_auth_headers(self.user_id)
+            
             response = requests.post(
                 f"{LLM_PROXY_URL}/llm",
-                json=payload
+                json=payload,
+                headers=headers
             )
             
             if response.status_code == 200:
@@ -81,9 +90,9 @@ default_tokenizer = ProxyTokenizer()
 MAX_TOKENS = 8191  # text-embedding-3-large's maximum context length
 
 # Function to get a tokenizer for a specific user
-def get_tokenizer(user_id=None):
+def get_tokenizer(user_id=None, model="gpt-4.1"):
     if user_id:
-        return ProxyTokenizer(user_id=user_id)
+        return ProxyTokenizer(user_id=user_id, model=model)
     return default_tokenizer
 
 # Function to get a chunker for a specific user
@@ -113,7 +122,9 @@ def test_connection():
         # Test the proxy connection
         proxy_status = "unknown"
         try:
-            response = requests.get(f"{LLM_PROXY_URL}/health")
+            # Forward the Authorization header if available
+            headers = forward_auth_header()
+            response = requests.get(f"{LLM_PROXY_URL}/health", headers=headers)
             if response.status_code == 200:
                 proxy_status = "connected"
             else:
@@ -450,6 +461,86 @@ def cleanup_temp_files(file_id):
     except Exception as e:
         logger.error(f"Error cleaning up temporary files: {str(e)}")
         return jsonify({"error": f"Error cleaning up temporary files: {str(e)}"}), 500
+
+# Function to store embeddings in the data store
+def store_embedding_in_data_store(embedding, metadata, user_id=None):
+    """
+    Store an embedding in the data store
+    
+    Args:
+        embedding: The embedding vector
+        metadata: Metadata for the embedding
+        user_id: Optional user ID for authentication
+        
+    Returns:
+        The stored record or None if failed
+    """
+    try:
+        # Get authentication headers
+        headers = get_auth_headers(user_id)
+        
+        # Prepare the payload
+        payload = {
+            "embedding": embedding,
+            "metadata": metadata
+        }
+        
+        # Send the request to the data store
+        response = requests.post(
+            f"{DATA_STORE_URL}/api/data-store/records",
+            json=payload,
+            headers=headers
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.error(f"Error storing embedding: {response.status_code} {response.text}")
+            return None
+    except Exception as e:
+        logger.error(f"Error storing embedding: {str(e)}")
+        return None
+
+# Function to search embeddings in the data store
+def search_embeddings_in_data_store(query_embedding, metadata_filter=None, limit=10, user_id=None):
+    """
+    Search for embeddings in the data store
+    
+    Args:
+        query_embedding: The query embedding vector
+        metadata_filter: Optional metadata filter
+        limit: Maximum number of results to return
+        user_id: Optional user ID for authentication
+        
+    Returns:
+        List of matching records or empty list if failed
+    """
+    try:
+        # Get authentication headers
+        headers = get_auth_headers(user_id)
+        
+        # Prepare the payload
+        payload = {
+            "embedding": query_embedding,
+            "metadata": metadata_filter or {},
+            "limit": limit
+        }
+        
+        # Send the request to the data store
+        response = requests.post(
+            f"{DATA_STORE_URL}/api/data-store/search",
+            json=payload,
+            headers=headers
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.error(f"Error searching embeddings: {response.status_code} {response.text}")
+            return []
+    except Exception as e:
+        logger.error(f"Error searching embeddings: {str(e)}")
+        return []
 
 # Create a Flask app for standalone usage
 app = Flask(__name__)

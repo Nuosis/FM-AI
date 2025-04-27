@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Snackbar, CircularProgress } from '@mui/material';
 import ProgressText from './ProgressText';
-import supabase from '../../utils/supabase';
 import { createLog, LogType } from '../../redux/slices/appSlice';
+import llmService from '../../services/llmService';
 import {
   setTemperature,
   setSystemInstructions,
@@ -117,13 +117,6 @@ const LLMChat = () => {
       let assistantMessage = { role: 'assistant', content: <ProgressText text="Thinking..." /> };
       setMessages(prev => [...prev, assistantMessage]);
 
-      // Get auth token for the edge function
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        throw new Error('Authentication required');
-      }
-
       // Create a clean messages array without React components and avoiding duplicates
       // Only include messages up to the point before adding the new message and assistant placeholder
       const previousMessages = messages.slice(0, messages.length - 1);
@@ -131,66 +124,41 @@ const LLMChat = () => {
       // Log the payload for debugging
       console.log('Chat payload:', {
         provider: activeProvider,
-        type: 'chat',
         model: activeModel,
         messagesCount: previousMessages.length + 2, // system + user message
         newMessage
       });
 
-      // Call the Supabase Edge Function using Redux state
-      const { data, error: functionError } = await supabase.functions.invoke('llmProxyHandler', {
-        body: {
-          provider: activeProvider.toLowerCase(),
-          type: 'chat',
-          model: activeModel,
-          baseUrl: llmPreferences.baseUrl || null,
-          messages: [
-            { role: 'system', content: llmPreferences.systemInstructions || llmSettings.systemInstructions },
-            ...previousMessages.map(msg => ({
-              role: msg.role,
-              content: typeof msg.content === 'string' ? msg.content : 'Thinking...'
-            })),
-            { role: newMessage.role, content: newMessage.content }
-          ],
-          options: {
-            temperature: llmPreferences.temperature || llmSettings.temperature,
-            max_tokens: 500,
-            stream: false
-          }
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
-        }
-      });
+      // Prepare the complete messages array with system instructions
+      const completeMessages = [
+        { role: 'system', content: llmPreferences.systemInstructions || llmSettings.systemInstructions },
+        ...previousMessages.map(msg => ({
+          role: msg.role,
+          content: typeof msg.content === 'string' ? msg.content : 'Thinking...'
+        })),
+        { role: newMessage.role, content: newMessage.content }
+      ];
 
-      if (functionError) {
-        console.error('Edge function error:', functionError);
-        
-        // Extract detailed error information if available
-        const errorDetails = functionError.details ?
-          JSON.stringify(functionError.details, null, 2) : '';
-        
-        // Log more detailed error information
-        console.error('Error details:', {
-          message: functionError.message,
-          details: functionError.details,
-          provider: activeProvider,
-          model: activeModel
-        });
-        
-        throw new Error(
-          `${functionError.message || 'Failed to get response from edge function'}\n` +
-          `Provider: ${activeProvider}, Model: ${activeModel}\n` +
-          (errorDetails ? `Details: ${errorDetails}` : '')
-        );
-      }
+      // Set options for the chat request
+      const options = {
+        temperature: llmPreferences.temperature || llmSettings.temperature,
+        max_tokens: 500,
+        stream: false,
+        baseUrl: llmPreferences.baseUrl || null
+      };
 
-      // Parse the response if it's a string
-      const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
-      
+      // Use llmService to send the chat request
+      const response = await llmService.chat(
+        activeProvider,
+        activeModel,
+        completeMessages,
+        options
+      );
+
+      // Update the messages with the response
       setMessages(prev => [...prev.slice(0, -1), {
         role: 'assistant',
-        content: parsedData.content || 'No response received'
+        content: response.content || 'No response received'
       }]);
 
     } catch (err) {

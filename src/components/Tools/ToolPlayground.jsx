@@ -63,7 +63,11 @@ const ToolPlayground = ({ tool = null }) => {
       // Check if response is ok and the text is exactly 'ok'
       if (response.ok) {
         const responseText = await response.text();
-        if (responseText === 'ok') {
+        // Parse the JSON string to an object
+        const responseObj = JSON.parse(responseText);
+        const status = responseObj.status;
+        console.log(status);
+        if (status === 'healthy') {
           console.log('[ToolPlayground] Proxy server health check successful');
           setProxyStatus({
             checking: false,

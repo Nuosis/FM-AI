@@ -6,6 +6,7 @@ This module provides API endpoints for the Data Store service:
 - Configuration endpoints for setting the data source
 - CRUD endpoints for vector records
 - Search endpoints for vector similarity search
+- JWT authentication for secure access
 """
 
 import os
@@ -13,6 +14,9 @@ import json
 import logging
 from typing import Dict, List, Any, Optional
 from flask import Blueprint, request, jsonify
+
+# Import JWT authentication middleware
+from auth import jwt_required
 
 # Use absolute import
 from factory import create_data_store, create_data_store_from_url
@@ -39,6 +43,7 @@ current_data_store_config = {
 current_data_store = None
 
 @data_store_api.route('/config', methods=['GET'])
+@jwt_required
 def get_config():
     """Get the current data store configuration"""
     # Remove sensitive information from the response
@@ -48,9 +53,15 @@ def get_config():
         'tableName': current_data_store_config['tableName'],
         'isConnected': current_data_store is not None
     }
+    
+    # Add user information if available
+    if hasattr(request, 'user_id'):
+        config['user_id'] = request.user_id
+        
     return jsonify(config)
 
 @data_store_api.route('/config', methods=['POST'])
+@jwt_required
 def set_config():
     """Set the data store configuration"""
     try:
@@ -95,6 +106,7 @@ def set_config():
         return jsonify({'error': f'Error setting data store configuration: {str(e)}'}), 500
 
 @data_store_api.route('/records', methods=['POST'])
+@jwt_required
 def create_record():
     """Create a new vector record"""
     try:
@@ -110,6 +122,10 @@ def create_record():
         
         if not embedding:
             return jsonify({'error': 'Embedding is required'}), 400
+        
+        # Add user_id to metadata if available
+        if hasattr(request, 'user_id'):
+            metadata['user_id'] = request.user_id
             
         record = current_data_store.create_record(embedding, metadata)
         
@@ -122,6 +138,7 @@ def create_record():
         return jsonify({'error': f'Error creating record: {str(e)}'}), 500
 
 @data_store_api.route('/records/<record_id>', methods=['GET'])
+@jwt_required
 def read_record(record_id):
     """Read a vector record by ID"""
     try:
@@ -139,6 +156,7 @@ def read_record(record_id):
         return jsonify({'error': f'Error reading record: {str(e)}'}), 500
 
 @data_store_api.route('/records/<record_id>', methods=['PUT', 'PATCH'])
+@jwt_required
 def update_record(record_id):
     """Update an existing vector record"""
     try:
@@ -166,6 +184,7 @@ def update_record(record_id):
         return jsonify({'error': f'Error updating record: {str(e)}'}), 500
 
 @data_store_api.route('/records/<record_id>', methods=['DELETE'])
+@jwt_required
 def delete_record(record_id):
     """Delete a vector record"""
     try:
@@ -183,6 +202,7 @@ def delete_record(record_id):
         return jsonify({'error': f'Error deleting record: {str(e)}'}), 500
 
 @data_store_api.route('/search', methods=['POST'])
+@jwt_required
 def search_records():
     """Search for vector records by similarity and/or metadata"""
     try:
@@ -194,11 +214,15 @@ def search_records():
             return jsonify({'error': 'No JSON data provided'}), 400
             
         query_embedding = data.get('embedding')
-        metadata_filter = data.get('metadata')
+        metadata_filter = data.get('metadata', {})
         limit = data.get('limit', 10)
         
         if not query_embedding and not metadata_filter:
             return jsonify({'error': 'Embedding or metadata filter is required'}), 400
+        
+        # Add user_id to metadata filter if available
+        if hasattr(request, 'user_id') and not request.is_service:
+            metadata_filter['user_id'] = request.user_id
             
         records = current_data_store.search_records(query_embedding, metadata_filter, limit)
         

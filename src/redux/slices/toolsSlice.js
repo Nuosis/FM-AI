@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import supabaseService from '../../services/supabaseService';
+import toolService from '../../services/toolService';
 
 /**
  * Supabase realtime subscription for functions table
@@ -35,211 +36,115 @@ export const subscribeToTools = () => (dispatch) => {
   };
 };
 
+/**
+ * Delete a tool by ID
+ */
 export const deleteTool = createAsyncThunk(
   'tools/deleteTool',
   async (id, { rejectWithValue, dispatch }) => {
     try {
-      const response = await supabaseService.executeQuery(supabase =>
-        supabase
-          .from('functions')
-          .delete()
-          .eq('id', id)
-      );
+      console.log('Deleting tool with ID:', id);
+      
+      // Use the toolService to delete the tool
+      const response = await toolService.deleteTool(id);
       
       console.log('Delete tool response:', response);
       
       // Still need to dispatch the action to update the state
       dispatch(removeToolById(id));
       
-      // Just return the entire response
       return response;
     } catch (error) {
-      console.error('Delete tool error:', {
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message
-      });
-      return rejectWithValue(error.response?.data || 'Failed to delete tool');
+      console.error('Delete tool error:', error);
+      return rejectWithValue(error.message || 'Failed to delete tool');
     }
   }
 );
 
+/**
+ * Fetch all tools
+ */
 export const fetchTools = createAsyncThunk(
   'tools/fetchTools',
   async (_, { rejectWithValue }) => {
     try {
       console.log('Fetching tools...');
-      const response = await supabaseService.executeQuery(supabase =>
-        supabase
-          .from('functions')
-          .select('*')
-      );
-
-      console.log('Full Supabase response:', response);
       
-      // Just return the entire response
-      return response;
+      // Use the toolService to get all tools
+      const tools = await toolService.getTools();
+      
+      console.log('Fetched tools:', tools);
+      
+      return tools;
     } catch (error) {
-      console.error('Tools API error:', {
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message
-      });
-      return rejectWithValue(error.response?.data || 'Failed to fetch tools');
+      console.error('Tools API error:', error);
+      return rejectWithValue(error.message || 'Failed to fetch tools');
     }
   }
 );
 
+/**
+ * Save a new tool
+ */
 export const saveTool = createAsyncThunk(
   'tools/saveTool',
   async (toolData, { rejectWithValue }) => {
     try {
       console.log('Saving tool with data:', toolData);
-      const response = await supabaseService.executeQuery(supabase =>
-        supabase
-          .from('functions')
-          .insert([toolData])
-          .select()
-      );
       
-      console.log('Full Supabase response:', response);
+      // Use the toolService to create the tool
+      const response = await toolService.createTool(toolData);
       
-      // Just return the entire response
-      return response;
+      console.log('Save tool response:', response);
+      
+      return { data: [response] }; // Match the expected response format
     } catch (error) {
-      console.error('Save tool error:', {
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message
-      });
-      return rejectWithValue(error.response?.data || 'Failed to save tool');
+      console.error('Save tool error:', error);
+      return rejectWithValue(error.message || 'Failed to save tool');
     }
   }
 );
 
+/**
+ * Update an existing tool
+ */
 export const updateToolAsync = createAsyncThunk(
   'tools/updateToolAsync',
   async (toolData, { rejectWithValue, dispatch }) => {
     try {
       console.log('Updating tool with data:', toolData);
-      const response = await supabaseService.executeQuery(supabase =>
-        supabase
-          .from('functions')
-          .update(toolData)
-          .eq('id', toolData.id)
-          .select()
-      );
+      
+      // Use the toolService to update the tool
+      const response = await toolService.updateTool(toolData.id, toolData);
       
       console.log('Update tool response:', response);
       
       // Dispatch the action to update the state
-      if (response.data && response.data.length > 0) {
-        dispatch({ type: 'tools/updateTool', payload: response.data[0] });
-      }
+      dispatch({ type: 'tools/updateTool', payload: response });
       
-      // Return the entire response
-      return response;
+      return { data: [response] }; // Match the expected response format
     } catch (error) {
-      console.error('Update tool error:', {
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message
-      });
-      return rejectWithValue(error.response?.data || 'Failed to update tool');
+      console.error('Update tool error:', error);
+      return rejectWithValue(error.message || 'Failed to update tool');
     }
   }
 );
 
+/**
+ * Execute a tool with the given input
+ */
 export const executeToolCode = createAsyncThunk(
   'tools/executeToolCode',
   async ({ id, input }, { rejectWithValue }) => {
     try {
       console.log('Executing tool with ID:', id, 'and input:', input);
       
-      // First, fetch the tool code from the database
-      console.log('Fetching tool code from database for ID:', id);
-      let toolData;
-      try {
-        toolData = await supabaseService.executeQuery(supabase =>
-          supabase
-            .from('functions')
-            .select('*')  // Select all fields to see what's available
-            .eq('id', id)
-            .single()
-        );
-        
-        console.log('Tool data fetched successfully:', toolData);
-      } catch (dbError) {
-        console.error('Database error when fetching tool:', dbError);
-        throw new Error(`Failed to fetch tool code: ${dbError.message}`);
-      }
+      // Use the toolService to execute the tool
+      const result = await toolService.executeTool(id, input);
       
-      if (!toolData) {
-        console.error('No tool found with ID:', id);
-        throw new Error(`Tool not found with ID: ${id}`);
-      }
+      console.log('Execution result:', result);
       
-      if (!toolData.code) {
-        console.error('Tool has no code field:', toolData);
-        throw new Error('Tool exists but has no code field');
-      }
-      
-      // Clean up the code by removing @tool() decorator if present
-      let cleanCode = toolData.code;
-      if (cleanCode.includes('@tool()')) {
-        console.log('Removing @tool() decorator from code');
-        cleanCode = cleanCode.replace(/@tool\(\)\s*\n/g, '');
-      }
-      
-      console.log('Tool code fetched successfully');
-      
-      // Check if the local proxy server is running
-      try {
-        // Try to connect to the proxy server health endpoint
-        const healthResponse = await fetch('http://localhost:3500/health', { method: 'GET' });
-        
-        // Check if response is ok and the text is exactly 'ok'
-        if (healthResponse.ok) {
-          const responseText = await healthResponse.text();
-          if (responseText === 'ok') {
-            console.log('Proxy server health check successful, executing code');
-            
-            // Execute the code using the proxy server's /execute endpoint
-            const executeResponse = await fetch('http://localhost:3500/execute', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                code: cleanCode,
-                input: input
-              })
-            });
-            
-            if (!executeResponse.ok) {
-              throw new Error(`Execution failed with status: ${executeResponse.status}`);
-            }
-            
-            const result = await executeResponse.json();
-            console.log('Execution result:', result);
-            
-            return result;
-          } else {
-            throw new Error(`Proxy server health check failed: unexpected response "${responseText}"`);
-          }
-        } else {
-          throw new Error(`Proxy server health check failed with status: ${healthResponse.status}`);
-        }
-      } catch (proxyError) {
-        console.error('Proxy server error:', proxyError);
-        
-        // Return an error indicating the proxy server is not running
-        return {
-          success: false,
-          output: "",
-          error: "Local proxy server is not running. Please deploy the server to execute Python code."
-        };
-      }
+      return result;
     } catch (error) {
       console.error('Execute tool error:', error);
       return rejectWithValue(error.message || 'Failed to execute tool');
@@ -291,8 +196,6 @@ const toolsSlice = createSlice({
         state.isLoading = false;
         console.log('fetchTools.fulfilled payload:', action.payload);
         
-        // The supabaseService.executeQuery returns the data directly, not a response object with a data property
-        // So action.payload is already the array of tools
         if (Array.isArray(action.payload)) {
           state.items = action.payload;
           console.log('Setting tools.items to array of length:', action.payload.length);

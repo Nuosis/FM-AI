@@ -25,6 +25,16 @@ export const fetchKnowledge = createAsyncThunk(
           .single()
       );
       
+      // Ensure preference_value is properly parsed if it's a string
+      if (response && typeof response.preference_value === 'string') {
+        try {
+          response.preference_value = JSON.parse(response.preference_value);
+        } catch (parseError) {
+          console.error('Error parsing preference_value:', parseError);
+          // If parsing fails, use the original value
+        }
+      }
+      
       return response;
     } catch (error) {
       console.error('Knowledge API error:', {
@@ -56,7 +66,9 @@ export const createKnowledge = createAsyncThunk(
       }
       
       // Add the new knowledge to the list
-      const updatedKnowledge = [...currentKnowledge, knowledgeData];
+      // Ensure currentKnowledge is an array
+      const knowledgeArray = Array.isArray(currentKnowledge) ? currentKnowledge : [];
+      const updatedKnowledge = [...knowledgeArray, knowledgeData];
       
       // Save to Supabase
       await supabaseService.executeQuery(supabase =>
@@ -110,7 +122,9 @@ export const updateKnowledge = createAsyncThunk(
       }
       
       // Update the knowledge in the list
-      const updatedKnowledge = [...currentKnowledge];
+      // Ensure currentKnowledge is an array
+      const knowledgeArray = Array.isArray(currentKnowledge) ? currentKnowledge : [];
+      const updatedKnowledge = [...knowledgeArray];
       updatedKnowledge[index] = knowledgeData;
       
       // Save to Supabase
@@ -170,7 +184,9 @@ export const deleteKnowledge = createAsyncThunk(
       }
       
       // Remove the knowledge from the list
-      const updatedKnowledge = currentKnowledge.filter(k => k.knowledge_id !== knowledgeId);
+      // Ensure currentKnowledge is an array
+      const knowledgeArray = Array.isArray(currentKnowledge) ? currentKnowledge : [];
+      const updatedKnowledge = knowledgeArray.filter(k => k.knowledge_id !== knowledgeId);
       
       // Save to Supabase
       await supabaseService.executeQuery(supabase =>
@@ -234,7 +250,9 @@ export const addSource = createAsyncThunk(
       }
       
       // Add the source to the knowledge
-      const updatedKnowledge = [...currentKnowledge];
+      // Ensure currentKnowledge is an array
+      const knowledgeArray = Array.isArray(currentKnowledge) ? currentKnowledge : [];
+      const updatedKnowledge = [...knowledgeArray];
       if (!updatedKnowledge[index].sources) {
         updatedKnowledge[index].sources = [];
       }
@@ -297,7 +315,9 @@ export const deleteSource = createAsyncThunk(
       }
       
       // Remove the source from the knowledge
-      const updatedKnowledge = [...currentKnowledge];
+      // Ensure currentKnowledge is an array
+      const knowledgeArray = Array.isArray(currentKnowledge) ? currentKnowledge : [];
+      const updatedKnowledge = [...knowledgeArray];
       updatedKnowledge[index].sources = updatedKnowledge[index].sources.filter(s => s.source_id !== sourceId);
       
       // Save to Supabase
@@ -360,7 +380,14 @@ const knowledgeSlice = createSlice({
       .addCase(fetchKnowledge.fulfilled, (state, action) => {
         state.isLoading = false;
         if (action.payload && action.payload.preference_value) {
-          state.items = action.payload.preference_value;
+          // Ensure preference_value is an array
+          if (Array.isArray(action.payload.preference_value)) {
+            state.items = action.payload.preference_value;
+          } else {
+            // If it's not an array (e.g., it's a string that couldn't be parsed), use empty array
+            console.error('preference_value is not an array:', action.payload.preference_value);
+            state.items = [];
+          }
         } else {
           state.items = [];
         }

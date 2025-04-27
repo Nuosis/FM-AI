@@ -108,8 +108,8 @@ const KnowledgeChat = ({ knowledge, onError }) => {
   };
 
   return (
-    <Box>
-      <Paper sx={{ p: 2, mb: 2 }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Paper sx={{ p: 2, mb: 2, flexGrow: 1, overflow: 'auto' }}>
         <Typography variant="h6" gutterBottom>
           Query Knowledge: {knowledge.name}
         </Typography>

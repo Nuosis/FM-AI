@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import fetchWithAuth from '../../utils/fetchWithAuth';
 import { useDispatch, useSelector } from 'react-redux';
 import PropTypes from 'prop-types';
 import {
@@ -61,7 +62,7 @@ const KnowledgeDetail = ({ knowledge, onSuccess, onError }) => {
 
       // Delete vector records from data store
       try {
-        await fetch(`/data_store/records?store_id=${knowledge.store_id}&source_id=${sourceToDelete.source_id}`, {
+        await fetchWithAuth(`/data_store/records?store_id=${knowledge.store_id}&source_id=${sourceToDelete.source_id}`, {
           method: 'DELETE'
         });
       } catch (deleteError) {
@@ -118,8 +119,8 @@ const KnowledgeDetail = ({ knowledge, onSuccess, onError }) => {
   };
 
   return (
-    <Box>
-      <Paper sx={{ p: 2, mb: 2 }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Paper sx={{ p: 2, mb: 2, flexGrow: 1, overflow: 'auto' }}>
         <Typography variant="h6" gutterBottom>
           {knowledge.name}
         </Typography>

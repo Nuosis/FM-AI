@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import { useSelector } from 'react-redux';
 import PropTypes from 'prop-types';
-import { saveTool } from '../../redux/slices/toolsSlice';
+import toolService from '../../services/toolService';
 import {
   Box,
   Typography,
@@ -30,7 +30,6 @@ const ToolTesting = ({ onSuccess, onError }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   
-  const dispatch = useDispatch();
   const user = useSelector(state => state.auth.user);
   
   // Generate default code template
@@ -76,7 +75,9 @@ def ${functionName}(input_text: Any) -> Any:
 
       console.log("Tool data being saved:", toolData);
 
-      await dispatch(saveTool(toolData)).unwrap();
+      // Use toolService directly instead of dispatching Redux action
+      await toolService.createTool(toolData);
+      
       setSuccess(true);
       
       // Clear form after successful creation

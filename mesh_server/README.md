@@ -171,6 +171,7 @@ This system is designed for secure, multi-user environments where each user runs
 3. **JWT Authentication**: Secure authentication with JWT tokens
 4. **Stateless Design**: The proxy service is stateless regarding user API keys
 5. **No Exposed Secrets**: Sensitive values are never visible to end users
+6. **Inter-Service Authentication**: Secure communication between services using JWT tokens
 
 #### Deployment Options for Multi-User Environments
 
@@ -341,6 +342,50 @@ The system uses Supabase to securely store and retrieve user-specific API keys:
    - The Supabase service role key is never exposed to end users
    - It's injected at runtime by the orchestrator or web app
    - All API key operations are logged and auditable
+
+#### Inter-Service Authentication
+
+The system implements secure authentication between services:
+
+1. **JWT-Based Authentication**:
+   - All services use the same JWT_SECRET for token validation
+   - User identity is propagated between services via JWT tokens
+   - Service-to-service calls use special service tokens when needed
+
+2. **Authentication Flow**:
+   ```mermaid
+   sequenceDiagram
+       participant User
+       participant WebApp
+       participant llm-proxy
+       participant docling
+       participant data_store
+
+       User->>WebApp: Request (with JWT)
+       WebApp->>llm-proxy: Forward request (with JWT)
+       llm-proxy->>Supabase: Get API key (user_id from JWT)
+       llm-proxy->>data_store: Request (with JWT)
+       WebApp->>docling: Request (with JWT)
+       docling->>llm-proxy: Forward request (with JWT)
+       docling->>data_store: Request (with JWT)
+       data_store->>Supabase: (optional) Enforce RLS by user_id
+   ```
+
+3. **Service Token Creation**:
+   - When a user JWT is not available, services create service-to-service tokens
+   - Service tokens include the service name and optional user_id for user-scoped operations
+   - Tokens have a short expiration time (1 hour) for security
+
+4. **User Identity Propagation**:
+   - User identity (user_id) is extracted from JWT and made available in request context
+   - User identity is propagated to downstream services via JWT
+   - This enables per-user access control and data isolation
+
+5. **Security Considerations**:
+   - All inter-service communication is authenticated
+   - User data is isolated by user_id
+   - Service tokens are only created when necessary
+   - JWT_SECRET is never exposed to end users
 
 ### Web App Integration
 
