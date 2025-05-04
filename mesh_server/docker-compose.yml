@@ -1,5 +1,3 @@
-version: '3'
-
 services:
   # LLM Proxy + Tool Execution Container
   proxy:
@@ -13,6 +11,7 @@ services:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - HOST=${HOST:-0.0.0.0}
+    command: ["python", "llm-proxy.py", "--port", "3500", "--host", "0.0.0.0", "--enable-auth", "--debug"]
     volumes:
       - proxy_data:/app/data
     healthcheck:
@@ -55,6 +54,7 @@ services:
     environment:
       - LLM_PROXY_URL=http://proxy:3500
       - HOST=${HOST:-0.0.0.0}
+      - DATABASE_URL=""
     volumes:
       - docling_temp:/app/temp
     healthcheck:

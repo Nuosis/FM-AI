@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # These should be configurable for different environments
+      - LLM_PROXY_URL=http://localhost:3500
+      - DATA_STORE_URL=http://localhost:3550
+      - DOCLING_URL=http://localhost:3600
+    network_mode: "host"  # Allows connecting to mesh_server services running locally

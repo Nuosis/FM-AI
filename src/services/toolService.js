@@ -1,22 +1,28 @@
 import apiService from './apiService';
 import supabase from '../utils/supabase';
+import supabaseService from './supabaseService';
 
 /**
  * Tool Service
- * 
+ *
  * Provides methods for managing and executing tools (Python functions)
  * stored in the database and executed via the proxy server or edge functions.
  */
 const toolService = {
   /**
    * Get all tools
-   * 
+   *
    * @returns {Promise<Array>} - Array of tools
    */
   async getTools() {
     try {
-      const response = await apiService.get('/functions');
-      return response.data || [];
+      const data = await supabaseService.executeQuery(supabase =>
+        supabase
+          .from('functions')
+          .select('*')
+      );
+      
+      return data || [];
     } catch (error) {
       console.error('Error fetching tools:', error);
       throw error;
@@ -24,15 +30,48 @@ const toolService = {
   },
   
   /**
+   * Get tools for a specific user
+   *
+   * @param {string} userId - The user ID
+   * @returns {Promise<Array>} - Array of tools created by the user
+   */
+  async getUserTools(userId) {
+    try {
+      if (!userId) {
+        throw new Error('User ID is required');
+      }
+      
+      const data = await supabaseService.executeQuery(supabase =>
+        supabase
+          .from('functions')
+          .select('*')
+          .eq('user_id', userId)
+      );
+      
+      return data || [];
+    } catch (error) {
+      console.error(`Error fetching tools for user ${userId}:`, error);
+      throw error;
+    }
+  },
+  
+  /**
    * Get a tool by ID
-   * 
+   *
    * @param {string} id - The tool ID
    * @returns {Promise<Object>} - The tool data
    */
   async getToolById(id) {
     try {
-      const response = await apiService.get(`/functions/${id}`);
-      return response.data;
+      const data = await supabaseService.executeQuery(supabase =>
+        supabase
+          .from('functions')
+          .select('*')
+          .eq('id', id)
+          .single()
+      );
+      
+      return data;
     } catch (error) {
       console.error(`Error fetching tool with ID ${id}:`, error);
       throw error;
@@ -58,8 +97,15 @@ const toolService = {
         throw new Error('Missing required fields: name, description, and code are required');
       }
       
-      const response = await apiService.post('/functions', toolData);
-      return response.data;
+      const data = await supabaseService.executeQuery(supabase =>
+        supabase
+          .from('functions')
+          .insert(toolData)
+          .select()
+          .single()
+      );
+      
+      return data;
     } catch (error) {
       console.error('Error creating tool:', error);
       throw error;
@@ -75,8 +121,16 @@ const toolService = {
    */
   async updateTool(id, toolData) {
     try {
-      const response = await apiService.put(`/functions/${id}`, toolData);
-      return response.data;
+      const data = await supabaseService.executeQuery(supabase =>
+        supabase
+          .from('functions')
+          .update(toolData)
+          .eq('id', id)
+          .select()
+          .single()
+      );
+      
+      return data;
     } catch (error) {
       console.error(`Error updating tool with ID ${id}:`, error);
       throw error;
@@ -91,8 +145,15 @@ const toolService = {
    */
   async deleteTool(id) {
     try {
-      const response = await apiService.delete(`/functions/${id}`);
-      return response.data;
+      const data = await supabaseService.executeQuery(supabase =>
+        supabase
+          .from('functions')
+          .delete()
+          .eq('id', id)
+          .select()
+      );
+      
+      return data;
     } catch (error) {
       console.error(`Error deleting tool with ID ${id}:`, error);
       throw error;

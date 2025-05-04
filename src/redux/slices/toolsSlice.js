@@ -97,7 +97,7 @@ export const saveTool = createAsyncThunk(
       
       console.log('Save tool response:', response);
       
-      return { data: [response] }; // Match the expected response format
+      return response; // Return the direct response from Supabase
     } catch (error) {
       console.error('Save tool error:', error);
       return rejectWithValue(error.message || 'Failed to save tool');
@@ -122,7 +122,7 @@ export const updateToolAsync = createAsyncThunk(
       // Dispatch the action to update the state
       dispatch({ type: 'tools/updateTool', payload: response });
       
-      return { data: [response] }; // Match the expected response format
+      return response; // Return the direct response from Supabase
     } catch (error) {
       console.error('Update tool error:', error);
       return rejectWithValue(error.message || 'Failed to update tool');
@@ -217,10 +217,10 @@ const toolsSlice = createSlice({
       })
       .addCase(saveTool.fulfilled, (state, action) => {
         state.isLoading = false;
-        // Extract data from the response
-        const data = action.payload.data;
-        if (data && Array.isArray(data) && data.length > 0) {
-          state.items.push(data[0]);
+        
+        // Add the new tool to the items array
+        if (action.payload) {
+          state.items.push(action.payload);
         } else if (action.meta && action.meta.arg) {
           // If no data returned but we have the original tool data, use that
           state.items.push(action.meta.arg);

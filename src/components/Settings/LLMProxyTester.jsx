@@ -62,17 +62,24 @@ const LLMProxyTester = () => {
 import json
 import sys
 
-# Get input from stdin
-input_data = json.loads(sys.stdin.read())
-
-# Process the input
-result = {
-    "message": f"Hello, {input_data.get('name', 'World')}!",
-    "timestamp": input_data.get('timestamp')
-}
-
-# Output the result as JSON
-print(json.dumps(result))
+def process_input(name="World", timestamp=None):
+    """
+    Process the input data and return a greeting message
+    
+    Args:
+        name: The name to greet
+        timestamp: The timestamp to include in the response
+    
+    Returns:
+        A dictionary with the greeting message and timestamp
+    """
+    # Process the input
+    result = {
+        "message": f"Hello, {name}!",
+        "timestamp": timestamp
+    }
+    
+    return result
   `.trim());
   
   const [inputData, setInputData] = useState(JSON.stringify({
@@ -300,6 +307,13 @@ print(json.dumps(result))
     setExecutionResult(null);
     
     try {
+      // Get auth token for the edge function
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error('Authentication required');
+      }
+      
       // Parse the input data
       let parsedInput;
       try {
@@ -312,7 +326,8 @@ print(json.dumps(result))
       const response = await fetch('http://localhost:3500/execute', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
         },
         body: JSON.stringify({
           code: pythonCode,

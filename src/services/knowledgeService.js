@@ -1,5 +1,4 @@
 import apiService from './apiService';
-import llmService from './llmService';
 
 /**
  * Knowledge Service

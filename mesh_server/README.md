@@ -2,11 +2,12 @@
 
 ## Overview
 
-This system provides a modular, production-ready architecture for GenAI and RAG (Retrieval-Augmented Generation) applications. It consists of three main services:
+This system provides a modular, production-ready architecture for GenAI and RAG (Retrieval-Augmented Generation) applications. It consists of four main services:
 
 - **LLM Proxy & Dynamic Tool Execution:** Unified, secure proxy for LLM API requests and dynamic tool execution.
 - **Data Store:** Backend-agnostic vector database service for storing and retrieving embeddings and metadata.
 - **Docling RAG:** Document processing and knowledge extraction pipeline for chunking, embedding, and preparing documents for RAG.
+- **Mesh MCP Server:** Model Context Protocol server that provides unified access to all mesh server capabilities.
 
 Each service is designed to run independently, enabling flexible deployment and scaling.
 
@@ -34,6 +35,57 @@ Each service is designed to run independently, enabling flexible deployment and 
 - **Embedding Generation:** Prepares and embeds document chunks for storage in the Data Store.
 - **RAG Pipeline:** Enables enterprise document search, passage retrieval, and knowledge extraction.
 
+### 4. Mesh MCP Server
+
+The Mesh MCP Server provides a unified interface to all mesh server capabilities through the Model Context Protocol (MCP). It exposes the following tools:
+
+#### LLM Proxy Tools
+- **llm_chat:** Execute chat completions with any provider/model
+  - Input: provider, model, messages, optional user_id
+  - Output: LLM chat response
+
+- **llm_embed:** Generate embeddings from text
+  - Input: provider, model, text, optional user_id
+  - Output: Embedding vector
+
+#### Data Store Tools
+- **store_record:** Store embedding vectors with metadata
+  - Input: embedding vector, metadata, optional user_id
+  - Output: Stored record details
+
+- **search_records:** Search for similar embeddings with filters
+  - Input: query embedding, optional metadata filter, limit, user_id
+  - Output: Similar records with scores
+
+#### Docling Tools
+- **extract_from_url:** Extract content from a URL
+  - Input: url, optional format (markdown/json)
+  - Output: Extracted document content
+
+- **extract_from_file:** Extract content from a local file
+  - Input: file_path, optional format (markdown/json)
+  - Output: Extracted document content
+
+- **extract_from_sitemap:** Extract content from multiple pages via sitemap
+  - Input: base url, optional sitemap filename
+  - Output: Array of extracted documents
+
+- **chunk_document:** Break documents into smaller chunks
+  - Input: document content, format, optional user_id
+  - Output: Array of chunks with metadata
+
+- **process_url:** Extract and chunk a document from URL in one step
+  - Input: url, optional user_id
+  - Output: Document metadata and chunks
+
+- **process_file:** Extract and chunk a local file in one step
+  - Input: file_path, optional user_id
+  - Output: Document metadata and chunks
+
+- **cleanup_temp_files:** Clean up temporary processing files
+  - Input: file_id
+  - Output: Cleanup confirmation
+
 ---
 
 ## Architecture
@@ -41,14 +93,18 @@ Each service is designed to run independently, enabling flexible deployment and 
 ```mermaid
 flowchart TD
     Client -->|REST/HTTP| ProxyServer[LLM Proxy + Tool Execution]
-    ProxyServer --> DataStore[Data Store Service]
-    ProxyServer --> Docling[Docling RAG Service]
+    Client -->|MCP| MeshMCP[Mesh MCP Server]
+    MeshMCP --> ProxyServer
+    MeshMCP --> DataStore[Data Store Service]
+    MeshMCP --> Docling[Docling RAG Service]
+    ProxyServer --> DataStore
+    ProxyServer --> Docling
     Docling --> DataStore
 ```
 
 ---
 
-## Deployment: 3-Container Approach
+## Deployment: 4-Container Approach
 
 For production, it is recommended to deploy each service in its own Docker container:
 
@@ -63,6 +119,10 @@ For production, it is recommended to deploy each service in its own Docker conta
 3. **Docling RAG Container**
     - Handles document ingestion, chunking, and embedding.
     - Feeds processed embeddings into the Data Store.
+
+4. **Mesh MCP Container**
+    - Provides unified MCP interface to all services.
+    - Handles tool routing and response formatting.
 
 This approach allows independent scaling, maintenance, and deployment of each service.
 
@@ -95,6 +155,7 @@ Pre-built Docker images are available for all mesh_server services:
 docker pull yourorg/mesh-server-proxy:latest
 docker pull yourorg/mesh-server-data-store:latest
 docker pull yourorg/mesh-server-docling:latest
+docker pull yourorg/mesh-server-mcp:latest
 ```
 
 #### Performance Optimizations
@@ -544,6 +605,12 @@ app.post('/api/logout', async (req, res) => {
   - `/docling/health` - Health check endpoint
   - Various document processing endpoints
 
+- **Mesh MCP Server**: stdio transport
+  - Uses stdio for communication with MCP clients
+  - Provides unified access to all services via MCP tools
+  - Exposes tools for LLM operations, data store access, and document processing
+  - No HTTP endpoints (accessed through MCP protocol)
+
 ---
 
 ## File Overview
@@ -564,6 +631,8 @@ app.post('/api/logout', async (req, res) => {
 - **docling/**: Document processing and RAG pipeline
   - **Dockerfile**: Dockerfile for the Docling service
   - **api.py**: REST API for document processing
+- **mesh_mcp_server.py**: MCP server implementation
+- **mesh_mcp.Dockerfile**: Dockerfile for the MCP server
 - **requirements.txt**: Python dependencies
 
 ---

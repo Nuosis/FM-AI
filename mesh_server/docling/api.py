@@ -15,7 +15,7 @@ import logging
 import tempfile
 import requests
 from typing import Dict, List, Any, Optional
-from flask import Flask, Blueprint, request, jsonify, Response
+from flask import Flask, Blueprint, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -113,7 +113,7 @@ def health_check():
     return jsonify({"status": "healthy", "service": "docling"})
 
 @docling_api.route('/test', methods=['POST'])
-def test_connection():
+def test_connection(params=None):
     """Test endpoint for verifying connectivity and proxy integration"""
     try:
         data = request.get_json() if request.is_json else {}
@@ -160,7 +160,7 @@ def test_connection():
         return jsonify({"error": f"Error in test endpoint: {str(e)}"}), 500
 
 @docling_api.route('/extract', methods=['POST'])
-def extract_document():
+def extract_document(params=None):
     """Extract content from a document URL or uploaded file"""
     try:
         data = request.get_json() if request.is_json else {}
@@ -224,7 +224,7 @@ def extract_document():
         return jsonify({"error": f"Error extracting document: {str(e)}"}), 500
 
 @docling_api.route('/extract/sitemap', methods=['POST'])
-def extract_from_sitemap():
+def extract_from_sitemap(params=None):
     """Extract content from multiple pages using a sitemap"""
     try:
         data = request.get_json()
@@ -268,7 +268,7 @@ def extract_from_sitemap():
         return jsonify({"error": f"Error extracting from sitemap: {str(e)}"}), 500
 
 @docling_api.route('/chunk', methods=['POST'])
-def chunk_document():
+def chunk_document(params=None):
     """Chunk a document into smaller pieces"""
     try:
         data = request.get_json()
@@ -330,7 +330,7 @@ def chunk_document():
         return jsonify({"error": f"Error chunking document: {str(e)}"}), 500
 
 @docling_api.route('/process', methods=['POST'])
-def process_document():
+def process_document(params=None):
     """Extract and chunk a document in one step"""
     try:
         data = request.get_json() if request.is_json else {}
@@ -504,7 +504,7 @@ def store_embedding_in_data_store(embedding, metadata, user_id=None):
 # Function to search embeddings in the data store
 def search_embeddings_in_data_store(query_embedding, metadata_filter=None, limit=10, user_id=None):
     """
-    Search for embeddings in the data store
+    Search for similar embeddings in the data store
     
     Args:
         query_embedding: The query embedding vector
@@ -513,7 +513,7 @@ def search_embeddings_in_data_store(query_embedding, metadata_filter=None, limit
         user_id: Optional user ID for authentication
         
     Returns:
-        List of matching records or empty list if failed
+        List of similar records or None if failed
     """
     try:
         # Get authentication headers
@@ -522,7 +522,7 @@ def search_embeddings_in_data_store(query_embedding, metadata_filter=None, limit
         # Prepare the payload
         payload = {
             "embedding": query_embedding,
-            "metadata": metadata_filter or {},
+            "metadata_filter": metadata_filter,
             "limit": limit
         }
         
@@ -537,7 +537,7 @@ def search_embeddings_in_data_store(query_embedding, metadata_filter=None, limit
             return response.json()
         else:
             logger.error(f"Error searching embeddings: {response.status_code} {response.text}")
-            return []
+            return None
     except Exception as e:
         logger.error(f"Error searching embeddings: {str(e)}")
         return []
@@ -545,7 +545,7 @@ def search_embeddings_in_data_store(query_embedding, metadata_filter=None, limit
 # Create a Flask app for standalone usage
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
-app.register_blueprint(docling_api, url_prefix='/docling')
+app.register_blueprint(docling_api)  # Remove url_prefix to keep /mcp at root
 
 if __name__ == '__main__':
     import argparse

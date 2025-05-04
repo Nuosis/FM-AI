@@ -10,6 +10,7 @@ import {
   TextField
 } from '@mui/material';
 import CodeIcon from '@mui/icons-material/Code';
+import supabase from '../../utils/supabase';
 
 /**
  * Component for testing the Python code execution functionality of the unified proxy server
@@ -62,11 +63,19 @@ print(json.dumps(result))
         throw new Error(`Invalid JSON input: ${error.message}`);
       }
       
+      // Get auth token for the mesh server
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error('Authentication required');
+      }
+      
       // Call the proxy server's execute endpoint
       const response = await fetch('http://localhost:3500/execute', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
         },
         body: JSON.stringify({
           code: pythonCode,

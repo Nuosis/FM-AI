@@ -198,26 +198,73 @@ def get_api_key_from_supabase(user_id, provider):
 def jwt_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        logger.debug(f"[JWT] Authentication check for endpoint: {request.path}")
+        
         if not ENABLE_AUTH:
+            logger.debug(f"[JWT] Authentication DISABLED (ENABLE_AUTH=False) - Bypassing JWT validation")
             return f(*args, **kwargs)
-            
+        
+        logger.debug(f"[JWT] Authentication ENABLED - Checking Authorization header")
         auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'error': 'Unauthorized', 'message': 'Missing or invalid Authorization header'}), 401
+        if not auth_header:
+            logger.warning(f"[JWT] No Authorization header found")
+            return jsonify({'error': 'Unauthorized', 'message': 'Missing Authorization header'}), 401
+        
+        if not auth_header.startswith('Bearer '):
+            logger.warning(f"[JWT] Invalid Authorization header format (should start with 'Bearer ')")
+            return jsonify({'error': 'Unauthorized', 'message': 'Invalid Authorization header format'}), 401
             
         token = auth_header.replace('Bearer ', '')
+        # Log token length and first/last few characters for debugging
+        token_preview = f"{token[:5]}...{token[-5:]}" if len(token) > 10 else "too_short"
+        logger.debug(f"[JWT] Token extracted from Authorization header (length: {len(token)}, preview: {token_preview})")
+        
+        # Log JWT_SECRET status (safely)
+        if not JWT_SECRET:
+            logger.error(f"[JWT] No JWT_SECRET configured - Cannot validate token")
+            return jsonify({'error': 'Server Error', 'message': 'JWT_SECRET not configured on server'}), 500
+        else:
+            secret_preview = f"{JWT_SECRET[:3]}...{JWT_SECRET[-3:]}" if len(JWT_SECRET) > 6 else "too_short"
+            secret_length = len(JWT_SECRET)
+            # logger.info(f"[JWT] Using JWT_SECRET (length: {secret_length}, preview: {secret_preview})")
         
         try:
             # Verify the JWT token
-            payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+            # Skip audience validation by setting options={'verify_aud': False}
+            payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'], options={'verify_aud': False})
+            logger.debug(f"[JWT] Token successfully verified")
+            
+            # Log the payload for debugging (excluding sensitive data)
+            safe_payload = {k: v for k, v in payload.items() if k not in ['sub', 'email']}
+            logger.debug(f"[JWT] Token payload: {safe_payload}")
+            
             # Add user info to request context
             request.user_id = payload.get('sub')
             request.user_email = payload.get('email')
+            logger.debug(f"[JWT] User context added to request: user_id={request.user_id}, email={request.user_email}")
         except jwt.ExpiredSignatureError:
+            logger.warning(f"[JWT] Token expired")
             return jsonify({'error': 'Unauthorized', 'message': 'Token expired'}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({'error': 'Unauthorized', 'message': 'Invalid token'}), 401
+        except jwt.InvalidTokenError as e:
+            error_type = type(e).__name__
+            error_msg = str(e)
+            logger.warning(f"[JWT] Invalid token: {error_type} - {error_msg}")
             
+            # More detailed error messages for common JWT errors
+            if "Invalid audience" in error_msg:
+                logger.debug(f"[JWT] This error occurs when the 'aud' claim in the token doesn't match what's expected. We've disabled audience validation with options={{verify_aud: false}}")
+            elif "Signature verification failed" in error_msg:
+                logger.debug(f"[JWT] This suggests the JWT_SECRET on the server doesn't match the one used to sign the token")
+            elif "Token is expired" in error_msg:
+                logger.debug(f"[JWT] The token's 'exp' claim indicates it has expired")
+            
+            return jsonify({
+                'error': 'Unauthorized',
+                'message': f'Invalid token: {error_type} - {error_msg}',
+                'token_length': len(token)
+            }), 401
+            
+        logger.info(f"[JWT] Authentication successful - Proceeding to endpoint handler")
         return f(*args, **kwargs)
     return decorated
 
@@ -440,11 +487,23 @@ def proxy_llm_request(provider, req_type, body, api_key=None):
     req_body = {}
     headers = {'Content-Type': 'application/json'}
     
-    # Use provided API key - no fallback to environment variables
-    if not api_key and provider not in ["lmstudio", "ollama"]:
+    # Use provided API key or check PROVIDER_CONFIG
+    if provider in ["lmstudio", "ollama"]:
+        # Local providers don't need API keys
+        provider_key = None
+        logger.debug(f"No API key needed for local provider {provider}")
+    elif api_key:
+        # Use the API key provided as a parameter
+        provider_key = api_key
+        logger.debug(f"Using API key provided as parameter for {provider}")
+    elif PROVIDER_CONFIG[provider]['key']:
+        # Use the API key from PROVIDER_CONFIG
+        provider_key = PROVIDER_CONFIG[provider]['key']
+        logger.debug(f"Using API key from PROVIDER_CONFIG for {provider}")
+    else:
+        # No API key available
+        logger.error(f"No API key provided for {provider}")
         raise ValueError(f"No API key provided for {provider}")
-        
-    provider_key = api_key
     
     # Configure request based on provider and request type
     if provider == "openai":
@@ -910,7 +969,7 @@ def llm_proxy():
     # Extract provider and validate input
     provider = body.get('provider', '').lower()
 
-    logger.info(f"User {user_id} and provider {provider}")
+    logger.debug(f"User {user_id} and provider {provider}")
 
     rest_body = {k: v for k, v in body.items() if k != 'provider'}
     
@@ -927,29 +986,50 @@ def llm_proxy():
         logger.debug(f"No API key needed for local provider {provider}")
     elif not api_key and not PROVIDER_CONFIG[provider]['key']:
         if user_id:
-            logger.info(f"Fetching API key from Supabase for user {user_id} and provider {provider}")
+            logger.debug(f"Fetching API key from Supabase for user {user_id} and provider {provider}")
             api_key = get_api_key_from_supabase(user_id, provider)
             if api_key:
-                logger.info(f"Successfully retrieved API key from Supabase for user {user_id} and provider {provider}")
+                logger.debug("Successfully retrieved API key")
+                # Set the API key in the provider config
+                PROVIDER_CONFIG[provider]['key'] = api_key
+                logger.debug(f"API key set in provider config for {provider}")
             else:
                 logger.warning(f"No API key found in Supabase for user {user_id} and provider {provider}")
+                # Only return error if no API key was found
+                return jsonify({
+                    'error': f'No API key found for {provider}',
+                    'message': 'Please verify your API key is set for the provider'
+                }), 400
         else:
             logger.warning("No user_id found in request, cannot fetch API key from Supabase")
             return jsonify({
                 'error': f'user_id required but not found in request',
                 'message': 'Please provide a user_id in the request for testing'
             }), 400
-        logger.warning(f"No API key returned for provider {provider}")
-        return jsonify({
-            'error': f'No API key returned for {provider}',
-            'message': 'Please verify your API key is set for the provider'
-        }), 400
     
     try:
         # Proxy the request to the appropriate provider
+        logger.debug(f"Proxying request to {provider} for {rest_body['type']}")
+        
+        # Log API key status (safely)
+        if api_key:
+            masked_key = f"{api_key[:4]}{'*' * (len(api_key) - 8)}{api_key[-4:]}" if len(api_key) > 8 else "****"
+            logger.debug(f"API key for {provider}: {masked_key}")
+        else:
+            logger.info(f"API key for {provider}: Not set in request")
+            
+        if PROVIDER_CONFIG[provider]['key']:
+            provider_key = PROVIDER_CONFIG[provider]['key']
+            masked_key = f"{provider_key[:4]}{'*' * (len(provider_key) - 8)}{provider_key[-4:]}" if len(provider_key) > 8 else "****"
+            logger.debug(f"Provider config key for {provider}: {masked_key}")
+        else:
+            logger.info(f"Provider config key for {provider}: Not set")
+        
         result = proxy_llm_request(provider, rest_body['type'], rest_body, api_key)
+        logger.debug(f"Received response from {provider} with status {result['status']}")
         
         if result['status'] >= 400:
+            logger.warning(f"Error response from {provider}: {result['data']}")
             return jsonify({
                 'error': result.get('data', {}).get('error', {}).get('message', 'Provider API error'),
                 'details': result.get('data', {}).get('error', result.get('data', {})),
