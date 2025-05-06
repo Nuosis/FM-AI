@@ -90,13 +90,25 @@ const toolService = {
    */
   async createTool(toolData) {
     try {
-      console.log('Creating tool with data:', toolData);
+      console.log('Creating tool with data:', {
+        ...toolData,
+        code: toolData.code ? `${toolData.code.slice(0, 100)}...` : null // Log truncated code for readability
+      });
       
       // Validate required fields
       if (!toolData.name || !toolData.description || !toolData.code) {
         throw new Error('Missing required fields: name, description, and code are required');
       }
       
+      // Log the final data being sent to the database
+      console.log('Required fields check:', {
+        name: !!toolData.name,
+        description: !!toolData.description,
+        code: !!toolData.code,
+        user_id: !!toolData.user_id,
+        created_by: !!toolData.created_by
+      });
+
       const data = await supabaseService.executeQuery(supabase =>
         supabase
           .from('functions')

@@ -1,28 +1,5 @@
 {
   "mcpServers": {
-    "vector-processor": {
-      "command": "docker",
-      "args": [
-        "run",
-        "--rm",
-        "--network=host",
-        "-e", "LLM_PROXY_URL=http://localhost:3500",
-        "-e", "DATA_STORE_URL=http://localhost:3550",
-        "-e", "DOCLING_URL=http://localhost:3600",
-        "mesh_mcp"
-      ],
-      "alwaysAllow": [
-        "store_record",
-        "search_records",
-        "extract_from_url",
-        "extract_from_file",
-        "extract_from_sitemap",
-        "chunk_document",
-        "process_url",
-        "process_file",
-        "cleanup_temp_files"
-      ]
-    },
     "vector-processor-sse": {
       "type": "sse",
       "url": "http://localhost:8001/sse",

@@ -1,13 +1,16 @@
-version: '3.8'
-
 services:
   mcp:
+    container_name: mesh_mcp_server  # Specific container name
     build:
       context: .
       dockerfile: Dockerfile
+    # command removed to use Dockerfile CMD
     environment:
       # These should be configurable for different environments
-      - LLM_PROXY_URL=http://localhost:3500
-      - DATA_STORE_URL=http://localhost:3550
-      - DOCLING_URL=http://localhost:3600
-    network_mode: "host"  # Allows connecting to mesh_server services running locally
+      - LLM_PROXY_URL=http://host.docker.internal:3500
+      - DATA_STORE_URL=http://host.docker.internal:3550
+      - DOCLING_URL=http://host.docker.internal:3600
+      - MCP_TRANSPORT=sse
+      - MCP_SSE_PORT=8001
+    ports:
+      - "8001:8001"

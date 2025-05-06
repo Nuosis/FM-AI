@@ -29,6 +29,7 @@ from typing import Dict, Any, Optional
 import anyio
 import mcp.types as types
 from mcp.server.lowlevel import Server
+from starlette.responses import JSONResponse
 
 # Configure logging
 logging.basicConfig(
@@ -345,40 +346,113 @@ def main():
         logger.info(f"Starting MCP server with transport: {args.transport}")
         app = create_server()
 
+        # Add a global flag to indicate initialization is complete
+        import threading
+        initialization_complete = threading.Event()
+
+        async def initialize_services(config):
+            """Explicit service initialization"""
+            service_health_endpoints = {
+                "LLM Proxy": {"url": config.llm_proxy_url, "health_path": "/health"},
+                "Data Store": {"url": config.data_store_url, "health_path": "/api/data-store/health"},
+                "Docling": {"url": config.docling_url, "health_path": "/health"}
+            }
+            
+            for name, service in service_health_endpoints.items():
+                try:
+                    response = requests.get(f"{service['url']}{service['health_path']}", timeout=5)
+                    response.raise_for_status()
+                    logger.info(f"{name} health check passed")
+                except Exception as e:
+                    raise ServiceError(name, f"Initialization failed: {str(e)}")
+
+        async def lifespan(app):
+            """Lifespan management for Starlette app"""
+            # Startup
+            yield
+            # Shutdown
+            initialization_complete.clear()
+            logger.info("Server shutdown, initialization state cleared")
+
         if args.transport == "sse":
             from mcp.server.sse import SseServerTransport
             from starlette.applications import Starlette
             from starlette.routing import Mount, Route
             import uvicorn
 
-            sse = SseServerTransport("/messages/")
+            sse = SseServerTransport("/messages/", require_session=False)
 
             async def handle_sse(request):
-                async with sse.connect_sse(
-                    request.scope, request.receive, request._send
-                ) as streams:
-                    await app.run(
-                        streams[0], streams[1], app.create_initialization_options()
-                    )
+                logger.info("Entered handle_sse function for SSE connection")
+                # Handle concurrent connections with proper initialization check
+                if not initialization_complete.is_set():
+                    logger.warning("Request received before initialization complete")
+                    return JSONResponse({"error": "Server not initialized"}, status_code=503)
 
-            starlette_app = Starlette(
-                debug=True,
-                routes=[
-                    Route("/sse", endpoint=handle_sse),
-                    Mount("/messages/", app=sse.handle_post_message),
-                ],
-            )
+                # Get session ID from header if provided
+                session_id = request.headers.get("mcp-session-id")
+                if session_id:
+                    # Add session_id to request query params if provided
+                    request.scope["query_string"] = f"session_id={session_id}".encode()
+                    logger.info(f"Using session ID from header: {session_id}")
 
-            uvicorn.run(starlette_app, host="0.0.0.0", port=args.port)
+                # Use semaphore for concurrent connection handling
+                sem = anyio.Semaphore(10)
+                async with sem:
+                    async with sse.connect_sse(
+                        request.scope, request.receive, request._send
+                    ) as streams:
+                        await app.run(
+                            streams[0], streams[1], app.create_initialization_options()
+                        )
+
+            async def handle_message(request):
+                """Handle incoming messages"""
+                # Get session ID from header if provided
+                session_id = request.headers.get("mcp-session-id")
+                if session_id:
+                    # Add session_id to request query params if provided
+                    request.scope["query_string"] = f"session_id={session_id}".encode()
+                    logger.info(f"Processing message for session: {session_id}")
+
+                return await sse.handle_post_message(
+                    request,
+                    request.receive,
+                    request._send
+                )
+
+            async def start_server():
+                config = ServiceConfig()
+                
+                # Create Starlette app with routes and lifespan defined upfront
+                app = Starlette(
+                    debug=True,
+                    routes=[
+                        Route("/sse", endpoint=handle_sse),
+                        Route("/messages/", endpoint=handle_message, methods=["POST"])
+                    ],
+                    lifespan=lifespan
+                )
+                
+                # Initialize services
+                await initialize_services(config)
+                logger.info("Service initialization complete")
+                initialization_complete.set()
+                
+                config = uvicorn.Config(app, host="0.0.0.0", port=args.port)
+                server = uvicorn.Server(config)
+                await server.serve()
+                
+            anyio.run(start_server)
             return 0
         else:
             from mcp.server.stdio import stdio_server
 
             async def run_stdio():
-                async with stdio_server() as streams:
-                    await app.run(
-                        streams[0], streams[1], app.create_initialization_options()
-                    )
+                await anyio.sleep(0.5)  # Give time for initialization
+                await app.run(
+                    streams[0], streams[1], app.create_initialization_options()
+                )
 
             anyio.run(run_stdio)
             return 0

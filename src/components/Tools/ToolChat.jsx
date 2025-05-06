@@ -130,7 +130,7 @@ const ToolChat = () => {
           model: selectedModel,
           baseUrl: null,
           messages: [
-            { role: 'system', content: 'You are a helpful assistant that generates Python code with @tool() decorators. When asked to create a tool, respond with valid Python code that includes a function with a @tool() decorator, proper docstrings, and implementation.' },
+            { role: 'system', content: 'You are a helpful assistant that generates Python code with @tool() decorators. When asked to create a tool, respond with a JSON object containing the following required fields:\n\n{{\n  "name": "descriptive_tool_name",\n  "description": "A clear description of what the tool does",\n  "code": "```python\\n@tool()\\ndef tool_name():...```"\n}}\n\nEnsure the tool name in the code matches the name field. Include proper docstrings and implementation in the code.' },
             ...messages.filter(m => !m.isLoading),
             userMessage
           ],
@@ -154,19 +154,28 @@ const ToolChat = () => {
       // Parse the response if it's a string
       const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
 
-      // Extract Python code if it exists
-      const pythonCodeMatch = parsedData.content ? parsedData.content.match(/```python([\s\S]*?)```/) : null;
-      let extractedCode = null;
-      
-      if (pythonCodeMatch && pythonCodeMatch[1]) {
-        extractedCode = pythonCodeMatch[1].trim();
+      // Try to parse the response as JSON
+      let toolData;
+      try {
+        const jsonMatch = parsedData.content ? parsedData.content.match(/({[\s\S]*})/) : null;
+        if (jsonMatch) {
+          toolData = JSON.parse(jsonMatch[1]);
+        }
+      } catch (e) {
+        console.error('Failed to parse JSON response:', e);
       }
+
+      // Extract code from the tool data if available
+      const code = toolData?.code?.match(/```python([\s\S]*?)```/)?.[1]?.trim();
 
       // Add the assistant's response
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: parsedData.content || 'No response received',
-        code: extractedCode
+        content: toolData ?
+          `I've created a tool named "${toolData.name}" that ${toolData.description}` :
+          parsedData.content || 'No response received',
+        code: code || null,
+        toolData: toolData // Store the full tool data for saving
       }]);
 
     } catch (error) {
@@ -246,27 +255,63 @@ const ToolChat = () => {
     setClearConfirmOpen(false);
   };
 
-  const handleSaveCode = async (code) => {
-    if (!code || !user) return;
+  const handleSaveCode = async (message) => {
+    if (!message?.toolData || !user) {
+      setError('Invalid tool data. Please try generating the tool again.');
+      return;
+    }
     
     try {
-      // Extract name and description from the code
+      const { toolData } = message;
+
+      // Validate required fields
+      if (!toolData.name || !toolData.description || !toolData.code) {
+        throw new Error('Invalid tool format. Name, description and code are required.');
+      }
+
+      // Extract code from the Python code block
+      const codeMatch = toolData.code.match(/```python\n([\s\S]*?)```/);
+      if (!codeMatch) {
+        throw new Error('Invalid tool code format. Code must be in a Python code block.');
+      }
+      const code = codeMatch[1].trim();
+
+      // Validate that code contains @tool decorator
+      if (!code.includes('@tool()')) {
+        throw new Error('Invalid tool code. @tool() decorator is required.');
+      }
+
+      // Validate that function name matches tool name
       const nameMatch = code.match(/@tool\(\)\s*\ndef\s+([a-zA-Z0-9_]+)/);
-      const docstringMatch = code.match(/"""([\s\S]*?)"""/);
+      if (!nameMatch) {
+        throw new Error('Invalid tool code format. Could not find function definition.');
+      }
+
+      // Convert both names to a consistent format for comparison
+      const codeNameNormalized = nameMatch[1].toLowerCase().replace(/_/g, ' ');
+      const toolNameNormalized = toolData.name.toLowerCase().replace(/_/g, ' ');
+
+      console.log('Name comparison:', {
+        codeNameNormalized,
+        toolNameNormalized,
+        originalCodeName: nameMatch[1],
+        originalToolName: toolData.name
+      });
+
+      if (codeNameNormalized !== toolNameNormalized) {
+        throw new Error(`Tool name mismatch: Code name "${nameMatch[1]}" does not match tool name "${toolData.name}"`);
+      }
       
-      const name = nameMatch ? nameMatch[1].replace(/_/g, ' ') : 'Unnamed Tool';
-      const description = docstringMatch ? docstringMatch[1].trim().split('\n')[0] : 'No description';
-      
-      const toolData = {
-        name,
-        description,
-        code,
-        user_id: user.id,
-        user_name: user.email || user.username || 'Unknown',
+      const finalToolData = {
+        name: toolData.name,
+        description: toolData.description,
+        code: code,
+        user_id: user.user_id,
+        created_by: user.user_id,  // Add created_by field
         created_at: new Date().toISOString()
       };
       
-      await dispatch(saveTool(toolData));
+      await dispatch(saveTool(finalToolData));
       dispatch(createLog('Tool saved successfully', LogType.INFO));
       
       // Add system message
@@ -427,7 +472,7 @@ const ToolChat = () => {
                           <IconButton 
                             size="small" 
                             color="primary"
-                            onClick={() => handleSaveCode(message.code)}
+                            onClick={() => handleSaveCode(message)}
                           >
                             Save Tool
                           </IconButton>

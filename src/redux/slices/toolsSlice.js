@@ -218,12 +218,12 @@ const toolsSlice = createSlice({
       .addCase(saveTool.fulfilled, (state, action) => {
         state.isLoading = false;
         
-        // Add the new tool to the items array
+        // Only add the tool if we have a valid response
         if (action.payload) {
           state.items.push(action.payload);
-        } else if (action.meta && action.meta.arg) {
-          // If no data returned but we have the original tool data, use that
-          state.items.push(action.meta.arg);
+        } else {
+          // If no payload, treat as an error
+          state.error = 'Failed to save tool: No response from server';
         }
       })
       .addCase(saveTool.rejected, (state, action) => {
